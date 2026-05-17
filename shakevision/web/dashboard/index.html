@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ShakeVision · Data</title>
+
+  <link rel="stylesheet" href="styles.css">
+
+  <!-- QWebChannel (provisto por Qt) -->
+  <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+
+  <!-- ECharts: local primero, fallback a CDN -->
+  <script src="lib/echarts.min.js" onerror="window._needCdn = true"></script>
+  <script>
+    if (window._needCdn || typeof echarts === "undefined") {
+      document.write(
+        '<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"><\/script>'
+      );
+    }
+    console.log("Dashboard deps:", "echarts=", typeof echarts);
+  </script>
+</head>
+<body>
+  <div id="dashboard">
+    <!-- Cabecera con resumen — los textos se rellenan vía i18n -->
+    <header id="summary-bar">
+      <div class="kpi">
+        <span class="kpi-label" id="kpi-count-label">Sismos / 24 h</span>
+        <span class="kpi-value mono" id="kpi-count">—</span>
+      </div>
+      <div class="kpi">
+        <span class="kpi-label" data-i18n="web.dashboard.kpi.max_mag">Magnitud máx.</span>
+        <span class="kpi-value mono" id="kpi-max-mag">—</span>
+      </div>
+      <div class="kpi">
+        <span class="kpi-label" data-i18n="web.dashboard.kpi.latest">Más reciente</span>
+        <span class="kpi-value mono" id="kpi-latest">—</span>
+      </div>
+      <div class="kpi">
+        <span class="kpi-label" data-i18n="web.dashboard.kpi.countries">Países afectados</span>
+        <span class="kpi-value mono" id="kpi-countries">—</span>
+      </div>
+    </header>
+
+    <main id="charts-area">
+      <!-- Controles globales: solo periodo -->
+      <!-- NOTA: el selector de FUENTE (Todos/USGS/Shake) se eliminó
+           porque los feeds GeoJSON de USGS no exponen consistentemente
+           el origen del evento; filtrar por "Raspberry Shake" siempre
+           devolvía un conjunto vacío y confundía al usuario. -->
+      <div id="controls-bar">
+        <div id="period-selector" class="selector-row">
+          <span class="selector-label" data-i18n="web.dashboard.selector.period">PERIODO</span>
+          <button class="period-btn" data-period="all_hour">1 h</button>
+          <button class="period-btn" data-period="all_6h">6 h</button>
+          <button class="period-btn active" data-period="all_day">24 h</button>
+          <button class="period-btn" data-period="all_week">7 d</button>
+          <button class="period-btn" data-period="all_month">30 d</button>
+        </div>
+      </div>
+
+      <h2 class="row-title"><span id="row-summary-title">Resumen</span> <span id="period-label" class="period-label">(últimas 24 h)</span></h2>
+
+      <!-- Primera fila: 4 gráficas básicas -->
+      <div class="charts-grid">
+        <section class="chart-card">
+          <header>
+            <span class="chart-icon">📊</span>
+            <h3><span data-i18n="web.dashboard.chart.countries">Top 10 países / regiones</span> <span class="period-label-inline" data-i18n="web.dashboard.chart.countries_filter">(M ≥ 3.0)</span></h3>
+          </header>
+          <div class="chart" id="chart-countries"></div>
+        </section>
+
+        <section class="chart-card">
+          <header>
+            <span class="chart-icon">📈</span>
+            <h3 data-i18n="web.dashboard.chart.magnitude">Distribución de magnitud</h3>
+          </header>
+          <div class="chart" id="chart-magnitude"></div>
+        </section>
+
+        <section class="chart-card">
+          <header>
+            <span class="chart-icon">🌊</span>
+            <h3 data-i18n="web.dashboard.chart.depth">Distribución de profundidad</h3>
+          </header>
+          <div class="chart" id="chart-depth"></div>
+        </section>
+
+        <section class="chart-card">
+          <header>
+            <span class="chart-icon">⏱</span>
+            <h3 id="timeline-title"><span id="timeline-title-text">Línea temporal</span> <span id="timeline-window-label" class="period-label-inline">(24 h)</span></h3>
+          </header>
+          <div class="chart" id="chart-timeline"></div>
+        </section>
+      </div>
+
+      <h2 class="row-title" data-i18n="web.dashboard.row.advanced">Análisis avanzado</h2>
+
+      <!-- Segunda fila: 3 gráficas avanzadas -->
+      <div class="charts-grid charts-grid-3">
+        <section class="chart-card">
+          <header>
+            <span class="chart-icon">🚨</span>
+            <h3 data-i18n="web.dashboard.chart.pager">Niveles PAGER</h3>
+            <select id="pager-region-select" class="region-select" data-i18n-title="web.dashboard.pager.tooltip" title="Filtrar por región">
+              <option value="all" data-i18n="web.dashboard.pager.select.all">Todo el mundo</option>
+            </select>
+          </header>
+          <div class="chart" id="chart-pager"></div>
+        </section>
+
+        <section class="chart-card">
+          <header>
+            <span class="chart-icon">📉</span>
+            <h3><span data-i18n="web.dashboard.chart.trend">Distribución por periodo</span> <span id="trend-bucket-label" class="period-label-inline">(adaptativo)</span></h3>
+          </header>
+          <div class="chart" id="chart-trend"></div>
+        </section>
+
+        <section class="chart-card">
+          <header>
+            <span class="chart-icon">🎯</span>
+            <h3 data-i18n="web.dashboard.chart.scatter">Profundidad × Magnitud</h3>
+          </header>
+          <div class="chart" id="chart-scatter"></div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <!-- Pantalla de error si ECharts no carga -->
+  <div id="error-screen" style="display:none; position:absolute; top:50%;
+       left:50%; transform:translate(-50%,-50%); background:rgba(17,17,17,0.92);
+       border:1px solid rgba(255,255,255,0.08); border-radius:12px;
+       padding:24px 28px; max-width:420px; text-align:center; z-index:99;">
+    <div style="font-size:32px; margin-bottom:8px;">📉</div>
+    <div data-i18n="web.dashboard.error.title" style="font-size:16px; font-weight:600; color:#fafafa; margin-bottom:6px;">
+      No se pudo cargar el dashboard
+    </div>
+    <div id="error-detail" style="font-size:12px; color:#a1a1aa; line-height:1.5;">
+      Comprobando conexión a la CDN…
+    </div>
+  </div>
+
+  <script src="dashboard.js"></script>
+  <script>
+    window.addEventListener("error", (e) => {
+      const d = document.getElementById("error-detail");
+      const s = document.getElementById("error-screen");
+      if (d) d.textContent = e.message || "Error JS";
+      if (s) s.style.display = "block";
+    });
+    setTimeout(() => {
+      if (typeof echarts === "undefined") {
+        const d = document.getElementById("error-detail");
+        const s = document.getElementById("error-screen");
+        if (d) d.innerHTML =
+          "ECharts no se descargó. Verifica conexión a<br>cdn.jsdelivr.net.";
+        if (s) s.style.display = "block";
+      }
+    }, 8000);
+  </script>
+</body>
+</html>

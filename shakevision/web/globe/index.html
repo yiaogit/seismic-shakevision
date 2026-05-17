@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ShakeVision · Globe</title>
+
+  <link rel="stylesheet" href="styles.css">
+
+  <!-- QWebChannel (provisto por Qt) -->
+  <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+
+  <!-- ECharts + ECharts-GL: bibliotecas locales primero, fallback CDN -->
+  <script src="lib/echarts.min.js" onerror="window._needCdn = true"></script>
+  <script src="lib/echarts-gl.min.js" onerror="window._needCdn = true"></script>
+  <script>
+    if (window._needCdn || typeof echarts === "undefined") {
+      document.write(
+        '<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"><\/script>' +
+        '<script src="https://cdn.jsdelivr.net/npm/echarts-gl@2.0.9/dist/echarts-gl.min.js"><\/script>'
+      );
+    }
+    console.log("Globe deps:",
+                "echarts=", typeof echarts,
+                "echarts-gl loaded=", (typeof echarts !== "undefined" &&
+                                        typeof echarts.GLOBE !== "undefined" ||
+                                        document.querySelectorAll('script[src*="echarts-gl"]').length > 0));
+  </script>
+</head>
+<body>
+  <!-- Contenedor principal del globo (ocupa toda la ventana) -->
+  <div id="globe"></div>
+
+  <!-- Cabecera flotante: selector de capa + ventana temporal -->
+  <div id="layer-switcher" class="floating-card">
+    <div class="card-label" data-i18n="web.globe.layer_label">Capa</div>
+    <div class="segmented" role="tablist">
+      <button class="seg-btn" data-layer="devices" data-i18n="web.globe.layer.devices" role="tab">📡 Dispositivos</button>
+      <button class="seg-btn active" data-layer="quakes" data-i18n="web.globe.layer.quakes" role="tab">🌋 Sismos</button>
+      <button class="seg-btn" data-layer="both" data-i18n="web.globe.layer.both" role="tab">✨ Ambos</button>
+    </div>
+
+    <div class="card-label" style="margin-top:10px;" data-i18n="web.globe.period_label">Periodo</div>
+    <div class="segmented" id="period-switcher" role="tablist">
+      <button class="period-btn-globe" data-period="all_hour">1h</button>
+      <button class="period-btn-globe active" data-period="all_day">24h</button>
+      <button class="period-btn-globe" data-period="all_week">7d</button>
+      <button class="period-btn-globe" data-period="all_month">30d</button>
+    </div>
+  </div>
+
+  <!-- Esquina superior derecha: controles de cámara -->
+  <div id="camera-controls" class="floating-card">
+    <button class="cam-btn" id="cam-zoom-in" data-i18n-title="web.globe.controls.zoom_in" title="Acercar">＋</button>
+    <button class="cam-btn" id="cam-zoom-out" data-i18n-title="web.globe.controls.zoom_out" title="Alejar">−</button>
+    <button class="cam-btn" id="cam-reset" data-i18n-title="web.globe.controls.reset" title="Restablecer vista">⟲</button>
+    <button class="cam-btn cam-toggle" id="cam-rotate" data-i18n-title="web.globe.controls.rotate_pause" title="Pausar/reanudar rotación">⏸</button>
+  </div>
+
+  <!-- Esquina inferior izquierda: leyenda dinámica -->
+  <div id="legend" class="floating-card">
+    <div class="card-label" id="legend-title">Magnitud</div>
+    <div id="legend-content"></div>
+  </div>
+
+  <!-- Esquina inferior derecha: contador en vivo -->
+  <div id="counter" class="floating-card mono">
+    <span id="counter-icon">⏳</span>
+    <span id="counter-text" data-i18n="web.globe.loading">Cargando…</span>
+  </div>
+
+  <!-- Pantalla de error -->
+  <div id="error-screen" class="floating-card" style="display:none;
+       top: 50%; left: 50%; transform: translate(-50%, -50%);
+       max-width: 480px; text-align: center; padding: 28px 32px;">
+    <div style="font-size: 32px; margin-bottom: 8px;">🛰️</div>
+    <div data-i18n="web.globe.error.title" style="font-size: 16px; font-weight: 600; color: #fafafa;
+                margin-bottom: 6px;">No se pudo cargar el globo</div>
+    <div id="error-detail" style="font-size: 12px; color: #a1a1aa;
+         line-height: 1.5;">Comprobando ECharts-GL…</div>
+  </div>
+
+  <script src="globe.js"></script>
+
+  <script>
+    window.addEventListener("error", (e) => {
+      const detail = document.getElementById("error-detail");
+      const screen = document.getElementById("error-screen");
+      if (detail) detail.textContent = (e.message || "Error JS")
+        + (e.filename ? `  (${e.filename.split("/").pop()})` : "");
+      if (screen) screen.style.display = "block";
+    });
+    setTimeout(() => {
+      // Si echarts no cargó, mostrar diagnóstico
+      if (typeof echarts === "undefined") {
+        const d = document.getElementById("error-detail");
+        const s = document.getElementById("error-screen");
+        if (d) d.innerHTML =
+          "ECharts no se descargó.<br>" +
+          "Ejecuta: <span class='mono'>bash scripts/install_libs.sh</span>";
+        if (s) s.style.display = "block";
+      }
+    }, 8000);
+  </script>
+</body>
+</html>

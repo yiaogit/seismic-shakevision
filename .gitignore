@@ -1,0 +1,94 @@
+# ============================================================
+# Python
+# ============================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ============================================================
+# Entornos virtuales
+# ============================================================
+.venv/
+venv/
+ENV/
+env/
+.env
+
+# ============================================================
+# Pruebas y cobertura
+# ============================================================
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# ============================================================
+# Empaquetado y binarios
+# ============================================================
+*.spec
+*.exe
+*.app
+
+# ============================================================
+# Editores e IDE
+# ============================================================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ============================================================
+# Datos sísmicos generados / capturas locales
+# ============================================================
+data/
+recordings/
+*.mseed
+*.sac
+logs/
+*.log
+
+# ============================================================
+# Fuentes empaquetadas (se descargan con scripts/install_fonts.sh)
+# El README del directorio queda en el repo; los binarios no.
+# ============================================================
+shakevision/assets/fonts/*.ttf
+shakevision/assets/fonts/*.otf
+shakevision/assets/fonts/*.ttc
+!shakevision/assets/fonts/README.md
+
+# ============================================================
+# Bibliotecas JS empaquetadas (descargadas con install_libs.sh)
+# ============================================================
+shakevision/web/globe/lib/*.js
+shakevision/web/globe/lib/*.jpg
+shakevision/web/globe/lib/*.png
+shakevision/web/dashboard/lib/*.js

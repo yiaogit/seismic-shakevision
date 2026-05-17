@@ -1,0 +1,88 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shakevision"
+version = "0.1.0"
+description = "ShakeVision OpenData Monitor - estación local de monitoreo sísmico basada en datos abiertos de Raspberry Shake."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Yiao", email = "yiaogit@gmail.com" }
+]
+keywords = ["seismology", "raspberry-shake", "seedlink", "obspy", "pyqtgraph", "real-time"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Visualization",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+    "PySide6>=6.6,<7.0",
+    "pyqtgraph>=0.13.3",
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "obspy>=1.4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-qt>=4.3",
+    "ruff>=0.4",
+    "pyinstaller>=6.5",
+]
+# Mejoras nativas exclusivas de macOS (barra de título translúcida,
+# fondo vibrante). Se instala con: pip install ".[macos]"
+macos = [
+    "pyobjc-framework-Cocoa>=10; sys_platform == 'darwin'",
+]
+
+[project.scripts]
+shakevision = "shakevision.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/yiaogit/seismic-shakevision"
+Repository = "https://github.com/yiaogit/seismic-shakevision"
+Issues = "https://github.com/yiaogit/seismic-shakevision/issues"
+Changelog = "https://github.com/yiaogit/seismic-shakevision/blob/main/CHANGELOG.md"
+
+[tool.setuptools.packages.find]
+include = ["shakevision*"]
+exclude = ["tests*"]
+
+[tool.setuptools.package-data]
+shakevision = [
+    "assets/fonts/*.ttf",
+    "assets/fonts/*.otf",
+    "assets/fonts/README.md",
+    "assets/icons/*.svg",
+    "web/globe/*.html",
+    "web/globe/*.js",
+    "web/globe/*.css",
+    "web/dashboard/*.html",
+    "web/dashboard/*.js",
+    "web/dashboard/*.css",
+    "web/report/*.html",
+    "web/report/*.css",
+    "web/globe/lib/*.js",
+    "web/globe/lib/*.jpg",
+    "web/globe/lib/*.png",
+    "web/dashboard/lib/*.js",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

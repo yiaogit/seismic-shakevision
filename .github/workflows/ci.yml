@@ -1,0 +1,127 @@
+# =============================================================================
+# Integración Continua de ShakeVision
+# -----------------------------------------------------------------------------
+# Este flujo de trabajo se ejecuta en cada "push" y en cada "pull request"
+# contra la rama principal. Valida que el proyecto:
+#   1. compila en Python 3.10, 3.11 y 3.12;
+#   2. supera el linter "ruff";
+#   3. pasa la suite de pruebas "pytest";
+#   4. funciona en los tres sistemas operativos soportados
+#      (Ubuntu, macOS y Windows).
+#
+# El objetivo principal es detectar de forma temprana cualquier
+# incompatibilidad entre plataformas antes de llegar a la fase de
+# empaquetado.
+# =============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master]
+  # Permite lanzar el flujo manualmente desde la pestaña "Actions"
+  workflow_dispatch:
+
+# Cancelar ejecuciones anteriores cuando se empuja una nueva versión
+# al mismo PR / rama: ahorra tiempo de CI.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }} · Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      # No abortar todos los trabajos si uno falla:
+      # queremos ver qué plataformas concretas tienen problemas.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ['3.10', '3.11', '3.12']
+
+    steps:
+      # -----------------------------------------------------------------
+      # 1. Descargar el repositorio
+      # -----------------------------------------------------------------
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------
+      # 2. Instalar Python con caché de pip
+      # -----------------------------------------------------------------
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      # -----------------------------------------------------------------
+      # 3. Dependencias de sistema necesarias en Ubuntu para Qt/PySide6
+      #    (xcb, openGL, etc.). En macOS y Windows no hace falta.
+      # -----------------------------------------------------------------
+      - name: Install Linux system dependencies (Qt runtime)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 \
+            libxkbcommon0 \
+            libxkbcommon-x11-0 \
+            libxcb-cursor0 \
+            libxcb-icccm4 \
+            libxcb-image0 \
+            libxcb-keysyms1 \
+            libxcb-randr0 \
+            libxcb-render-util0 \
+            libxcb-shape0 \
+            libxcb-xinerama0 \
+            libxcb-xkb1 \
+            libgl1 \
+            libdbus-1-3
+
+      # -----------------------------------------------------------------
+      # 4. Instalar el proyecto en modo editable + extras de desarrollo
+      # -----------------------------------------------------------------
+      - name: Install project (editable + dev extras)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      # -----------------------------------------------------------------
+      # 5. Linter (ruff). Solo informa, no bloquea de momento.
+      # -----------------------------------------------------------------
+      - name: Lint with ruff
+        run: |
+          ruff check shakevision tests
+
+      # -----------------------------------------------------------------
+      # 6. Comprobación de sintaxis global
+      # -----------------------------------------------------------------
+      - name: Byte-compile all sources
+        run: |
+          python -m compileall -q shakevision tests
+
+      # -----------------------------------------------------------------
+      # 7. Suite de pruebas. En Linux hay que arrancar un servidor X
+      #    virtual (xvfb) para que los widgets Qt puedan crearse aunque
+      #    no haya pantalla física.
+      # -----------------------------------------------------------------
+      - name: Run pytest (Linux con xvfb)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y --no-install-recommends xvfb
+          xvfb-run --auto-servernum pytest -v
+
+      - name: Run pytest (macOS / Windows)
+        if: runner.os != 'Linux'
+        env:
+          # Backend "offscreen" de Qt: permite instanciar widgets sin
+          # mostrar ninguna ventana, ideal para CI.
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          pytest -v

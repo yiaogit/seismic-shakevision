@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="{{LANG}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{HTML_TITLE}}</title>
+  <style>{{INLINE_STYLES}}</style>
+</head>
+<body>
+  <div class="container">
+
+    <header class="report-header">
+      <h1>{{H1}}</h1>
+      <div class="subtitle">{{SUBTITLE}}</div>
+      <div class="meta">
+        <span><strong>{{META_GENERATED}}</strong> <span class="mono">{{GENERATED_AT}}</span></span>
+        <span><strong>{{META_STATION}}</strong> <span class="mono">{{STATION_LABEL}}</span></span>
+        <span><strong>{{META_VERSION}}</strong> <span class="mono">v{{VERSION}}</span></span>
+      </div>
+    </header>
+
+    <section class="kpi-row">
+      {{KPI_CARDS}}
+    </section>
+
+    <section>
+      <h2>{{SECTION_COUNTRIES}}</h2>
+      <div class="bar-list">
+        {{COUNTRY_BARS}}
+      </div>
+    </section>
+
+    <section class="two-col">
+      <div>
+        <h2>{{SECTION_MAGNITUDE}}</h2>
+        <div class="bar-list">
+          {{MAGNITUDE_BARS}}
+        </div>
+      </div>
+      <div>
+        <h2>{{SECTION_DEPTH}}</h2>
+        <div class="bar-list">
+          {{DEPTH_BARS}}
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>{{SECTION_TIMELINE}}</h2>
+      {{TIMELINE_SVG}}
+    </section>
+
+    <section>
+      <h2>{{SECTION_EVENTS}}</h2>
+      {{EVENT_TABLE}}
+    </section>
+
+    <footer class="report-footer">
+      <span>{{FOOTER_SOURCES}}</span>
+      <span>ShakeVision v{{VERSION}} · MIT License</span>
+    </footer>
+
+  </div>
+</body>
+</html>

@@ -1,0 +1,252 @@
+/* ============================================================
+   ShakeVision · Datos · Tema "ciencia oscura"
+   Mantiene la coherencia con la vista del globo y el resto de la UI.
+   ============================================================ */
+
+:root {
+  --bg:        #0a0a0a;
+  --panel:    rgba(17, 17, 17, 0.78);
+  --panel-solid: #111111;
+  --border:   rgba(255, 255, 255, 0.08);
+  --text:     #fafafa;
+  --muted:    #a1a1aa;
+  --dim:      #71717a;
+  --accent:   #3b82f6;
+  --accent-2: #60a5fa;
+  --ok:       #10b981;
+  --warn:     #facc15;
+  --danger:   #ef4444;
+
+  --font-sans: "Inter Variable","Inter","-apple-system","SF Pro Text",
+               "Segoe UI Variable","Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  --font-mono: "JetBrains Mono","SF Mono","Monaco","Cascadia Code",
+               "Consolas","Menlo",monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  overflow: hidden;
+}
+
+#dashboard {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 12px;
+  gap: 12px;
+}
+
+/* ============================================================
+   Resumen superior con 4 KPI
+   ============================================================ */
+#summary-bar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.kpi {
+  background: var(--panel);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.kpi-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.kpi-value {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.1;
+}
+
+.mono { font-family: var(--font-mono); }
+
+/* ============================================================
+   Área de gráficas (scroll vertical si hace falta)
+   ============================================================ */
+#charts-area {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-right: 4px;  /* deja sitio al scrollbar */
+}
+
+#charts-area::-webkit-scrollbar { width: 8px; }
+#charts-area::-webkit-scrollbar-track { background: transparent; }
+#charts-area::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.08);
+  border-radius: 4px;
+}
+#charts-area::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.16);
+}
+
+.row-title {
+  margin: 4px 4px 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Barra que agrupa selectores de periodo y de fuente */
+#controls-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 4px 2px 4px;
+}
+
+.selector-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.selector-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  color: var(--muted);
+  margin-right: 4px;
+  min-width: 56px;
+}
+
+.period-btn {
+  background: var(--panel);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+
+.period-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.period-btn.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+  box-shadow: 0 0 12px rgba(59,130,246,0.35);
+}
+
+.period-label {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--dim);
+  letter-spacing: 0.4px;
+  text-transform: none;
+  margin-left: 6px;
+}
+
+.period-label-inline {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--dim);
+  margin-left: 4px;
+}
+
+.charts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-auto-rows: minmax(280px, 1fr);
+  gap: 12px;
+}
+
+.charts-grid-3 {
+  grid-template-columns: 1.1fr 1.4fr 1fr;
+}
+
+.chart-card {
+  background: var(--panel-solid);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.chart-card > header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 4px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+/* Selector embebido dentro del header de una tarjeta (p.ej. PAGER región) */
+.region-select {
+  margin-left: auto;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  cursor: pointer;
+  outline: none;
+  max-width: 160px;
+}
+
+.region-select:hover {
+  border-color: var(--accent);
+}
+
+.region-select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(59,130,246,0.25);
+}
+
+.chart-card h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.chart-icon {
+  font-size: 14px;
+  color: var(--accent-2);
+}
+
+.chart {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}

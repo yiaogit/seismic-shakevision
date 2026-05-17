@@ -1,0 +1,234 @@
+/* ============================================================
+   ShakeVision · Reporte de actividad — estilo "papel oscuro".
+   Embebido inline en el HTML generado: cero dependencias externas,
+   se ve igual abierto en cualquier navegador y al imprimirse a PDF.
+   ============================================================ */
+
+* { box-sizing: border-box; }
+
+@page { size: A4; margin: 18mm; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #0a0a0a;
+  color: #fafafa;
+  font-family: "Inter Variable","Inter","-apple-system","SF Pro Text",
+               "Segoe UI Variable","Segoe UI","PingFang SC",
+               "Microsoft YaHei","Helvetica Neue",sans-serif;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.mono {
+  font-family: "JetBrains Mono","SF Mono","Monaco","Cascadia Code",
+               "Consolas","Menlo",monospace;
+}
+
+.container {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 32px 28px 56px 28px;
+}
+
+/* ---------- Cabecera ---------- */
+header.report-header {
+  border-bottom: 1px solid #262626;
+  padding-bottom: 16px;
+  margin-bottom: 24px;
+}
+
+header.report-header h1 {
+  margin: 0 0 4px 0;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+header.report-header .subtitle {
+  color: #a1a1aa;
+  font-size: 12px;
+}
+
+header.report-header .meta {
+  margin-top: 12px;
+  display: flex;
+  gap: 24px;
+  font-size: 12px;
+  color: #a1a1aa;
+}
+
+header.report-header .meta strong {
+  color: #fafafa;
+  font-weight: 500;
+}
+
+/* ---------- KPI ---------- */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 32px;
+}
+
+.kpi-card {
+  background: #111111;
+  border: 1px solid #262626;
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+
+.kpi-card .label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: #a1a1aa;
+  margin-bottom: 6px;
+}
+
+.kpi-card .value {
+  font-size: 22px;
+  font-weight: 600;
+  color: #fafafa;
+}
+
+/* ---------- Secciones ---------- */
+section {
+  margin-bottom: 28px;
+  page-break-inside: avoid;
+}
+
+section h2 {
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #a1a1aa;
+  margin: 0 0 12px 0;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #1a1a1a;
+}
+
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+/* ---------- Bar rows (Top países / magnitud / profundidad) ---------- */
+.bar-list { width: 100%; }
+
+.bar-row {
+  display: grid;
+  grid-template-columns: 140px 1fr 56px;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.bar-label { color: #fafafa; }
+
+.bar-track {
+  background: #171717;
+  border-radius: 4px;
+  height: 16px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #3b82f6 0%, #60a5fa 100%);
+}
+
+.bar-value {
+  font-family: "JetBrains Mono","SF Mono","Consolas",monospace;
+  text-align: right;
+  color: #a1a1aa;
+}
+
+/* Variantes coloreadas para los buckets de magnitud */
+.bar-fill.mag-1 { background: linear-gradient(90deg, #38bdf8aa, #38bdf8); }
+.bar-fill.mag-2 { background: linear-gradient(90deg, #facc15aa, #facc15); }
+.bar-fill.mag-3 { background: linear-gradient(90deg, #fb923caa, #fb923c); }
+.bar-fill.mag-4 { background: linear-gradient(90deg, #ef4444aa, #ef4444); }
+.bar-fill.mag-5 { background: linear-gradient(90deg, #a855f7aa, #a855f7); }
+
+.bar-fill.depth { background: linear-gradient(90deg, #0ea5e9, #1d4ed8); }
+
+/* ---------- Tabla de eventos ---------- */
+table.events {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+table.events thead th {
+  text-align: left;
+  padding: 8px 10px;
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #a1a1aa;
+  border-bottom: 1px solid #262626;
+}
+
+table.events tbody td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #1a1a1a;
+}
+
+table.events tbody tr:hover { background: #111111; }
+
+table.events td.mag {
+  font-family: "JetBrains Mono","SF Mono","Consolas",monospace;
+  font-weight: 600;
+  width: 70px;
+}
+
+table.events td.time { color: #a1a1aa;
+  font-family: "JetBrains Mono","SF Mono","Consolas",monospace;
+  width: 170px; }
+table.events td.depth { color: #a1a1aa;
+  font-family: "JetBrains Mono","SF Mono","Consolas",monospace;
+  width: 80px; text-align: right; }
+table.events td.pager {
+  width: 80px; text-align: center;
+  font-size: 10px; font-weight: 600; text-transform: uppercase;
+}
+
+td.pager-green  { color: #10b981; }
+td.pager-yellow { color: #facc15; }
+td.pager-orange { color: #fb923c; }
+td.pager-red    { color: #ef4444; }
+
+/* ---------- Sparkline / SVG timeline ---------- */
+.timeline-svg {
+  width: 100%;
+  height: 180px;
+  background: #111111;
+  border: 1px solid #262626;
+  border-radius: 10px;
+  display: block;
+}
+
+/* ---------- Footer ---------- */
+footer.report-footer {
+  margin-top: 40px;
+  padding-top: 16px;
+  border-top: 1px solid #262626;
+  color: #71717a;
+  font-size: 11px;
+  display: flex;
+  justify-content: space-between;
+}
+
+/* ---------- Print: forzar fondo oscuro al imprimir ---------- */
+@media print {
+  html, body { background: #0a0a0a !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .container { padding: 0; max-width: none; }
+  section { page-break-inside: avoid; }
+}

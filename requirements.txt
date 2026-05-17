@@ -1,0 +1,12 @@
+# Dependencias en tiempo de ejecución para ShakeVision
+PySide6>=6.6,<7.0
+pyqtgraph>=0.13.3
+numpy>=1.24
+scipy>=1.10
+obspy>=1.4.0
+
+# Dependencias opcionales para desarrollo (instalar con: pip install -r requirements-dev.txt)
+# pytest>=7.4
+# pytest-qt>=4.3
+# ruff>=0.4
+# pyinstaller>=6.5

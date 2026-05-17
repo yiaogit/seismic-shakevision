@@ -1,0 +1,252 @@
+/* ============================================================
+   ShakeVision · Globo · Tema "ciencia oscura"
+   Coherente con la paleta del resto de la app (Vercel Geist dark).
+   ============================================================ */
+
+:root {
+  --bg:        #0a0a0a;
+  --panel:    rgba(17, 17, 17, 0.78);
+  --border:   rgba(255, 255, 255, 0.08);
+  --text:     #fafafa;
+  --muted:    #a1a1aa;
+  --dim:      #71717a;
+  --accent:   #3b82f6;
+  --accent-2: #60a5fa;
+  --ok:       #10b981;
+
+  --font-sans: "Inter Variable","Inter","-apple-system","SF Pro Text",
+               "Segoe UI Variable","Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  --font-mono: "JetBrains Mono","SF Mono","Monaco","Cascadia Code",
+               "Consolas","Menlo",monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  overflow: hidden;
+  user-select: none;
+}
+
+#globe {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 50%, #0e1530 0%, #050816 60%, #02030a 100%);
+}
+
+/* ============================================================
+   Tarjetas flotantes (HUD)
+   ============================================================ */
+.floating-card {
+  position: absolute;
+  background: var(--panel);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 14px;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+  z-index: 10;
+}
+
+.card-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.mono { font-family: var(--font-mono); font-size: 12px; }
+
+/* ============================================================
+   Selector de capa (segmented control)
+   ============================================================ */
+#layer-switcher {
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.segmented {
+  display: flex;
+  gap: 4px;
+}
+
+.seg-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 160ms ease;
+}
+
+.seg-btn:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.seg-btn.active {
+  background: var(--accent);
+  color: #ffffff;
+  box-shadow: 0 0 16px rgba(59, 130, 246, 0.45);
+}
+
+/* ============================================================
+   Selector de periodo (más compacto que el de capa)
+   ============================================================ */
+.period-btn-globe {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+
+.period-btn-globe:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.period-btn-globe.active {
+  background: var(--accent);
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.35);
+}
+
+/* ============================================================
+   Controles de cámara (zoom + rotate + reset)
+   ============================================================ */
+#camera-controls {
+  top: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+}
+
+.cam-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 500;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 140ms ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cam-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--accent);
+  color: var(--accent-2);
+}
+
+.cam-btn:active {
+  background: var(--accent);
+  color: white;
+}
+
+.cam-btn.cam-toggle.paused {
+  color: var(--accent-2);
+  border-color: var(--accent);
+}
+
+/* ============================================================
+   Leyenda
+   ============================================================ */
+#legend {
+  bottom: 16px;
+  left: 16px;
+  min-width: 200px;
+}
+
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 8px currentColor;
+}
+
+/* ============================================================
+   Contador "live"
+   ============================================================ */
+#counter {
+  bottom: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+#counter.ok #counter-icon {
+  filter: drop-shadow(0 0 6px var(--ok));
+}
+
+/* ============================================================
+   Tooltip
+   ============================================================ */
+#tooltip {
+  display: none;
+  pointer-events: none;
+  max-width: 320px;
+  z-index: 20;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+#tooltip .tt-title {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 4px;
+  color: var(--text);
+}
+
+#tooltip .tt-row {
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+
+#tooltip .tt-row strong {
+  color: var(--text);
+  font-weight: 500;
+}
