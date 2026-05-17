@@ -56,7 +56,7 @@ class LoadingOverlay(QFrame):
         # Capturar clics para que el panel detrás no reciba interacción
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.setStyleSheet(
-            f"QFrame#LoadingOverlay {{ background-color: rgba(10,10,10,0.78); }}"
+            "QFrame#LoadingOverlay { background-color: rgba(10,10,10,0.78); }"
         )
 
         self._mode = "loading"      # "loading" | "error" | "hidden"

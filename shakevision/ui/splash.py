@@ -19,7 +19,6 @@ anillos. Es ligero (~0.1 ms/frame) y no requiere QPropertyAnimation.
 
 from __future__ import annotations
 
-import math
 from typing import Optional
 
 from PySide6.QtCore import Qt, QTimer
@@ -178,7 +177,8 @@ class SplashScreen(QFrame):
         glow = QRadialGradient(cx, cy, EPICENTER_RADIUS_PX * 2.5)
         glow.setColorAt(0.0, QColor(255, 255, 255, 230))
         glow.setColorAt(0.4, center_color)
-        center_color2 = QColor(COLOR_ACCENT); center_color2.setAlpha(0)
+        center_color2 = QColor(COLOR_ACCENT)
+        center_color2.setAlpha(0)
         glow.setColorAt(1.0, center_color2)
         painter.setBrush(QBrush(glow))
         painter.setPen(Qt.NoPen)

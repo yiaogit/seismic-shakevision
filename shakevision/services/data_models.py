@@ -81,12 +81,18 @@ class Earthquake:
         """
 
         m = self.magnitude
-        if m < 3.0:   return "micro"
-        if m < 4.0:   return "minor"
-        if m < 5.0:   return "light"
-        if m < 6.0:   return "moderate"
-        if m < 7.0:   return "strong"
-        if m < 8.0:   return "major"
+        if m < 3.0:
+            return "micro"
+        if m < 4.0:
+            return "minor"
+        if m < 5.0:
+            return "light"
+        if m < 6.0:
+            return "moderate"
+        if m < 7.0:
+            return "strong"
+        if m < 8.0:
+            return "major"
         return "great"
 
     def is_recent(self, now_unix: float, hours: float = 24.0) -> bool:

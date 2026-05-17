@@ -38,7 +38,7 @@ from PySide6.QtCore import (
     Slot,
 )
 
-from shakevision.services.data_models import Earthquake, ShakeStation
+from shakevision.services.data_models import ShakeStation
 from shakevision.services.iris import IRISClient, IRISError
 from shakevision.services.shakenet import ShakeNetClient, ShakeNetError
 from shakevision.services.usgs import USGSClient, USGSError

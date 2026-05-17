@@ -10,7 +10,7 @@ import pytest
 # El módulo dashboard_view importa PySide6 en cabecera; saltar si no está
 pytest.importorskip("PySide6.QtCore", reason="PySide6 no instalado")
 
-from shakevision.services.data_models import Earthquake, PagerLevel  # noqa: E402
+from shakevision.services.data_models import Earthquake  # noqa: E402
 from shakevision.ui.dashboard_view import (  # noqa: E402
     WEB_DASHBOARD_DIR,
     aggregate_by_country,

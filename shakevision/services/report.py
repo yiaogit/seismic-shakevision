@@ -351,10 +351,14 @@ def _render_timeline_svg(
         return pad_t + (1.0 - (mag / m_max)) * inner_h
 
     def color_for(mag: float) -> str:
-        if mag < 3.0:  return "#38bdf8"
-        if mag < 4.5:  return "#facc15"
-        if mag < 6.0:  return "#fb923c"
-        if mag < 7.5:  return "#ef4444"
+        if mag < 3.0:
+            return "#38bdf8"
+        if mag < 4.5:
+            return "#facc15"
+        if mag < 6.0:
+            return "#fb923c"
+        if mag < 7.5:
+            return "#ef4444"
         return "#a855f7"
 
     # Líneas del eje Y para magnitudes 3, 5, 7
