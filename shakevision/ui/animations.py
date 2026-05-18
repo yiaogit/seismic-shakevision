@@ -149,3 +149,91 @@ def clear_opacity_effect(widget: QWidget) -> None:
     if isinstance(effect, QGraphicsOpacityEffect):
         effect.setOpacity(1.0)
         widget.setGraphicsEffect(None)
+
+
+# ============================================================
+# v0.6: HoverPressBehavior — animación micro de feedback macOS-style
+# ============================================================
+#
+# QSS soporta :hover/:pressed pero los cambios son INMEDIATOS (0 ms).
+# macOS y iOS tienen ~150 ms ease para hover y ~80 ms para pressed.
+# Esto añade percepción de pulido sin necesidad de re-pintar lógica.
+#
+# Implementación: usamos QGraphicsOpacityEffect en lugar de QSS para
+# que el cambio sea animable. La opacidad oscila entre 1.0 (normal),
+# 0.86 (hover) y 0.72 (pressed). NO usamos transform de escala
+# porque Qt no anima propiedades nativas de widget (rotación/escala)
+# sin meterlos en un QGraphicsView — coste demasiado alto.
+#
+# Uso:
+#     from shakevision.ui.animations import attach_hover_press
+#     attach_hover_press(my_button)
+#
+# Una vez instalado, el widget responde solo. Es seguro llamar a la
+# misma función dos veces sobre el mismo widget — el behavior se
+# reemplaza, no se acumula.
+class _HoverPressBehavior(QObject):
+    """Event filter que anima opacity en hover/press."""
+
+    NORMAL  = 1.00
+    HOVER   = 0.86
+    PRESSED = 0.72
+
+    def __init__(self, widget: QWidget) -> None:
+        super().__init__(widget)
+        self._widget = widget
+        # Asegurar que existe un effect
+        effect = widget.graphicsEffect()
+        if not isinstance(effect, QGraphicsOpacityEffect):
+            effect = QGraphicsOpacityEffect(widget)
+            effect.setOpacity(1.0)
+            widget.setGraphicsEffect(effect)
+        self._effect = effect
+        # Animación reutilizable (la reasignamos start/end cada vez)
+        self._anim = QPropertyAnimation(effect, b"opacity", widget)
+        self._anim.setDuration(150)
+        self._anim.setEasingCurve(QEasingCurve.OutCubic)
+        # Instalar como event filter
+        widget.installEventFilter(self)
+
+    def _animate_to(self, target: float, duration_ms: int = 150) -> None:
+        self._anim.stop()
+        self._anim.setStartValue(self._effect.opacity())
+        self._anim.setEndValue(float(target))
+        self._anim.setDuration(int(duration_ms))
+        self._anim.start()
+
+    def eventFilter(self, obj, event):  # noqa: N802
+        # Importar localmente para no inflar el module-load
+        from PySide6.QtCore import QEvent
+        t = event.type()
+        if t == QEvent.Enter:
+            self._animate_to(self.HOVER, 150)
+        elif t == QEvent.Leave:
+            self._animate_to(self.NORMAL, 180)
+        elif t == QEvent.MouseButtonPress:
+            self._animate_to(self.PRESSED, 80)
+        elif t == QEvent.MouseButtonRelease:
+            # Si sigue dentro vuelve a HOVER, si no a NORMAL
+            target = self.HOVER if self._widget.underMouse() else self.NORMAL
+            self._animate_to(target, 120)
+        return False   # no consumir — dejamos que el evento siga
+
+
+# Mapping widget → behavior para evitar duplicados.
+_BEHAVIORS: dict[int, _HoverPressBehavior] = {}
+
+
+def attach_hover_press(widget: QWidget) -> None:
+    """Instala micro-animación hover/press (macOS-style) en ``widget``.
+
+    Idempotente: llamadas repetidas reemplazan el behavior anterior
+    en lugar de apilarlo. Devuelve None — el behavior se mantiene
+    vivo por la jerarquía Qt (parented to widget).
+    """
+
+    key = id(widget)
+    if key in _BEHAVIORS:
+        # Ya tiene behavior; nada que hacer
+        return
+    _BEHAVIORS[key] = _HoverPressBehavior(widget)

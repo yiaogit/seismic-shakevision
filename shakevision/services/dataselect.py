@@ -54,7 +54,7 @@ DEFAULT_TTL_S: Final[float] = 30.0 * 86400.0
 REQUEST_TIMEOUT_S: Final[float] = 60.0
 
 USER_AGENT: Final[str] = (
-    "ShakeVision/0.2 (+https://github.com/yiaogit/seismic-shakevision)"
+    "SeismicGuard/0.2 (+https://github.com/yiaogit/seismic-shakevision)"
 )
 
 # Límite duro de duración solicitable. dataselect deja descargar

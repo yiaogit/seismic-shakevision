@@ -53,7 +53,7 @@ DEFAULT_TTL_S: Final[float] = 300.0
 REQUEST_TIMEOUT_S: Final[float] = 15.0
 
 # User-Agent recomendado por USGS para identificar la app.
-USER_AGENT: Final[str] = "ShakeVision/0.1 (+https://github.com/yourname/ShakeVision)"
+USER_AGENT: Final[str] = "SeismicGuard/0.1 (+https://github.com/yourname/SeismicGuard)"
 
 
 class USGSError(Exception):

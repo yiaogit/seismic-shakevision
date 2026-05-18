@@ -53,18 +53,16 @@ class SpectrogramPanel(QFrame):
         self._header.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         layout.addWidget(self._header)
 
-        # PlotWidget contenedor
+        # PlotWidget contenedor — v0.6 P11: theme-aware
         self._plot = pg.PlotWidget(background=COLOR_BACKGROUND)
         self._plot.setMouseEnabled(x=True, y=False)
         self._plot.setMenuEnabled(False)
         self._plot.showGrid(x=True, y=True, alpha=0.10)
-        self._plot.getAxis("bottom").setPen(COLOR_PANEL_BORDER)
-        self._plot.getAxis("left").setPen(COLOR_PANEL_BORDER)
-        self._plot.getAxis("bottom").setTextPen(COLOR_TEXT_SECONDARY)
-        self._plot.getAxis("left").setTextPen(COLOR_TEXT_SECONDARY)
         self._plot.setLabel("bottom", t("spectrogram.axis_time"))
         self._plot.setLabel("left", t("spectrogram.axis_freq"))
         self._plot.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        from shakevision.ui.pg_theming import subscribe_pg_plot
+        subscribe_pg_plot(self._plot)
         layout.addWidget(self._plot, stretch=1)
 
         LocaleService.language_changed_signal().connect(self._retranslate)

@@ -1,8 +1,117 @@
 # Changelog
 
-All notable changes to **ShakeVision OpenData Monitor** will be documented in this file.
+All notable changes to **SeismicGuard** (formerly **ShakeVision OpenData Monitor**) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+---
+
+## [0.7.0] — 2026-05-18
+
+🎨 **Major redesign release** — rebrand, theming, internationalisation,
+onboarding, profile, location services, PDF polish.
+
+### Rebrand
+- Renamed app from **ShakeVision** to **SeismicGuard** everywhere
+  user-visible (window title, splash, About, status messages, reports).
+  Python package stays `shakevision` for backwards-compat with installs.
+
+### Theming
+- New `ThemeManager` + `LayerModeManager` singletons (themes
+  independent of pro/standard layer modes).
+- macOS-Sonoma / ChromeOS Material-3 palette overhaul: system-blue
+  accent `#0a84ff`, iOS-style hairlines, pill buttons, capsule tabs,
+  custom tooltips, drop shadows.
+- Light theme reworked from scratch: dashboard cards, workbench
+  panels, intensity card, profile dialog all use dynamic CSS variables.
+- `ui/animations.py` + `ui/elevation.py` + `ui/pg_theming.py` helpers
+  for hover/press micro-animations, Material elevation shadows, and
+  theme-aware pyqtgraph plots.
+- AppHeader logo with real-time theme awareness (PNG swap on switch).
+- Globe view always uses dark background regardless of Qt theme.
+
+### Internationalisation
+- Full i18n infrastructure (`LocaleService`, `t()` helper).
+- 435 keys × 4 locales (English, Spanish, Chinese, French) at 100 %
+  parity, covering UI, status messages, web views (globe + dashboard
+  ECharts), report templates.
+
+### Onboarding
+- Splash screen with progress bar.
+- `Localízame` welcome transition with halo animation, system
+  timezone detection (no network).
+- 6-step onboarding wizard (welcome / language / timezone / theme /
+  layer mode / done) with live re-translation as the user picks
+  language.
+- Auto-popup timezone dropdown for macOS QComboBox.
+
+### Profile dialog (📊)
+- AppHeader 👤 entry point opens a modal `ProfileDialog` with:
+  - Identity card with GitHub avatar (OAuth Device Flow, no secret).
+  - 6 usage stat cards (launches, time in app, earthquakes viewed,
+    stations clicked, audio played, reports generated).
+  - **Recent activity timeline** (last 50 events with relative time,
+    stored locally in QSettings via `ActivityLog`).
+- `UsageTracker` records aggregates; `ActivityLog` records events.
+
+### Region & time (Settings → General)
+- Timezone dropdown with all IANA zones + "Detect from system" button.
+- **Auto-detect location** button: one-click IP-based geolocation via
+  ip-api.com (no key, HTTP, 5 s timeout). Address can be detected
+  automatically or typed manually. Privacy-first — never called in
+  background.
+
+### Globe (3D Earth)
+- Three visual modes:
+  - **Day**: NASA Blue Marble texture, realistic shading.
+  - **Night**: Blue Marble darkened + Black Marble city lights as
+    emission layer (industry-standard NASA Worldview approach;
+    final iteration of 4 attempts).
+  - **Holographic**: country borders + multi-language labels
+    (≤ 100 countries, Taiwan blocklisted), reactive to language.
+- Auto-recovery from WebGL context loss with ResizeObserver +
+  `safeSetOption` wrapper.
+- `download_globe_assets.py` script with mirror fallback for optional
+  texture files.
+
+### Reports & PDF export
+- `report.html` template fully internationalised.
+- **PDF export overflow fixed**: `@page A4 + 18 mm margins`, table
+  columns now wrap (`table-layout: fixed; word-break: break-word`),
+  KPI grid switches from 4 → 2 columns in print, header repeated on
+  each page, white print background.
+- QWebEngineView sized 794 × 1123 px (A4 96 dpi) to minimise
+  Chromium scaling glitches.
+
+### Settings
+- Reset tab replaces the old Backup tab: one-click "Clear cache and
+  restart" wipes all `QSettings` (10 apps) + `~/.cache/shakevision/`
+  with a hard confirmation dialog → `QApplication.quit()`. Next
+  launch re-runs the onboarding wizard.
+
+### Removed / postponed
+- Right-click favourite-earthquake from the globe (7 implementation
+  iterations couldn't make echarts-gl's `scatter3D` raycaster
+  cooperate reliably; the underlying `FavoritesStore` and Profile
+  dialog plumbing remains for a future button-based UX).
+
+### Fixed
+- Profile dialog dark-mode rendering: cards were white over dark
+  background because QSS read theme colours at construction time
+  only — now re-applied on `ThemeManager.changed_signal`.
+- Black rectangles inside Profile cards: explicit
+  `background: transparent` on all child QLabels.
+- All click feedback (station click, add-to-workstation) broken by a
+  short-lived `rebuildChart()` call in `ResizeObserver` — reverted to
+  `chart.resize()` only.
+- Recoverable WebGL `getRoots` errors no longer surface in the
+  user-facing error overlay (whitelist + `safeSetOption`).
+
+### Added (services)
+- `services/activity_log.py` — 14-kind enum + 50-entry ring buffer.
+- `services/location_service.py` — async IP geolocation.
+- `services/clear_cache.py` — orchestrated QSettings + disk-cache wipe.
+- `services/github_auth.py` — GitHub Device Flow.
 
 ---
 

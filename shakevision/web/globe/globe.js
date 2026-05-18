@@ -1,5 +1,5 @@
 /* ============================================================
-   ShakeVision · Globo · Implementación con ECharts-GL.
+   SeismicGuard · Globo · Implementación con ECharts-GL.
    ------------------------------------------------------------
    Reemplazamos Globe.gl/Three.js por echarts-gl (mismo motor que
    ya usa el dashboard). Ventajas:
@@ -15,6 +15,38 @@
     devices: [],
     quakes: [],
     activeLayer: "quakes",
+    // ─── Modo visual del globo ───
+    // "night"        → texto-noche con luces de ciudades (clásico)
+    // "day"          → relieve topográfico iluminado (paramétrico, sin
+    //                  texturas adicionales: reutiliza earth-topology)
+    // "holographic"  → globo sin textura, shading=color, bloom alto.
+    //                  Se activa con LayerModeManager="professional".
+    // Python (globe_view.py) deriva el modo de Theme × LayerMode y lo
+    // empuja vía window.shakevisionGlobe.setVisualMode().
+    visualMode: "night",
+    // v0.6 G: tema activo de la app Qt (dark/light). Python lo empuja
+    // junto al modo. Solo influye en el sub-modo "holographic" — los
+    // modos day/night ya son theme-specific por definición.
+    visualTheme: "dark",
+    // v0.6 D: textura "Blue Marble" para modo día. Se asume null hasta
+    // que el preflight detecte el JPG opcional. Si existe se usa; si
+    // no, fallback a la topología B/N gris.
+    dayTextureUrl: null,
+    // v0.6 E: GeoJSON de fronteras de países (lazy-loaded para Pro).
+    // null = no cargado; [] = cargado pero vacío; [...] = listo.
+    countryBorderLines: null,
+    // v0.6 Phase 10: etiquetas de nombre de país (también de world.json).
+    // Cada item: { value: [lng,lat], name: "...", rank: int }.
+    // ``rank`` es el puesto por área (0 = el más grande) — se usa
+    // para mostrar solo los primeros N en vistas alejadas.
+    countryLabels: null,
+    // Idioma actual de la UI (en/es/zh/fr). Lo empuja Python en
+    // setI18n() para que las etiquetas de país se traduzcan.
+    lang: "en",
+    // v0.6 Phase 13: IDs de eventos sísmicos en favoritos. Python lo
+    // empuja con setFavoritedEventIds(); el JS resalta esos puntos
+    // con un símbolo ★ y borde dorado.
+    favoritedEventIds: new Set(),
     bridge: null,
   };
 
@@ -100,6 +132,50 @@
   // ``chart`` es ``let`` para poder sustituirlo al reinicializar.
   let chart = createChart();
 
+  // v0.6 Phase 13-fix v6: si el contenedor estaba a 0×0 al cargar
+  // (caso típico cuando QWebEngineView aún se está layouting), el
+  // echarts.init imprime "Dom has no width or height" y el
+  // coordinateSystem 'globe' queda a medio bootstrap →
+  // chart.convertToPixel devuelve null permanentemente → el right-
+  // click hit-test nunca encuentra ningún sismo.
+  //
+  // ResizeObserver es más fiable que window.resize cuando el
+  // tamaño del contenedor cambia por relayout interno de Qt en
+  // lugar de por cambio de tamaño de ventana. Al primer cambio
+  // a dimensiones reales forzamos chart.resize() para que echarts
+  // re-bootstrappee la cámara del globo. Una vez ya tiene buenas
+  // dimensiones, seguimos llamando resize en cada cambio (no es
+  // caro) para mantener todo sincronizado.
+  // ResizeObserver para mantener chart.resize() sincronizado con
+  // cambios de layout (Qt no siempre dispara window.resize).
+  //
+  // v6 IMPORTANTE: una versión previa de este bloque llamaba a
+  // rebuildChart() la primera vez que el contenedor pasaba de 0×0 a
+  // tener dimensiones reales, con la idea de re-bootstrappear el
+  // coordinateSystem 'globe'. PERO rebuildChart() hace
+  // chart.dispose() + crea uno nuevo, y todos los chart.on(...)
+  // (incluyendo el click handler que dispatcha station_clicked /
+  // earthquake_clicked al puente Python) viven en la instancia VIEJA
+  // → después del rebuild, el nuevo chart no tiene listeners → todos
+  // los clicks dejan de responder. Por eso ahora SOLO llamamos a
+  // resize(), nunca rebuild. El warning "Dom has no width or height"
+  // del primer init en container 0×0 se ignora — resize() después
+  // arregla el layout.
+  if (typeof ResizeObserver !== "undefined") {
+    try {
+      const ro = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const cr = entry.contentRect;
+          if (cr.width <= 0 || cr.height <= 0) continue;
+          if (isChartAlive(chart)) {
+            try { chart.resize(); } catch (_) { /* ignore */ }
+          }
+        }
+      });
+      ro.observe(container);
+    } catch (_) { /* ResizeObserver no soportado — usamos window.resize */ }
+  }
+
   function createChart() {
     const c = echarts.init(container, null, { renderer: "canvas" });
     installContextLostHandler(c);
@@ -140,8 +216,18 @@
   function rebuildChart() {
     try { if (chart) chart.dispose(); } catch (_) { /* ignore */ }
     chart = createChart();
-    // Restaurar el estado completo: base option + capa activa + datos.
-    try { chart.setOption(baseOption); } catch (_) { /* ignore primer pinta */ }
+    // Restaurar el estado completo: base option + modo visual + datos.
+    // ``baseOption`` se construyó con el modo visual inicial — si el
+    // usuario lo cambió en caliente, re-aplicamos el modo guardado en
+    // state.visualMode para evitar que el rebuild vuelva al "modo de
+    // arranque" tras una pérdida de contexto WebGL.
+    try {
+      chart.setOption({
+        backgroundColor: "transparent",
+        globe: buildGlobeBase(state.visualMode),
+        series: [],
+      });
+    } catch (_) { /* ignore primer pinta */ }
     // ``applyActiveLayer`` repinta todas las series con los datos
     // cacheados en ``state``; si aún no hay datos, no hace nada visible.
     try { applyActiveLayer(); } catch (_) { /* idem */ }
@@ -203,31 +289,423 @@
     }
   }, 10000);
 
-  // Configuración base del globo (estilo "ciencia oscura")
-  const baseOption = {
-    backgroundColor: "transparent",
-    globe: {
-      // Texturas locales (las descarga install_libs.sh); echarts-gl
-      // tolera URLs HTTPS también si las locales fallan.
-      baseTexture: "lib/earth-night.jpg",
+  // ============================================================
+  // Modos visuales — paramétricos (sin texturas adicionales)
+  // ------------------------------------------------------------
+  // Cada modo describe ÚNICAMENTE las propiedades visuales del
+  // globo (textura, shading, luces, post-effects). La cámara,
+  // controles y series se mantienen iguales — así un cambio de
+  // modo nunca pierde la posición ni los datos del usuario.
+  //
+  // Filosofía: cero assets nuevos. Reutilizamos los dos PNG ya
+  // descargados (earth-night.jpg + earth-topology.png) más una
+  // variante "color puro" para el modo holográfico.
+  // ============================================================
+  const VISUAL_MODES = {
+    // Noche — v0.6 Phase 12.4 REPLANTEO COMPLETO:
+    //
+    // Por qué los intentos anteriores fallaron: Black Marble es una
+    // textura inherentemente ~99% negra. Bajo CUALQUIER iluminación,
+    // si renderizas píxeles 0/255 obtienes negro. Las "ciudades" son
+    // píxeles aislados de 100-200/255 que a distancia se vuelven
+    // sub-pixel y desaparecen visualmente. No es un problema de
+    // shading, es la textura.
+    //
+    // Solución estándar de la industria (Cesium, NASA Worldview,
+    // Google Earth at night): NO usar Black Marble como base. Usar
+    // Blue Marble (textura DIURNA) oscurecida + luz de luna fría +
+    // overlay de luces de ciudad encima. Resultado: continentes
+    // perfectamente visibles en tono azul-noche, ciudades brillan
+    // por encima.
+    //
+    // Implementación:
+    //   * baseTexture = earth-day.jpg (Blue Marble — continentes claros)
+    //   * baseColor multiplica oscureciendo → tono "luz lunar"
+    //   * ambient azul frío + main blanco como reflejo lunar
+    //   * layers[]: capa adicional con earth-night.jpg como
+    //     "emisión" → ciudades brillan sin alterar el resto
+    //   * bloom moderado realza ciudades en bloom-aware
+    //
+    // ECharts-GL globe.layers requiere la propiedad name + type
+    // "blend" o "overlay". Usamos "blend" con blendTo="emission"
+    // para que la noche se sume sin restar contraste a la base.
+    night: {
+      baseTexture: "lib/earth-day.jpg",
       heightTexture: "lib/earth-topology.png",
+      shading: "lambert",
+      // baseColor multiplicativo: oscurece + tinta toda la textura
+      // hacia azul-noche. Sin esto el modo noche se vería como un
+      // día normal apenas atenuado.
+      baseColor: "#3a4a6e",
+      environment: "#000010",
+      light: {
+        // Ambient azul: simula luz dispersa de la atmósfera nocturna.
+        ambient: { intensity: 0.55, color: "#5a7aa8" },
+        // Main = "luz lunar" — fría, suave, desde un ángulo bajo.
+        main:    { intensity: 0.65, alpha: 25, color: "#dce6ff" },
+      },
+      // Capa adicional de luces de ciudad encima del Blue Marble.
+      // Si earth-night.jpg no carga (ej. install_libs no se corrió)
+      // la capa simplemente no aporta nada — el resto sigue OK.
+      layers: [
+        {
+          type: "blend",
+          blendTo: "emission",
+          texture: "lib/earth-night.jpg",
+          intensity: 0.85,
+        },
+      ],
+      postEffect: {
+        enable: true,
+        // Bloom moderado: las luces de ciudad (capa emisiva) generan
+        // halo, pero el cuerpo del globo no se "lava".
+        bloom: { enable: true, intensity: 0.35 },
+        SSAO:  { enable: true, radius: 1.2, intensity: 0.8 },
+      },
+    },
+    // Día (v0.6 D dual-source):
+    //   * Si existe ``lib/earth-day.jpg`` (Blue Marble) → satélite real:
+    //     shading=realistic + textura Blue Marble + entorno cielo →
+    //     se ve como la portada de un atlas profesional.
+    //   * Si NO existe → fallback al topology PNG: lambert + tierra
+    //     azul-verde + entorno crepúsculo, como un globo de despacho.
+    //
+    // ``baseTexture`` lo decide ``buildGlobeBase()`` en runtime leyendo
+    // state.dayTextureUrl (poblado por preflightDayTexture al arrancar).
+    // Las claves listadas aquí son el VALOR PROVISIONAL del fallback —
+    // se sobreescriben dinámicamente si tenemos Blue Marble.
+    day: {
+      baseTexture: "lib/earth-topology.png",
+      heightTexture: "lib/earth-topology.png",
+      shading: "lambert",
+      baseColor: "#5a7d8c",
+      environment: "#bfd8e8",
+      light: {
+        ambient: { intensity: 1.05, color: "#e0ecf5" },
+        main:    { intensity: 1.20, alpha: 45, color: "#fff6e2" },
+      },
+      postEffect: {
+        enable: true,
+        bloom: { enable: false },
+        SSAO:  { enable: false },
+      },
+    },
+    // Holográfico (Modo Profesional) — v0.6 dual-theme:
+    // El modo "holographic" base. La variante (dark vs light) se
+    // mezcla on-demand desde HOLOGRAPHIC_VARIANTS más abajo según
+    // el tema activo de la app (Theme manager Python).
+    //
+    // Filosofía:
+    //   * Tema OSCURO → environment negro espacio profundo, luces cyan
+    //     puras → sensación "puente de mando nocturno".
+    //   * Tema CLARO  → environment azul crepúsculo + luces más cálidas
+    //     → sensación "comando táctico al amanecer".
+    // Ambas variantes comparten textura topology + bloom alto.
+    holographic: {
+      baseTexture: "lib/earth-topology.png",
+      heightTexture: "lib/earth-topology.png",
+      shading: "lambert",
+      baseColor: "#062a3d",
+      environment: "#000814",
+      light: {
+        ambient: { intensity: 1.20, color: "#22d3ee" },
+        main:    { intensity: 0.55, alpha: 50, color: "#7dd3fc" },
+      },
+      postEffect: {
+        enable: true,
+        bloom: { enable: true, intensity: 0.85 },
+        SSAO:  { enable: false },
+      },
+    },
+  };
+
+  // ── v0.6 G: variantes de Modo Profesional según tema (dark/light)
+  // El usuario pidió "专业版的宇宙部分颜色根据 白天黑夜颜色进行改变":
+  // el espacio negro puro del modo Pro era demasiado severo en tema
+  // claro. Esta tabla mezcla un puñado de claves por encima del modo
+  // base para suavizar a "azul crepúsculo" en light, mantener negro
+  // espacio en dark.
+  const HOLOGRAPHIC_VARIANTS = {
+    dark: {
+      // Ya es el default — repetimos por simetría y para que el merge
+      // sea explícito, no dependa del fallback.
+      environment: "#000814",
+      baseColor:   "#062a3d",
+      light: {
+        ambient: { intensity: 1.20, color: "#22d3ee" },
+        main:    { intensity: 0.55, alpha: 50, color: "#7dd3fc" },
+      },
+    },
+    light: {
+      // Azul crepúsculo profundo — ni puro negro ni cielo diurno.
+      // Las luces ambientales tienen toque más cálido para no chocar
+      // con la UI Qt clara que envuelve el WebView.
+      environment: "#15233a",
+      baseColor:   "#1a3a5c",
+      light: {
+        ambient: { intensity: 1.05, color: "#7dd3fc" },
+        main:    { intensity: 0.65, alpha: 50, color: "#bae6fd" },
+      },
+    },
+  };
+
+  function visualConfigFor(mode) {
+    const base = VISUAL_MODES[mode] || VISUAL_MODES.night;
+    // v0.6 G: holographic adopta variante dark/light según tema activo.
+    if (mode === "holographic") {
+      const theme = state.visualTheme || "dark";
+      const variant = HOLOGRAPHIC_VARIANTS[theme] || HOLOGRAPHIC_VARIANTS.dark;
+      return Object.assign({}, base, variant);
+    }
+    // v0.6 D: day usa Blue Marble si está disponible.
+    if (mode === "day" && state.dayTextureUrl) {
+      return Object.assign({}, base, {
+        baseTexture: state.dayTextureUrl,
+        heightTexture: state.dayTextureUrl,  // mismo, da relieve sutil
+        shading: "realistic",
+        realisticMaterial: { roughness: 0.85, metalness: 0 },
+        // Con textura real podemos subir el bloom 0 y dejar el realismo
+        // hablar por sí mismo — y el cielo más neutro porque la propia
+        // textura ya tiene mucho azul océano.
+        environment: "#aac4dc",
+        light: {
+          ambient: { intensity: 0.45, color: "#ffffff" },
+          main:    { intensity: 1.10, alpha: 50, color: "#fff6e2" },
+        },
+      });
+    }
+    return base;
+  }
+
+  // ============================================================
+  // v0.6 D — Preflight de la textura Blue Marble (opcional)
+  // ============================================================
+  // ECharts intenta cargar baseTexture con un <img>; si el archivo no
+  // existe, ECharts silenciosamente pinta el globo del baseColor. No
+  // queremos eso para el día — preferimos el fallback explícito a
+  // earth-topology.png. Así que hacemos un Image() de prueba al
+  // arrancar; si carga OK, marcamos state.dayTextureUrl y re-aplicamos
+  // el modo si toca.
+  function preflightDayTexture() {
+    const url = "lib/earth-day.jpg";
+    const img = new Image();
+    img.onload = () => {
+      console.info("Globe: Blue Marble disponible → usando textura real");
+      state.dayTextureUrl = url;
+      // Si el usuario ya está en modo día, re-aplicar para que se vea
+      if (state.visualMode === "day") {
+        applyVisualMode("day", state.visualTheme);
+      }
+    };
+    img.onerror = () => {
+      console.info("Globe: earth-day.jpg no encontrado — usando "
+                   + "fallback topológico (modo día seguirá visible)");
+    };
+    img.src = url;
+  }
+
+  // ============================================================
+  // v0.6 E — Loader de fronteras de países (opcional)
+  // ============================================================
+  // Carga lib/world.json (GeoJSON FeatureCollection) y lo convierte a
+  // ``lines3D`` de ECharts: cada anillo exterior de cada Polygon/
+  // MultiPolygon → una polilínea sobre la esfera. Cyan + glow sutil.
+  // Solo se RENDERIZA en modo holographic — en day/night se omite
+  // para no ensuciar la vista satélite.
+  //
+  // GeoJSON esperado: features con geometry.type "Polygon" o
+  // "MultiPolygon" (cualquier ne_50m_admin_0_countries.geojson sirve).
+  function loadCountryBordersOnce() {
+    if (state.countryBorderLines !== null) return;   // ya cargado
+    const url = "lib/world.json";
+    fetch(url)
+      .then(r => {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      })
+      .then(geoJson => {
+        const lines = geoJsonToLines3D(geoJson);
+        const labels = geoJsonToCountryLabels(geoJson);
+        state.countryBorderLines = lines;
+        state.countryLabels = labels;
+        console.info(
+          "Globe: world.json cargado — " + lines.length + " polilíneas, "
+          + labels.length + " etiquetas de país");
+        // Si el usuario ya está en holographic, re-renderizar
+        if (state.visualMode === "holographic") {
+          applyActiveLayer();
+        }
+      })
+      .catch(err => {
+        console.info(
+          "Globe: world.json no encontrado/inválido — Pro mode "
+          + "seguirá sin bordes de país. Error: " + err.message);
+        state.countryBorderLines = [];   // marca "intentado, vacío"
+        state.countryLabels = [];
+      });
+  }
+
+  function geoJsonToLines3D(geoJson) {
+    // Devuelve [{ coords: [[lng,lat], ...] }, ...]
+    const out = [];
+    const features = (geoJson && geoJson.features) || [];
+    for (const f of features) {
+      const g = f.geometry;
+      if (!g) continue;
+      if (g.type === "Polygon") {
+        for (const ring of g.coordinates) {
+          out.push({ coords: ring });
+        }
+      } else if (g.type === "MultiPolygon") {
+        for (const poly of g.coordinates) {
+          for (const ring of poly) {
+            out.push({ coords: ring });
+          }
+        }
+      }
+    }
+    return out;
+  }
+
+  // ============================================================
+  // v0.6 Phase 10 — Etiquetas de país sobre el globo holográfico
+  // ============================================================
+  // Por cada Feature:
+  //   1. Sacar un punto representativo (LABEL_X/Y precomputado por
+  //      Natural Earth si está, sino bbox-center del polígono más
+  //      grande — más rápido que centroide ponderado y suficiente
+  //      visualmente para etiquetas).
+  //   2. Calcular el área del bbox (para ranking por importancia).
+  //   3. Guardar TODAS las traducciones disponibles (name_en, name_zh
+  //      etc.) — al cambiar de idioma en caliente no hay que volver
+  //      a cargar el GeoJSON.
+  function geoJsonToCountryLabels(geoJson) {
+    const features = (geoJson && geoJson.features) || [];
+    const out = [];
+    for (const f of features) {
+      const p = f.properties || {};
+      const point = labelPoint(f.geometry, p);
+      if (!point) continue;
+      const area = bboxAreaOfGeometry(f.geometry);
+      out.push({
+        coord: point,        // [lng, lat]
+        area: area,
+        // Diccionario de traducciones — Natural Earth ne_110m usa
+        // claves mayúscula. Defendemos las dos por si el GeoJSON
+        // viene de otro origen con minúsculas.
+        names: {
+          en: p.NAME_EN || p.name_en || p.NAME || p.name || "?",
+          es: p.NAME_ES || p.name_es,
+          zh: p.NAME_ZH || p.name_zh,
+          fr: p.NAME_FR || p.name_fr,
+        },
+      });
+    }
+    // Sort by area DESC. El índice resultante es el "rank":
+    // 0 = país más grande, len-1 = más pequeño.
+    out.sort((a, b) => b.area - a.area);
+    for (let i = 0; i < out.length; i++) out[i].rank = i;
+    return out;
+  }
+
+  function labelPoint(geom, props) {
+    if (!geom) return null;
+    // Natural Earth ofrece LABEL_X / LABEL_Y precomputados para muchas
+    // versiones — son posiciones manualmente ajustadas (mejor que el
+    // centroide para países raros tipo Chile / Noruega).
+    const lx = props.LABEL_X !== undefined ? props.LABEL_X : props.label_x;
+    const ly = props.LABEL_Y !== undefined ? props.LABEL_Y : props.label_y;
+    if (typeof lx === "number" && typeof ly === "number") {
+      return [lx, ly];
+    }
+    if (geom.type === "Polygon") {
+      return bboxCenter(geom.coordinates[0]);
+    }
+    if (geom.type === "MultiPolygon") {
+      // Tomamos el bbox del polígono más grande
+      let best = null, bestArea = 0;
+      for (const poly of geom.coordinates) {
+        const ring = poly[0];
+        const a = bboxAreaOfRing(ring);
+        if (a > bestArea) { bestArea = a; best = ring; }
+      }
+      return best ? bboxCenter(best) : null;
+    }
+    return null;
+  }
+
+  function bboxCenter(ring) {
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
+    for (const pt of ring) {
+      const x = pt[0], y = pt[1];
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    return [(minX + maxX) / 2, (minY + maxY) / 2];
+  }
+
+  function bboxAreaOfRing(ring) {
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
+    for (const pt of ring) {
+      const x = pt[0], y = pt[1];
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    return (maxX - minX) * (maxY - minY);
+  }
+
+  function bboxAreaOfGeometry(geom) {
+    if (!geom) return 0;
+    if (geom.type === "Polygon") {
+      return bboxAreaOfRing(geom.coordinates[0]);
+    }
+    if (geom.type === "MultiPolygon") {
+      let total = 0;
+      for (const poly of geom.coordinates) {
+        total += bboxAreaOfRing(poly[0]);
+      }
+      return total;
+    }
+    return 0;
+  }
+
+  function pickCountryName(item, lang) {
+    return (item.names[lang] || item.names.en || "?");
+  }
+
+  function buildGlobeBase(mode) {
+    // Construye la sección ``globe`` con la apariencia del modo dado
+    // + los parámetros invariantes (displacementScale, viewControl,
+    // temporalSuperSampling). Se llama desde baseOption inicial y
+    // desde applyVisualMode() al cambiar de modo en caliente.
+    const v = visualConfigFor(mode);
+    return {
       // displacementScale: 0  → la superficie queda perfectamente
       // esférica (sin relieve montañoso). Imprescindible para que
       // los puntos scatter3D se posicionen exactamente sobre las
       // coordenadas reportadas por USGS.
       displacementScale: 0,
-      shading: "realistic",
-      realisticMaterial: {
-        roughness: 0.85,
-        metalness: 0,
-      },
-      environment: "#000",
-      // Iluminación tenue para mantener el aspecto nocturno con
-      // las luces de las ciudades visibles
-      light: {
-        ambient: { intensity: 0.35 },
-        main:    { intensity: 0.6, alpha: 30 },
-      },
+      baseTexture:   v.baseTexture,
+      heightTexture: v.heightTexture,
+      shading:       v.shading,
+      ...(v.baseColor          ? { baseColor: v.baseColor } : {}),
+      ...(v.realisticMaterial  ? { realisticMaterial: v.realisticMaterial } : {}),
+      // v12.4: propagar layers[] si el modo lo define (modo night usa
+      // earth-night.jpg como capa emisiva de ciudades sobre la base
+      // Blue Marble). Si el modo no tiene layers pasamos array vacío
+      // para que ECharts sobreescriba la capa del modo anterior y no
+      // queden luces de ciudad parpadeando en modo día/holographic.
+      layers:        v.layers || [],
+      environment:   v.environment,
+      light:         v.light,
+      postEffect:    v.postEffect,
+      temporalSuperSampling: { enable: true },
       // Cámara y controles (rotación lenta automática)
       // ─── LÍMITES DE DISTANCIA ───
       // minDistance: 20 permite hacer zoom hasta escala "país pequeño"
@@ -263,23 +741,46 @@
         minAlpha: -90,
         maxAlpha: 90,
       },
-      // Bloom muy sutil — antes 0.18 hacía que los puntos ya brillantes
-      // (naranja, amarillo) parecieran "hiper-iluminados". Con 0.06
-      // queda solo un toque de glow en luces de ciudad.
-      postEffect: {
-        enable: true,
-        bloom: {
-          enable: true,
-          intensity: 0.06,
-        },
-        SSAO: { enable: true, radius: 1, intensity: 1.0 },
-      },
-      temporalSuperSampling: { enable: true },
-    },
+    };
+  }
+
+  // baseOption ahora se construye a partir del modo visual actual.
+  // Cualquier cambio en caliente (window.shakevisionGlobe.setVisualMode)
+  // re-emite SOLO la parte ``globe`` vía safeSetOption(), preservando
+  // cámara, series y zoom.
+  const baseOption = {
+    backgroundColor: "transparent",
+    globe:  buildGlobeBase(state.visualMode),
     series: [],
   };
 
   safeSetOption(baseOption);
+
+  // v0.6 D+E: lanzar preflights de assets opcionales. Estos son no
+  // bloqueantes — si los archivos no existen el globo sigue funcionando
+  // con los fallbacks ya configurados.
+  preflightDayTexture();
+  loadCountryBordersOnce();
+
+  // ─── API pública: cambio de modo visual en caliente ───
+  // v0.6: ahora acepta un segundo argumento ``theme`` ("dark" o
+  // "light") usado SOLO por el modo holographic — los modos day/night
+  // ya son theme-specific por definición. Python pasa el theme actual
+  // en cada llamada para que el fondo del Modo Pro se ajuste.
+  function applyVisualMode(mode, theme) {
+    if (!VISUAL_MODES[mode]) {
+      console.warn("Globe: modo visual desconocido", mode, "→ ignorado");
+      return;
+    }
+    state.visualMode = mode;
+    if (theme === "dark" || theme === "light") {
+      state.visualTheme = theme;
+    }
+    const fresh = buildGlobeBase(mode);
+    safeSetOption({ globe: fresh });
+    // v0.6 E: re-pintar series para meter/quitar fronteras según modo
+    applyActiveLayer();
+  }
 
   // ============================================================
   // Construcción dinámica de las series según la capa activa
@@ -378,18 +879,53 @@
         },
         data: state.quakes.map(q => {
           const b = bucketFor(q.mag);
+          // v0.6 Phase 13: si el sismo está en favoritos, lo agrandamos
+          // (+50% radio) y le añadimos un borde dorado para que destaque.
+          const isFav = state.favoritedEventIds.has(q.id);
           return {
             value: [q.lng, q.lat],
-            symbolSize: b.radius,
+            symbolSize: isFav ? Math.round(b.radius * 1.5) : b.radius,
             itemStyle: {
               color: b.color,
               opacity: 0.92,
+              borderColor: isFav ? "#fcd34d" : undefined,  // amber-300
+              borderWidth: isFav ? 2 : 0,
             },
             raw: q,
             kind: "quake",
           };
         }),
       });
+
+      // v0.6 Phase 13: capa adicional con ★ encima de los sismos
+      // favoritos. Usamos scatter3D con symbolSize=0 + label.show=true
+      // para que el ★ aparezca como texto flotante centrado sobre
+      // el punto, en lugar de un símbolo gráfico.
+      const favoritedQuakes = state.quakes.filter(
+        q => state.favoritedEventIds.has(q.id)
+      );
+      if (favoritedQuakes.length > 0) {
+        series.push({
+          name: "favorited_quakes",
+          type: "scatter3D",
+          coordinateSystem: "globe",
+          silent: true,
+          symbolSize: 0,
+          label: {
+            show: true,
+            formatter: "★",
+            color: "#fcd34d",   // amber-300, contrasta con todos los buckets
+            fontSize: 14,
+            fontWeight: 700,
+            textBorderColor: "#1a1a1f",
+            textBorderWidth: 2,
+          },
+          data: favoritedQuakes.map(q => ({
+            value: [q.lng, q.lat],
+            raw: q,
+          })),
+        });
+      }
 
       // Halos: solo para sismos REALMENTE significativos
       // (M ≥ 6.0 y últimas 6 h). Antes incluía M ≥ 4.5 lo cual
@@ -419,6 +955,79 @@
           }),
         });
       }
+    }
+
+    // ── v0.6 E: fronteras de países (solo modo Pro/holographic) ──
+    if (state.visualMode === "holographic"
+        && Array.isArray(state.countryBorderLines)
+        && state.countryBorderLines.length > 0) {
+      series.push({
+        name: "country_borders",
+        type: "lines3D",
+        coordinateSystem: "globe",
+        silent: true,                  // no roban click a los puntos
+        polyline: true,
+        effect: { show: false },       // sin animación de "running line"
+        blendMode: "lighter",          // sumar luz cyan
+        lineStyle: {
+          color: "#67e8f9",            // cyan-200 brillante
+          width: 1,
+          opacity: 0.55,
+        },
+        data: state.countryBorderLines,
+      });
+    }
+
+    // ── v0.6 Phase 10/12.3: etiquetas de nombre de país (solo holographic) ──
+    // v12.3 cambios:
+    //   * MAX_LABELS 50 → 100 — España, Portugal, Países Bajos, Bélgica,
+    //     Suiza, etc. caben ahora en el top 100 por área.
+    //   * BLOCKLIST — algunas etiquetas se omiten por preferencia del
+    //     usuario (sensibilidad política, redundancia, etc.). Se filtra
+    //     por nombre EN (case-insensitive, en cualquier propiedad de
+    //     traducción) para que la regla aplique en todos los idiomas.
+    if (state.visualMode === "holographic"
+        && Array.isArray(state.countryLabels)
+        && state.countryLabels.length > 0) {
+      const MAX_LABELS = 100;
+      const lang = state.lang || "en";
+      // v12.3: blocklist — usar nombre EN canónico de Natural Earth
+      // (case-insensitive). Match parcial para tolerar variantes.
+      const BLOCKLIST = new Set(["taiwan"]);
+      const isBlocked = (item) => {
+        const en = (item.names.en || "").toLowerCase();
+        for (const b of BLOCKLIST) {
+          if (en === b || en.includes(b)) return true;
+        }
+        return false;
+      };
+      const labelData = state.countryLabels
+        .filter(c => c.rank < MAX_LABELS && !isBlocked(c))
+        .map(c => ({
+          value: c.coord,
+          name: pickCountryName(c, lang),
+        }));
+      series.push({
+        name: "country_labels",
+        type: "scatter3D",
+        coordinateSystem: "globe",
+        silent: true,
+        symbolSize: 0,        // punto invisible — solo queremos la etiqueta
+        label: {
+          show: true,
+          formatter: "{b}",
+          color: "#bae6fd",   // cyan-100 más claro que el borde para
+                              // crear jerarquía visual
+          fontSize: 10,
+          fontWeight: 500,
+          fontFamily: "-apple-system, 'Inter', 'Segoe UI', sans-serif",
+          // Halo oscuro detrás del texto para legibilidad sobre el
+          // globo iluminado:
+          textBorderColor: "#001525",
+          textBorderWidth: 3,
+        },
+        data: labelData,
+      });
     }
 
     safeSetOption({
@@ -587,6 +1196,36 @@
       }
     }
   });
+
+  // ─── Right-click favorito: FEATURE POSPUESTA ─────────────────────
+  // Phase 13 introdujo "right-click sismo → toggle favorito" pero
+  // tras 7 iteraciones (v1-v7) ninguna funcionó de forma fiable en
+  // echarts-gl scatter3D. Los problemas encontrados:
+  //   * convertToPixel para coord-sys 'globe' devuelve coords 3D
+  //     mundo, no píxeles → hit-test manual rompe.
+  //   * chart.on("contextmenu") no se forwardea para scatter3D.
+  //   * chart.on("mouseup") con button===2 crashea echarts-gl al
+  //     final de drag-rotaciones (getRoots null).
+  //   * chart.on("mousedown") con button===2 tampoco daba
+  //     params.data fiable.
+  //   * rebuildChart() para arreglar init 0×0 destruía los listeners.
+  //
+  // Decisión: postponer la feature. El icono ★, los favoritos del
+  // Profile dialog y FavoritesStore se mantienen (útiles para futura
+  // re-implementación con UX alternativa — p.ej. botón "favoritar"
+  // en el tooltip del click izquierdo, o desde el Profile dialog
+  // mismo). Solo se quita el handler de evento del right-click.
+  //
+  // Sí mantenemos un preventDefault del menú contextual nativo del
+  // browser dentro del contenedor del chart, porque sin él QtWebEngine
+  // muestra "Reload / Inspect" al hacer right-click en el globo, lo
+  // cual queda muy poco profesional.
+  try {
+    const dom = chart.getDom();
+    if (dom) {
+      dom.addEventListener("contextmenu", (e) => e.preventDefault());
+    }
+  } catch (_e) { /* registro defensivo */ }
 
   // ─── Rueda hacia atrás (alejar) → salida del zoom ───
   chart.getZr().on("mousewheel", () => {
@@ -813,6 +1452,51 @@
       i18nTable = (typeof json === "string" ? JSON.parse(json) : json) || {};
       applyStaticI18n();
       try { updateLegend(); updateCounter(); } catch (e) { /* aún sin datos */ }
+    },
+    // v0.6 Phase 10: idioma actual para etiquetas de país. Acepta
+    // "en" | "es" | "zh" | "fr". Cualquier otro valor → fallback a
+    // "en" en pickCountryName.
+    setLang(code) {
+      if (typeof code !== "string") return;
+      state.lang = code;
+      // Si estamos en holographic, re-renderizar para que las
+      // etiquetas cambien de idioma inmediatamente.
+      if (state.visualMode === "holographic") {
+        applyActiveLayer();
+      }
+    },
+    currentLang() {
+      return state.lang;
+    },
+    // v0.6 Phase 13: Python empuja la lista de IDs de sismos favoritos.
+    // El JS re-renderiza para que esos puntos lleven una ★ encima
+    // y un halo dorado más grueso.
+    setFavoritedEventIds(jsonOrArray) {
+      let ids;
+      try {
+        ids = (typeof jsonOrArray === "string")
+          ? JSON.parse(jsonOrArray)
+          : jsonOrArray;
+      } catch (e) { ids = []; }
+      state.favoritedEventIds = new Set(
+        Array.isArray(ids) ? ids : []);
+      applyActiveLayer();
+    },
+    currentFavoritedEventIds() {
+      return Array.from(state.favoritedEventIds);
+    },
+    // Modo visual del globo. Acepta:
+    //   * setVisualMode("day" | "night" | "holographic")
+    //   * setVisualMode("holographic", "dark" | "light")   (v0.6 G)
+    // Python lo deriva de Theme × LayerMode; el JS solo aplica.
+    setVisualMode(mode, theme) {
+      applyVisualMode(mode, theme);
+    },
+    currentVisualMode() {
+      return state.visualMode;
+    },
+    currentVisualTheme() {
+      return state.visualTheme;
     },
   };
 

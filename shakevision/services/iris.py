@@ -49,7 +49,7 @@ DEFAULT_USGS_NETWORKS: Final[str] = "IU,US"
 DEFAULT_TTL_S: Final[float] = 3600.0 * 6   # 6 horas (catálogo cambia lento)
 REQUEST_TIMEOUT_S: Final[float] = 20.0
 USER_AGENT: Final[str] = (
-    "ShakeVision/0.1 (+https://github.com/yourname/ShakeVision)"
+    "SeismicGuard/0.1 (+https://github.com/yourname/SeismicGuard)"
 )
 
 

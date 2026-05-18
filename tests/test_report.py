@@ -165,7 +165,7 @@ def test_generate_writes_html_file_with_required_sections(tmp_path: Path) -> Non
     # Estructura mínima
     assert "<!DOCTYPE html>" in html
     assert "<style>" in html
-    assert "ShakeVision" in html
+    assert "SeismicGuard" in html
     assert "AM.MOCK" in html
     assert "v0.1.0" in html
 

@@ -35,8 +35,17 @@ from PySide6.QtGui import QPageLayout, QPageSize
 logger = logging.getLogger(__name__)
 
 
-# Margen estándar A4 (en milímetros)
-DEFAULT_MARGINS_MM = (12, 12, 12, 12)
+# v0.7-B: márgenes A4 alineados con @page del template (styles.css)
+# para que el CSS y Qt coincidan al milímetro y no haya "doble margen"
+# (Qt aplica el suyo + Chromium aplica el del @page).
+DEFAULT_MARGINS_MM = (18, 18, 18, 18)
+
+# v0.7-B: tamaño del view aproximadamente al ancho imprimible de A4
+# (210 mm - 2×18 mm = 174 mm ≈ 657 px a 96 dpi) para minimizar el
+# escalado que Chromium hace al imprimir. Mantenemos un alto generoso
+# para que el contenido fluya naturalmente y Chromium pagine bien.
+_PDF_VIEW_WIDTH_PX: int = 794      # A4 width 210mm a 96dpi (sin margen)
+_PDF_VIEW_HEIGHT_PX: int = 1123    # A4 height 297mm a 96dpi
 
 
 class PdfExportError(Exception):
@@ -76,10 +85,13 @@ class PdfExporter(QObject):
         target.parent.mkdir(parents=True, exist_ok=True)
         self._target = target
 
-        # Crear el view oculto
+        # Crear el view oculto. v0.7-B: el tamaño coincide con A4 full
+        # a 96dpi (sin descontar márgenes — la CSS @page se encarga).
+        # Esto reduce el escalado de Chromium y evita que las columnas
+        # fijas de la tabla se vean comprimidas/cortadas.
         self._view = QWebEngineView()
         self._view.setAttribute = getattr(self._view, "setAttribute", lambda *a, **k: None)
-        self._view.resize(1024, 1400)  # tamaño aproximado A4 en píxeles
+        self._view.resize(_PDF_VIEW_WIDTH_PX, _PDF_VIEW_HEIGHT_PX)
 
         # Conectar el evento "carga terminada" para disparar la impresión
         self._view.loadFinished.connect(self._on_load_finished)

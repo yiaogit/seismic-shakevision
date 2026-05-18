@@ -14,7 +14,7 @@ del disparo" se puede añadir en una iteración posterior usando un
 
 Diseño
 ------
-* Carpeta de destino: ``~/ShakeVision/recordings/`` (creada bajo
+* Carpeta de destino: ``~/SeismicGuard/recordings/`` (creada bajo
   demanda). El usuario puede sobrescribirla por argumento.
 * Formato: MiniSEED (estándar de la sismología, leído por ObsPy,
   Madagascar, SAC, etc.).
@@ -36,7 +36,7 @@ from shakevision.processing.buffer import RingBuffer
 
 
 # Carpeta por defecto donde se guardan los eventos.
-DEFAULT_RECORDINGS_DIR: Path = Path.home() / "ShakeVision" / "recordings"
+DEFAULT_RECORDINGS_DIR: Path = Path.home() / "SeismicGuard" / "recordings"
 
 # Mapeo canal interno -> sufijo del nombre estándar SEED
 CHANNEL_TO_SEED: dict[str, str] = {"Z": "EHZ", "N": "EHN", "E": "EHE"}

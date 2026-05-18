@@ -39,18 +39,20 @@ _CHANNELS: list[str] = ["Z", "N", "E"]
 
 
 def _build_plot_widget(channel: str) -> pg.PlotWidget:
-    """Crea un ``PlotWidget`` con el estilo del tema oscuro."""
+    """Crea un ``PlotWidget`` que sigue el tema activo en caliente."""
 
     plot = pg.PlotWidget(background=COLOR_BACKGROUND)
     plot.setMouseEnabled(x=True, y=False)             # Solo zoom horizontal
     plot.setMenuEnabled(False)
     plot.showGrid(x=True, y=True, alpha=0.15)
-    plot.getAxis("bottom").setPen(COLOR_PANEL_BORDER)
-    plot.getAxis("left").setPen(COLOR_PANEL_BORDER)
-    plot.getAxis("bottom").setTextPen(COLOR_TEXT_SECONDARY)
-    plot.getAxis("left").setTextPen(COLOR_TEXT_SECONDARY)
     plot.setLabel("left", f"EH{channel}")
     plot.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+    # v0.6 P11: suscribir al ThemeManager — el helper aplica
+    # background + axis pens con la paleta actual y re-aplica al
+    # cambiar de tema. Reemplaza las llamadas estáticas setPen /
+    # setTextPen que se quedaban "congeladas" al arranque.
+    from shakevision.ui.pg_theming import subscribe_pg_plot
+    subscribe_pg_plot(plot)
     return plot
 
 

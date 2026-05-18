@@ -57,7 +57,7 @@ _LOCALES_DIR: Path = Path(__file__).resolve().parent / "locales"
 
 # Clave QSettings (organización, app, clave). Las dos primeras coinciden
 # con las que ya usa ProWindow para no proliferar settings.
-_QSETTINGS_ORG: str = "ShakeVision"
+_QSETTINGS_ORG: str = "SeismicGuard"
 _QSETTINGS_APP: str = "Locale"
 _QSETTINGS_KEY: str = "locale/language"
 

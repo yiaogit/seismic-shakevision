@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ShakeVision · Globe</title>
+  <title>SeismicGuard · Globe</title>
 
   <link rel="stylesheet" href="styles.css">
 
@@ -83,12 +83,45 @@
   <script src="globe.js"></script>
 
   <script>
+    // Patrones de error que sabemos que son recuperables (los maneja
+    // safeSetOption() / rebuildChart() en globe.js). NO mostramos la
+    // pantalla de error para ellos — solo loggeamos a consola.
+    // Incluye el bug clásico de echarts-gl tras una pérdida de contexto
+    // WebGL: "Cannot read properties of null (reading 'getRoots')".
+    const RECOVERABLE_ERROR_PATTERNS = [
+      /getRoots/i,
+      /Cannot read propert(y|ies) of null/i,
+      /webgl.*context.*lost/i,
+    ];
+    function isRecoverableError(msg) {
+      if (!msg) return false;
+      return RECOVERABLE_ERROR_PATTERNS.some((re) => re.test(msg));
+    }
+
     window.addEventListener("error", (e) => {
+      const msg = e.message || "Error JS";
+      if (isRecoverableError(msg)) {
+        // echarts-gl tropieza con esto a veces tras un context-loss; el
+        // safety net en globe.js lo cuenta y reconstruye el chart, así
+        // que ocultarlo del usuario es la respuesta correcta.
+        console.warn("[globe] error recuperable, supresión de overlay:", msg);
+        return;
+      }
       const detail = document.getElementById("error-detail");
       const screen = document.getElementById("error-screen");
-      if (detail) detail.textContent = (e.message || "Error JS")
+      if (detail) detail.textContent = msg
         + (e.filename ? `  (${e.filename.split("/").pop()})` : "");
       if (screen) screen.style.display = "block";
+    });
+
+    // También capturar promise rejections del mismo tipo (echarts puede
+    // disparar errores asíncronos durante texturas / shaders).
+    window.addEventListener("unhandledrejection", (e) => {
+      const msg = (e.reason && e.reason.message) || String(e.reason || "");
+      if (isRecoverableError(msg)) {
+        console.warn("[globe] rejection recuperable, supresión de overlay:", msg);
+        e.preventDefault && e.preventDefault();
+      }
     });
     setTimeout(() => {
       // Si echarts no cargó, mostrar diagnóstico

@@ -8,7 +8,7 @@ estaciones Shake propias del usuario en su red local.
 Persistencia
 ------------
 Se serializa como JSON dentro de ``QSettings`` (organización
-"ShakeVision", aplicación "Shakes", clave ``"shakes/lan_presets"``).
+"SeismicGuard", aplicación "Shakes", clave ``"shakes/lan_presets"``).
 Es legible/editable a mano sin riesgo de corromper el binario.
 
 Esquema de una entrada
@@ -51,7 +51,7 @@ from shakevision.config import StationPreset
 logger = logging.getLogger(__name__)
 
 
-_QSETTINGS_ORG: str = "ShakeVision"
+_QSETTINGS_ORG: str = "SeismicGuard"
 _QSETTINGS_APP: str = "Shakes"
 _QSETTINGS_KEY: str = "shakes/lan_presets"
 

@@ -121,6 +121,70 @@ def test_globe_js_exposes_window_api() -> None:
         assert name in js, f"globe.js no expone {name}"
 
 
+def test_globe_js_supports_three_visual_modes() -> None:
+    """v0.4 阶段 E — globe.js debe declarar los 3 modos visuales y
+    exponer setVisualMode al Python.
+
+    Sin estas claves el cambio de tema/modo desde la app no afectará
+    al globo y el usuario lo verá siempre nocturno. Test rápido pero
+    suficiente para detectar regresiones en el dict VISUAL_MODES.
+    """
+
+    from shakevision.ui.globe_view import WEB_GLOBE_DIR
+
+    js = (WEB_GLOBE_DIR / "globe.js").read_text(encoding="utf-8")
+    # Modos declarados
+    for mode_key in ("VISUAL_MODES", "night:", "day:", "holographic:"):
+        assert mode_key in js, f"globe.js no contiene {mode_key!r}"
+    # API pública
+    assert "setVisualMode" in js
+    assert "applyVisualMode" in js
+
+
+# ============================================================
+# Cómputo del modo visual (Theme × LayerMode → "day"/"night"/"holographic")
+# ============================================================
+def test_compute_visual_mode_holographic_when_professional() -> None:
+    """LayerMode == "professional" siempre → "holographic", ignorando
+    el tema (porque LayerModeManager fuerza dark al entrar en Pro)."""
+
+    pytest.importorskip("PySide6.QtWidgets", reason="PySide6 no instalado")
+
+    from unittest.mock import patch
+    from shakevision.ui.globe_view import GlobePanel
+
+    with patch("shakevision.ui.globe_view.LayerModeManager.current_mode",
+               return_value="professional"), \
+         patch("shakevision.ui.globe_view.ThemeManager.current_theme",
+               return_value="dark"):
+        assert GlobePanel._compute_visual_mode() == "holographic"
+    with patch("shakevision.ui.globe_view.LayerModeManager.current_mode",
+               return_value="professional"), \
+         patch("shakevision.ui.globe_view.ThemeManager.current_theme",
+               return_value="light"):
+        assert GlobePanel._compute_visual_mode() == "holographic"
+
+
+def test_compute_visual_mode_standard_follows_theme() -> None:
+    """En modo estándar, dark→night y light→day."""
+
+    pytest.importorskip("PySide6.QtWidgets", reason="PySide6 no instalado")
+
+    from unittest.mock import patch
+    from shakevision.ui.globe_view import GlobePanel
+
+    with patch("shakevision.ui.globe_view.LayerModeManager.current_mode",
+               return_value="standard"), \
+         patch("shakevision.ui.globe_view.ThemeManager.current_theme",
+               return_value="dark"):
+        assert GlobePanel._compute_visual_mode() == "night"
+    with patch("shakevision.ui.globe_view.LayerModeManager.current_mode",
+               return_value="standard"), \
+         patch("shakevision.ui.globe_view.ThemeManager.current_theme",
+               return_value="light"):
+        assert GlobePanel._compute_visual_mode() == "day"
+
+
 # ============================================================
 # Bridge slots (sin instanciar QObject completo: solo introspección)
 # ============================================================

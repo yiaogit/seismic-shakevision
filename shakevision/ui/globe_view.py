@@ -29,12 +29,14 @@ from PySide6.QtWidgets import QFrame, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
 from shakevision.i18n import LocaleService, t
 from shakevision.services.data_models import Earthquake, ShakeStation
+from shakevision.ui.layer_mode_manager import LayerModeManager
 from shakevision.ui.loading_overlay import LoadingOverlay
 from shakevision.ui.theme import (
     COLOR_PANEL,
     COLOR_PANEL_BORDER,
     COLOR_TEXT_SECONDARY,
 )
+from shakevision.ui.theme_manager import ThemeManager
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +57,8 @@ class GlobeBridge(QObject):
     layer_changed = Signal(str)               # "devices" | "quakes" | "both"
     period_changed = Signal(str)              # "all_hour" / "all_day" / ...
     globe_ready = Signal()                    # JS terminó de inicializarse
+    # v0.6 Phase 13: right-click sobre un sismo → toggle favorito
+    favorite_toggled = Signal(str)            # earthquake id
 
     # ------------------------------------------------------------------
     # Slots invocables desde JS
@@ -78,6 +82,12 @@ class GlobeBridge(QObject):
     @Slot()
     def on_globe_ready(self) -> None:
         self.globe_ready.emit()
+
+    @Slot(str)
+    def on_favorite_toggled(self, quake_id: str) -> None:
+        """v0.6 Phase 13: right-click en sismo → toggle favorito."""
+
+        self.favorite_toggled.emit(quake_id)
 
 
 # ============================================================
@@ -133,12 +143,28 @@ class GlobePanel(QFrame):
     station_clicked = Signal(str, str)
     earthquake_clicked = Signal(str)
     period_changed = Signal(str)
+    # v0.6 Phase 13: right-click sobre sismo → toggle favorito
+    favorite_toggled = Signal(str)
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
-        self.setObjectName("WaveformPanel")  # mismo estilo que las otras vistas
+        self.setObjectName("GlobePanel")    # estilo propio v0.5.3
         self.setFrameShape(QFrame.NoFrame)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        # v0.5.3: el contenedor del globo SIEMPRE es negro, independiente
+        # del tema Qt (claro/oscuro). El globo es un escenario espacial
+        # — el espacio es negro. Renderizar el web view sobre un fondo
+        # claro genera bordes blancos chocantes alrededor de la esfera.
+        self.setStyleSheet(
+            "QFrame#GlobePanel { background-color: #000000; border: none; }"
+        )
+        # Pintar el fondo del propio QFrame también en negro
+        from PySide6.QtGui import QPalette as _QPalette
+        from PySide6.QtCore import Qt as _Qt
+        pal = self.palette()
+        pal.setColor(_QPalette.Window, _Qt.black)
+        self.setPalette(pal)
+        self.setAutoFillBackground(True)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -219,21 +245,93 @@ class GlobePanel(QFrame):
         self._run_js(f"window.shakevisionGlobe.setLayer({json.dumps(layer)});")
 
     def push_i18n(self) -> None:
-        """Empuja la tabla de i18n actual al JS del globo.
+        """Empuja la tabla de i18n actual + el código de idioma al JS.
 
-        Llamada al inicializar (cuando llega ``globe_ready``) y cada
-        vez que el usuario cambia de idioma. JS la usa para repintar
-        leyenda, contador y atributos data-i18n.
+        v0.6 Phase 10: junto a la tabla mandamos también el ``lang``
+        actual ("en"/"es"/"zh"/"fr") para que las etiquetas de país
+        del modo Pro se traduzcan inmediatamente.
         """
 
         if self._view is None or not self._ready:
             return
         try:
             table = LocaleService.current_table()
+            lang  = LocaleService.current_language()
         except Exception:  # noqa: BLE001
             table = {}
-        payload = json.dumps(table)
-        self._run_js(f"window.shakevisionGlobe.setI18n({payload});")
+            lang  = "en"
+        payload_table = json.dumps(table)
+        payload_lang  = json.dumps(lang)
+        self._run_js(
+            f"window.shakevisionGlobe.setI18n({payload_table});"
+            f"window.shakevisionGlobe.setLang({payload_lang});"
+        )
+
+    # ------------------------------------------------------------------
+    # Modo visual del globo (Theme × LayerMode → "day"/"night"/"holographic")
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _compute_visual_mode() -> str:
+        """Deriva el modo visual del globo del estado global.
+
+        Reglas:
+          * LayerMode = "professional"            → "holographic"
+          * LayerMode = "standard" + Theme="light" → "day"
+          * LayerMode = "standard" + Theme="dark"  → "night"
+        """
+
+        try:
+            layer = LayerModeManager.current_mode()
+        except Exception:  # noqa: BLE001
+            layer = "standard"
+        if layer == "professional":
+            return "holographic"
+        try:
+            theme = ThemeManager.current_theme()
+        except Exception:  # noqa: BLE001
+            theme = "dark"
+        return "day" if theme == "light" else "night"
+
+    def push_visual_mode(self) -> None:
+        """Calcula el modo actual y se lo empuja al JS del globo.
+
+        v0.6 G: ahora también empuja el tema activo ("dark" / "light")
+        como segundo argumento, para que el sub-modo "holographic"
+        ajuste su environment (espacio negro en oscuro, crepúsculo
+        azul en claro).
+
+        Llamada al ``globe_ready`` (modo inicial) y cada vez que
+        ``ThemeManager`` o ``LayerModeManager`` notifican un cambio.
+        Es idempotente.
+        """
+
+        if self._view is None or not self._ready:
+            return
+        mode = self._compute_visual_mode()
+        try:
+            theme = ThemeManager.current_theme()    # "dark" | "light"
+        except Exception:  # noqa: BLE001
+            theme = "dark"
+        payload_mode  = json.dumps(mode)
+        payload_theme = json.dumps(theme)
+        self._run_js(
+            f"window.shakevisionGlobe.setVisualMode("
+            f"{payload_mode}, {payload_theme});"
+        )
+
+    def push_favorited_event_ids(self, ids) -> None:
+        """v0.6 Phase 13: empuja la lista de IDs de sismos favoritos.
+
+        El JS resalta esos puntos con un ★ dorado encima + borde más
+        grueso. Llamado desde MainWindow cuando FavoritesStore cambia.
+        """
+
+        if self._view is None or not self._ready:
+            return
+        payload = json.dumps(list(ids))
+        self._run_js(
+            f"window.shakevisionGlobe.setFavoritedEventIds({payload});"
+        )
 
     # ------------------------------------------------------------------
     # Internos
@@ -274,6 +372,8 @@ class GlobePanel(QFrame):
         self._bridge.station_clicked.connect(self.station_clicked)
         self._bridge.earthquake_clicked.connect(self.earthquake_clicked)
         self._bridge.period_changed.connect(self.period_changed)
+        # v0.6 Phase 13
+        self._bridge.favorite_toggled.connect(self.favorite_toggled)
 
         self._channel = QWebChannel(self._view.page())
         self._channel.registerObject("bridge", self._bridge)
@@ -339,6 +439,23 @@ class GlobePanel(QFrame):
                 lambda _lang: self.push_i18n()
             )
         except Exception:  # noqa: BLE001 — defensa: si ya estaba conectado
+            pass
+        # ─── Modo visual (día / noche / holográfico) ───
+        # Empuja el modo inicial y se suscribe a cambios de Theme y
+        # LayerMode para mantenerlo sincronizado. Sin esto, el globo
+        # se queda siempre en "night" aunque el usuario alterne tema.
+        self.push_visual_mode()
+        try:
+            ThemeManager.changed_signal().connect(
+                lambda _theme: self.push_visual_mode()
+            )
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            LayerModeManager.changed_signal().connect(
+                lambda _mode: self.push_visual_mode()
+            )
+        except Exception:  # noqa: BLE001
             pass
         if self._pending_stations is not None:
             self.update_stations(self._pending_stations)

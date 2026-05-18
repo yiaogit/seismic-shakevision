@@ -15,8 +15,15 @@ Política:
 
 from __future__ import annotations
 
+import datetime as _dt
 import logging
 from typing import Optional
+
+
+def _safe_today() -> str:
+    """YYYY-MM-DD del día actual — usado como sufijo del fichero de backup."""
+
+    return _dt.date.today().isoformat()
 
 from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtWidgets import (
@@ -100,6 +107,14 @@ class SettingsDialog(QDialog):
         shakes = self._build_my_shakes_tab()
         self._tabs.addTab(shakes, t("settings.tab.my_shakes"))
 
+        # ── Tab Reset (v0.7-C: clear cache) ──
+        # Sustituye al antiguo tab "Backup" — el flujo export/import
+        # JSON estaba poco usado y resultaba confuso ("¿qué incluye?").
+        # La nueva acción es más directa: borrar TODO y reiniciar el
+        # onboarding, equivalente a una reinstalación limpia.
+        reset = self._build_reset_tab()
+        self._tabs.addTab(reset, t("settings.tab.reset"))
+
         root.addWidget(self._tabs, stretch=1)
 
         # ─── Botones inferiores ───
@@ -120,10 +135,11 @@ class SettingsDialog(QDialog):
 
     def _build_language_section(self) -> QVBoxLayout:
         layout = QVBoxLayout()
-        layout.setSpacing(6)
+        layout.setSpacing(8)
         title = QLabel(t("settings.section.language"))
-        title.setObjectName("SectionTitle")
-        title.setStyleSheet("font-weight: 600; font-size: 13px;")
+        # v0.6: usa el selector global SettingsSectionTitle en lugar
+        # de inline setStyleSheet — funciona en ambos temas.
+        title.setObjectName("SettingsSectionTitle")
         layout.addWidget(title)
 
         form = QFormLayout()
@@ -139,18 +155,17 @@ class SettingsDialog(QDialog):
         form.addRow(t("settings.language.label"), self._lang_combo)
 
         help_text = QLabel(t("settings.language.help"))
+        help_text.setObjectName("DialogHint")
         help_text.setWordWrap(True)
-        help_text.setStyleSheet("color: rgba(255,255,255,0.55); font-size: 11px;")
         layout.addLayout(form)
         layout.addWidget(help_text)
         return layout
 
     def _build_locale_section(self) -> QVBoxLayout:
         layout = QVBoxLayout()
-        layout.setSpacing(6)
+        layout.setSpacing(8)
         title = QLabel(t("settings.section.locale"))
-        title.setObjectName("SectionTitle")
-        title.setStyleSheet("font-weight: 600; font-size: 13px;")
+        title.setObjectName("SettingsSectionTitle")
         layout.addWidget(title)
 
         form = QFormLayout()
@@ -174,21 +189,34 @@ class SettingsDialog(QDialog):
         tz_row.addWidget(self._detect_btn)
         form.addRow(t("settings.timezone.label"), tz_row)
 
-        # ─── Address (texto libre) ───
+        # ─── Address (texto libre + auto-detect por IP) ───
+        # v0.7-D: añadimos un botón "Detectar mi ubicación" que llama a
+        # ip-api.com (HTTP, sin key, ~45 req/min). El usuario debe
+        # pulsarlo explícitamente — nunca se llama en background.
+        addr_row = QHBoxLayout()
+        addr_row.setSpacing(6)
         self._address_edit = QLineEdit()
         self._address_edit.setPlaceholderText(t("settings.address.placeholder"))
-        form.addRow(t("settings.address.label"), self._address_edit)
+        self._address_edit.setSizePolicy(
+            QSizePolicy.Expanding, QSizePolicy.Preferred)
+        addr_row.addWidget(self._address_edit, stretch=1)
+        self._detect_location_btn = QPushButton(
+            t("settings.address.detect_button"))
+        self._detect_location_btn.clicked.connect(
+            self._on_detect_location_clicked)
+        addr_row.addWidget(self._detect_location_btn)
+        form.addRow(t("settings.address.label"), addr_row)
 
         layout.addLayout(form)
 
-        # Hints
+        # Hints — v0.6 usan DialogHint global
         tz_help = QLabel(t("settings.timezone.help"))
+        tz_help.setObjectName("DialogHint")
         tz_help.setWordWrap(True)
-        tz_help.setStyleSheet("color: rgba(255,255,255,0.55); font-size: 11px;")
         layout.addWidget(tz_help)
         addr_help = QLabel(t("settings.address.help"))
+        addr_help.setObjectName("DialogHint")
         addr_help.setWordWrap(True)
-        addr_help.setStyleSheet("color: rgba(255,255,255,0.55); font-size: 11px;")
         layout.addWidget(addr_help)
 
         return layout
@@ -204,12 +232,10 @@ class SettingsDialog(QDialog):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(8)
 
-        # Encabezado explicativo
+        # Encabezado explicativo — v0.6 usa DialogHint global
         self._shakes_help = QLabel()
+        self._shakes_help.setObjectName("DialogHint")
         self._shakes_help.setWordWrap(True)
-        self._shakes_help.setStyleSheet(
-            "color: rgba(255,255,255,0.55); font-size: 11px;"
-        )
         layout.addWidget(self._shakes_help)
 
         # Lista de presets
@@ -221,10 +247,8 @@ class SettingsDialog(QDialog):
 
         # Mensaje "no shakes" cuando la lista está vacía
         self._shakes_empty = QLabel()
+        self._shakes_empty.setObjectName("DialogEmpty")
         self._shakes_empty.setAlignment(Qt.AlignCenter)
-        self._shakes_empty.setStyleSheet(
-            "color: rgba(255,255,255,0.4); font-size: 13px; padding: 24px;"
-        )
         layout.addWidget(self._shakes_empty)
 
         # Botonera inferior: Add / Rename / Delete
@@ -261,6 +285,13 @@ class SettingsDialog(QDialog):
         if hasattr(self, "_tabs"):
             self._tabs.setTabText(0, t("settings.tab.general"))
             self._tabs.setTabText(1, t("settings.tab.my_shakes"))
+            if self._tabs.count() > 2:
+                self._tabs.setTabText(2, t("settings.tab.reset"))
+        # Reset tab widgets (v0.7-C — sustituye al antiguo Backup)
+        if hasattr(self, "_reset_heading"):
+            self._reset_heading.setText(t("settings.reset.heading"))
+            self._reset_help.setText(t("settings.reset.help"))
+            self._reset_button.setText(t("settings.reset.button"))
 
     @Slot()
     def _reload_shakes_list(self) -> None:
@@ -360,12 +391,108 @@ class SettingsDialog(QDialog):
         if reply == QMessageBox.Yes:
             ShakePresetStore.delete(host)
 
+    # ------------------------------------------------------------------
+    # Reset tab (v0.7-C — clear cache + restart como nueva instalación)
+    # ------------------------------------------------------------------
+    def _build_reset_tab(self) -> QWidget:
+        """Tab con un botón rojo "Limpiar caché" + confirmación dura.
+
+        Reemplaza al antiguo tab "Backup" cuyo flujo export/import JSON
+        resultaba opaco. La nueva acción es directa y predecible: borra
+        TODO el estado persistente (QSettings + cache de disco) y cierra
+        la app — al volver a abrirla, el usuario verá splash + Localízame
+        + Onboarding wizard otra vez, igual que el primer arranque.
+        """
+
+        from PySide6.QtWidgets import QWidget as _W
+        tab = _W()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(14)
+
+        # Texto de cabecera + descripción detallada de qué se borra
+        self._reset_heading = QLabel()
+        self._reset_heading.setObjectName("SettingsSectionTitle")
+        layout.addWidget(self._reset_heading)
+        self._reset_help = QLabel()
+        self._reset_help.setWordWrap(True)
+        self._reset_help.setObjectName("DialogHint")
+        layout.addWidget(self._reset_help)
+
+        # Botón destructivo — etiqueta y color de "danger" (objectName
+        # DangerButton para que el QSS global lo pinte rojo si lo hay;
+        # si no, queda con color por defecto pero la confirmación
+        # protege al usuario igualmente).
+        btns = QHBoxLayout()
+        btns.setSpacing(8)
+        self._reset_button = QPushButton()
+        self._reset_button.setObjectName("DangerButton")
+        self._reset_button.setProperty("danger", True)
+        self._reset_button.clicked.connect(self._on_clear_cache_clicked)
+        btns.addWidget(self._reset_button)
+        btns.addStretch(1)
+        layout.addLayout(btns)
+
+        # Status visible de la última operación (poco usado — tras
+        # clear la app se cierra inmediatamente).
+        self._reset_status = QLabel("")
+        self._reset_status.setWordWrap(True)
+        self._reset_status.setObjectName("DialogHint")
+        layout.addWidget(self._reset_status)
+        layout.addStretch(1)
+        return tab
+
+    def _on_clear_cache_clicked(self) -> None:
+        """Confirma con un diálogo destructivo, ejecuta clear_all() y
+        cierra la app. El usuario tiene que volver a abrirla
+        manualmente — esto es deliberado: dar tiempo a leer el efecto.
+        """
+
+        reply = QMessageBox.question(
+            self,
+            t("settings.reset.confirm_title"),
+            t("settings.reset.confirm_body"),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        try:
+            from shakevision.services.clear_cache import clear_all
+            summary = clear_all()
+            # Resumen condensado para el log (la UI ya no se verá tras
+            # quit, pero el status queda escrito por si quit falla).
+            errors = [k for k, v in summary.items()
+                      if isinstance(v, str) and v.startswith("error")]
+            if errors:
+                self._reset_status.setText(
+                    t("settings.reset.partial",
+                      errors=", ".join(errors)))
+                logger.warning("Clear cache: errores en %s", errors)
+            else:
+                self._reset_status.setText(
+                    t("settings.reset.ok"))
+                logger.info("Clear cache: todo OK, cerrando app")
+        except Exception as exc:  # noqa: BLE001
+            self._reset_status.setText(
+                t("settings.reset.error", error=str(exc)))
+            logger.exception("Clear cache falló")
+            return
+
+        # Cierre limpio del proceso. Usar QApplication.quit en lugar
+        # de sys.exit para que Qt haga cleanup ordenado de timers,
+        # threads, web engine, etc.
+        from PySide6.QtWidgets import QApplication
+        QApplication.quit()
+
     @staticmethod
     def _separator() -> QFrame:
+        # v0.6: usa DialogSeparator global (responde al tema).
         line = QFrame()
+        line.setObjectName("DialogSeparator")
         line.setFrameShape(QFrame.HLine)
-        line.setFrameShadow(QFrame.Sunken)
-        line.setStyleSheet("color: rgba(255,255,255,0.08);")
+        line.setFrameShadow(QFrame.Plain)
         return line
 
     # ------------------------------------------------------------------
@@ -408,6 +535,65 @@ class SettingsDialog(QDialog):
             self._tz_combo.setEditText(detected)
         # Pequeña confirmación visual
         self._detect_btn.setText(t("settings.timezone.detected", tz=detected))
+
+    def _on_detect_location_clicked(self) -> None:
+        """v0.7-D: botón «Detectar mi ubicación» — usa ip-api.com.
+
+        La llamada va en QThread (LocationService.detect_async) para no
+        bloquear la UI; mientras tanto el botón muestra "Detectando…" y
+        se desactiva. Al volver se rellena el address field (o se
+        muestra error con QMessageBox)."""
+
+        # Estado "trabajando" — botón deshabilitado, texto de progreso.
+        self._detect_location_btn.setEnabled(False)
+        self._detect_location_btn.setText(t("settings.address.detecting"))
+
+        def _on_done(detected, error):
+            # Restaurar UI siempre, suceda lo que suceda
+            self._detect_location_btn.setEnabled(True)
+            self._detect_location_btn.setText(
+                t("settings.address.detect_button"))
+            if error:
+                QMessageBox.warning(
+                    self,
+                    t("common.error"),
+                    t("settings.address.detect_failed", error=error),
+                )
+                return
+            if detected is None:
+                return
+            self._address_edit.setText(detected.formatted)
+            # Si ip-api detectó una timezone distinta, ofrecemos
+            # también actualizarla (atajo de UX — el usuario podría
+            # estar configurando por primera vez).
+            if detected.timezone and detected.timezone != self._tz_combo.currentText():
+                reply = QMessageBox.question(
+                    self,
+                    t("settings.address.tz_offer_title"),
+                    t("settings.address.tz_offer_body",
+                      tz=detected.timezone),
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.Yes,
+                )
+                if reply == QMessageBox.Yes:
+                    idx = self._tz_combo.findText(detected.timezone)
+                    if idx >= 0:
+                        self._tz_combo.setCurrentIndex(idx)
+                    else:
+                        self._tz_combo.setEditText(detected.timezone)
+
+        try:
+            from shakevision.services.location_service import detect_async
+            detect_async(_on_done)
+        except Exception as exc:  # noqa: BLE001
+            self._detect_location_btn.setEnabled(True)
+            self._detect_location_btn.setText(
+                t("settings.address.detect_button"))
+            QMessageBox.warning(
+                self,
+                t("common.error"),
+                t("settings.address.detect_failed", error=str(exc)),
+            )
 
     def _on_restore_defaults(self) -> None:
         """Restaurar: idioma EN + timezone detectado + dirección vacía."""

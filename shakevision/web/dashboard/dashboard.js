@@ -1,5 +1,5 @@
 /* ============================================================
-   ShakeVision · Datos · Lógica de las 4 gráficas ECharts.
+   SeismicGuard · Datos · Lógica de las 4 gráficas ECharts.
    ------------------------------------------------------------
    Recibe agregaciones pre-calculadas en Python a través de:
 
@@ -72,14 +72,52 @@
     }
   }
 
-  // Tema oscuro común para todas las gráficas
-  const TEXT_PRIMARY   = "#fafafa";
-  const TEXT_SECONDARY = "#a1a1aa";
-  const TEXT_MUTED     = "#71717a";
-  const ACCENT         = "#3b82f6";
-  const ACCENT_2       = "#60a5fa";
-  const PANEL_BG       = "#111111";
-  const GRID_LINE      = "rgba(255,255,255,0.06)";
+  // ─── v0.6 Phase 11: paletas duales (dark / light) ───
+  // Antes estos eran ``const`` hardcoded → solo se veían bien en tema
+  // oscuro. Ahora viven en PALETTES y se reasignan en setTheme().
+  // Las funciones que consumen estos valores ya leen las variables
+  // top-level cada vez que se llaman (no las cierran en closure),
+  // así que el cambio se refleja en el próximo render.
+  const PALETTES = {
+    dark: {
+      TEXT_PRIMARY:   "#fafafa",
+      TEXT_SECONDARY: "#a1a1aa",
+      TEXT_MUTED:     "#71717a",
+      ACCENT:         "#0a84ff",
+      ACCENT_2:       "#3395ff",
+      PANEL_BG:       "#1a1a1f",
+      GRID_LINE:      "rgba(255,255,255,0.06)",
+      TOOLTIP_BG:     "rgba(26,26,31,0.95)",
+      TOOLTIP_BORDER: "rgba(255,255,255,0.08)",
+    },
+    light: {
+      TEXT_PRIMARY:   "#1d1d1f",
+      TEXT_SECONDARY: "#6e6e73",
+      TEXT_MUTED:     "#8e8e93",
+      ACCENT:         "#0a84ff",
+      ACCENT_2:       "#3395ff",
+      PANEL_BG:       "#ffffff",
+      GRID_LINE:      "rgba(0,0,0,0.06)",
+      TOOLTIP_BG:     "rgba(255,255,255,0.96)",
+      TOOLTIP_BORDER: "rgba(0,0,0,0.08)",
+    },
+  };
+
+  // Variables "vivas" — las reasignamos en setTheme() y los siguientes
+  // renders de gráficas usan el nuevo valor. Por defecto dark.
+  let TEXT_PRIMARY   = PALETTES.dark.TEXT_PRIMARY;
+  let TEXT_SECONDARY = PALETTES.dark.TEXT_SECONDARY;
+  let TEXT_MUTED     = PALETTES.dark.TEXT_MUTED;
+  let ACCENT         = PALETTES.dark.ACCENT;
+  let ACCENT_2       = PALETTES.dark.ACCENT_2;
+  let PANEL_BG       = PALETTES.dark.PANEL_BG;
+  let GRID_LINE      = PALETTES.dark.GRID_LINE;
+  let TOOLTIP_BG     = PALETTES.dark.TOOLTIP_BG;
+  let TOOLTIP_BORDER = PALETTES.dark.TOOLTIP_BORDER;
+  // Tema actual + último payload para poder re-renderizar al cambiar
+  // de tema sin esperar al próximo data push.
+  let currentTheme   = "dark";
+  let lastPayload    = null;
 
   const FONT_SANS = `"Inter Variable","Inter","-apple-system","SF Pro Text","Segoe UI Variable","Segoe UI","PingFang SC",sans-serif`;
   const FONT_MONO = `"JetBrains Mono","SF Mono","Monaco","Consolas","Menlo",monospace`;
@@ -93,11 +131,17 @@
       animationEasing: "cubicOut",
       textStyle: { fontFamily: FONT_SANS, color: TEXT_SECONDARY, fontSize: 12 },
       tooltip: {
-        backgroundColor: "rgba(17,17,17,0.95)",
-        borderColor: "rgba(255,255,255,0.08)",
+        // v0.6 Phase 11: tooltip dinámico — fondo blanco semitransparent
+        // en tema claro, gris-negro en oscuro. La sombra también más
+        // sutil en claro porque el panel base ya es brillante.
+        backgroundColor: TOOLTIP_BG,
+        borderColor: TOOLTIP_BORDER,
         borderWidth: 1,
         textStyle: { color: TEXT_PRIMARY, fontSize: 12, fontFamily: FONT_SANS },
-        extraCssText: "border-radius: 8px; box-shadow: 0 8px 28px rgba(0,0,0,0.5);",
+        extraCssText: "border-radius: 8px; box-shadow: 0 8px 28px "
+                      + (currentTheme === "light"
+                          ? "rgba(0,0,0,0.12)"
+                          : "rgba(0,0,0,0.5)") + ";",
       },
       grid: { left: 60, right: 24, top: 24, bottom: 36, containLabel: true },
     };
@@ -587,30 +631,57 @@
   window.shakevisionDashboard = {
     setAggregations(payload) {
       const p = (typeof payload === "string") ? JSON.parse(payload) : payload;
-      // Actualizar i18n + timezone si vienen en el payload
+      // v0.6 Phase 11: cachear el payload para que setTheme() pueda
+      // re-renderizar sin esperar al próximo data push.
+      lastPayload = p || {};
       if (p && p.i18n) {
         i18nTable = p.i18n;
-        // Aplicar traducciones estáticas (HTML data-i18n attrs)
         applyStaticI18n();
       }
       if (p && p.timezone) {
         userTimezone = p.timezone;
       }
-      renderKPIs(p || {});
-      renderCountries(p?.country_top10);
-      renderMagnitude(p?.magnitude_buckets);
-      renderDepth(p?.depth_buckets);
-      // Línea temporal: dispatcher decide entre scatter (≤24h) y
-      // density (>24h) según p.timeline_mode.
-      renderTimeline(p || {});
-      // Histograma adaptativo del periodo (sustituye a trend_48h fijo)
-      renderTrend(p?.period_histogram);
-      renderPager(p?.pager_distribution);
-      // Repoblar el dropdown de región del PAGER con el nuevo catálogo
-      syncPagerRegionOptions(p || {});
-      renderScatter(p?.depth_mag_scatter);
+      _renderAll(p || {});
     },
+    // v0.6 Phase 11: cambio de tema en caliente. Acepta "dark" | "light".
+    // Llamado desde Python al cambiar ThemeManager. Re-pinta TODAS las
+    // gráficas con la paleta nueva — sin perder datos.
+    setTheme(name) {
+      if (name !== "dark" && name !== "light") return;
+      if (name === currentTheme) return;
+      currentTheme = name;
+      // Reasignar las variables vivas a la paleta nueva
+      const p = PALETTES[name];
+      TEXT_PRIMARY   = p.TEXT_PRIMARY;
+      TEXT_SECONDARY = p.TEXT_SECONDARY;
+      TEXT_MUTED     = p.TEXT_MUTED;
+      ACCENT         = p.ACCENT;
+      ACCENT_2       = p.ACCENT_2;
+      PANEL_BG       = p.PANEL_BG;
+      GRID_LINE      = p.GRID_LINE;
+      TOOLTIP_BG     = p.TOOLTIP_BG;
+      TOOLTIP_BORDER = p.TOOLTIP_BORDER;
+      // Reflejar en el atributo del <html> para que el CSS active
+      // las reglas [data-theme="light"].
+      document.documentElement.setAttribute("data-theme", name);
+      // Re-render con el payload cacheado (si lo hay)
+      if (lastPayload) _renderAll(lastPayload);
+    },
+    currentTheme() { return currentTheme; },
   };
+
+  // Helper interno reutilizable por setAggregations y setTheme.
+  function _renderAll(p) {
+    renderKPIs(p);
+    renderCountries(p.country_top10);
+    renderMagnitude(p.magnitude_buckets);
+    renderDepth(p.depth_buckets);
+    renderTimeline(p);
+    renderTrend(p.period_histogram);
+    renderPager(p.pager_distribution);
+    syncPagerRegionOptions(p);
+    renderScatter(p.depth_mag_scatter);
+  }
 
   // ============================================================
   // Selector de periodo (1h / 6h / 24h / 7d / 30d)

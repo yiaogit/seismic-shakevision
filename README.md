@@ -1,6 +1,13 @@
 <div align="center">
 
-# 🌐 ShakeVision OpenData Monitor
+# 🌐 SeismicGuard
+
+**简体中文** · [English](README.en.md) · [Español](README.es.md) · [Français](README.fr.md)
+
+> 原名 **ShakeVision OpenData Monitor**。v0.7.0 完成 SeismicGuard 品牌重塑、
+> macOS Sonoma 风格主题、全栈 4 语言 i18n、Onboarding 引导、Profile 活动时间线、
+> IP 地理定位等大量改进。历史的 v0.1.x 二进制仍以 `ShakeVision-*` 名字保留在
+> Releases 页面。
 
 **桌面级开源地震监测可视化工作站**
 *Cross-platform desktop seismic monitoring workbench*

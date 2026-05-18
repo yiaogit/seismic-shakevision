@@ -1,4 +1,4 @@
-# Custom fonts for ShakeVision
+# Custom fonts for SeismicGuard
 
 This directory is **automatically scanned** at startup. Any `.ttf` or
 `.otf` file dropped in here will be registered with Qt and will become

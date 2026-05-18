@@ -53,7 +53,7 @@ SHAKENET_STATION_URL: Final[str] = (
 DEFAULT_TTL_S: Final[float] = 3600.0  # 1 hora
 REQUEST_TIMEOUT_S: Final[float] = 20.0
 USER_AGENT: Final[str] = (
-    "ShakeVision/0.1 (+https://github.com/yourname/ShakeVision)"
+    "SeismicGuard/0.1 (+https://github.com/yourname/SeismicGuard)"
 )
 
 

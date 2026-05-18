@@ -39,7 +39,7 @@ from PySide6.QtCore import QObject, Signal
 logger = logging.getLogger(__name__)
 
 
-_QSETTINGS_ORG: str = "ShakeVision"
+_QSETTINGS_ORG: str = "SeismicGuard"
 _QSETTINGS_APP: str = "Locale"
 _QSETTINGS_KEY: str = "timezone/iana"
 _QSETTINGS_KEY_ADDRESS: str = "locale/address"

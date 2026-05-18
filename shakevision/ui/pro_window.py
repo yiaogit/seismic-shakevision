@@ -74,7 +74,7 @@ _DEFAULT_WIDTH: int = 1200
 _DEFAULT_HEIGHT: int = 800
 
 # Claves QSettings para recordar geometría entre sesiones
-_QSETTINGS_ORG: str = "ShakeVision"
+_QSETTINGS_ORG: str = "SeismicGuard"
 _QSETTINGS_APP: str = "Pro"
 _QSETTINGS_KEY_GEOMETRY: str = "pro_window/geometry"
 

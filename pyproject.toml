@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shakevision"
-version = "0.3.0"
-description = "ShakeVision OpenData Monitor - estación local de monitoreo sísmico basada en datos abiertos de Raspberry Shake."
+version = "0.7.0"
+description = "SeismicGuard (formerly ShakeVision) — desktop seismic monitoring workbench powered by open data from USGS, IRIS and Raspberry Shake."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
@@ -75,6 +75,8 @@ shakevision = [
     "assets/fonts/*.otf",
     "assets/fonts/README.md",
     "assets/icons/*.svg",
+    "assets/icons/*.png",
+    "assets/branding/*.png",
     "web/globe/*.html",
     "web/globe/*.js",
     "web/globe/*.css",

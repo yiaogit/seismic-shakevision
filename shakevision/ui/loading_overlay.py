@@ -94,15 +94,11 @@ class LoadingOverlay(QFrame):
         self._subtitle.hide()
         layout.addWidget(self._subtitle)
 
+        # v0.6: PrimaryButton + objectName → hereda del QSS global de
+        # theme.py (fill accent + hover accent_hover dinámico).
         self._retry_button = QPushButton("Reintentar")
-        self._retry_button.setStyleSheet(
-            f"QPushButton {{"
-            f" background-color: {COLOR_ACCENT}; color: white;"
-            f" border: none; border-radius: 8px;"
-            f" padding: 8px 18px; font-weight: 600;"
-            f"}}"
-            f"QPushButton:hover {{ background-color: #60a5fa; }}"
-        )
+        self._retry_button.setObjectName("PrimaryButton")
+        self._retry_button.setProperty("primary", True)
         self._retry_button.clicked.connect(self.retry_clicked)
         self._retry_button.hide()
         layout.addWidget(self._retry_button, alignment=Qt.AlignCenter)
@@ -186,16 +182,21 @@ class LoadingOverlay(QFrame):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing, True)
 
+        # v0.6: leer colores del módulo theme en RUNTIME (no del import
+        # cacheado) — así al cambiar de tema el siguiente repaint usa la
+        # paleta nueva sin necesidad de reiniciar la app.
+        from shakevision.ui import theme as _t
+
         if self._mode == "loading":
             # Anillo de fondo
             radius = 20
-            pen_bg = QPen(QColor(COLOR_PANEL_BORDER), 3)
+            pen_bg = QPen(QColor(_t.COLOR_PANEL_BORDER), 3)
             painter.setPen(pen_bg)
             painter.setBrush(Qt.NoBrush)
             painter.drawEllipse(cx - radius, cy - radius, radius * 2, radius * 2)
 
             # Arco animado (3/8 del círculo, gira)
-            pen_arc = QPen(QColor(COLOR_ACCENT), 3, Qt.SolidLine, Qt.RoundCap)
+            pen_arc = QPen(QColor(_t.COLOR_ACCENT), 3, Qt.SolidLine, Qt.RoundCap)
             painter.setPen(pen_arc)
             start_angle = int(-self._spin_angle * 16)  # Qt usa 1/16°
             span_angle = int(135 * 16)
@@ -208,7 +209,7 @@ class LoadingOverlay(QFrame):
             # Triángulo rojo (no usamos emoji directamente para que se vea
             # idéntico en todas las plataformas)
             painter.setPen(Qt.NoPen)
-            painter.setBrush(QBrush(QColor(COLOR_ALERT)))
+            painter.setBrush(QBrush(QColor(_t.COLOR_ALERT)))
             r = 22
             from PySide6.QtCore import QPointF
             from PySide6.QtGui import QPolygonF

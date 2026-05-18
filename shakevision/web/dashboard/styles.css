@@ -1,26 +1,47 @@
 /* ============================================================
-   ShakeVision · Datos · Tema "ciencia oscura"
+   SeismicGuard · Datos · Tema "ciencia oscura"
    Mantiene la coherencia con la vista del globo y el resto de la UI.
    ============================================================ */
 
-:root {
-  --bg:        #0a0a0a;
-  --panel:    rgba(17, 17, 17, 0.78);
-  --panel-solid: #111111;
+/* ── Tema OSCURO (default — macOS dark + accent system blue) ── */
+:root,
+:root[data-theme="dark"] {
+  --bg:        #0d0d10;
+  --panel:    rgba(26, 26, 31, 0.85);
+  --panel-solid: #1a1a1f;
   --border:   rgba(255, 255, 255, 0.08);
   --text:     #fafafa;
   --muted:    #a1a1aa;
   --dim:      #71717a;
-  --accent:   #3b82f6;
-  --accent-2: #60a5fa;
-  --ok:       #10b981;
-  --warn:     #facc15;
-  --danger:   #ef4444;
+  --accent:   #0a84ff;
+  --accent-2: #3395ff;
+  --ok:       #30d158;
+  --warn:     #ff9f0a;
+  --danger:   #ff453a;
 
   --font-sans: "Inter Variable","Inter","-apple-system","SF Pro Text",
                "Segoe UI Variable","Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
   --font-mono: "JetBrains Mono","SF Mono","Monaco","Cascadia Code",
                "Consolas","Menlo",monospace;
+}
+
+/* ── Tema CLARO (v0.6 — macOS light, hairlines suaves) ── */
+/* La JS expone setTheme("light"|"dark"); Python lo empuja al cambiar
+   ThemeManager.current_theme(). ECharts también recibe el cambio
+   y reconstruye las series con paleta apropiada para fondo claro. */
+:root[data-theme="light"] {
+  --bg:        #f2f2f7;
+  --panel:    rgba(255, 255, 255, 0.95);
+  --panel-solid: #ffffff;
+  --border:   rgba(0, 0, 0, 0.08);
+  --text:     #1d1d1f;
+  --muted:    #6e6e73;
+  --dim:      #8e8e93;
+  --accent:   #0a84ff;
+  --accent-2: #3395ff;
+  --ok:       #34c759;
+  --warn:     #ff9500;
+  --danger:   #ff3b30;
 }
 
 * { box-sizing: border-box; }

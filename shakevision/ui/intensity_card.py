@@ -184,65 +184,84 @@ class IntensityCard(QFrame):
     # Internals
     # ------------------------------------------------------------------
     def _set_level(self, level: IntensityLevel) -> None:
-        """Cambia el color de la barra lateral y el matiz del fondo."""
+        """Cambia el color de la barra lateral y el matiz del fondo.
 
-        # Reescribir solo la línea de la barra de color para no rebuild todo el QSS
+        v0.6: lee colores del theme dinámicamente — al cambiar de tema,
+        la subscripción a ThemeManager.changed_signal llama de nuevo a
+        _set_level (vía _on_theme_changed), garantizando que el tinte
+        y el borde se recalculen con la paleta nueva.
+        """
+
+        from shakevision.ui import theme as _t
+
         bar_qss = (
             f"QFrame#IntensityBar {{ background-color: {level.color}; "
             f"border-top-left-radius: 10px; border-bottom-left-radius: 10px; }}"
         )
-        # Mezclamos el color del nivel con el fondo del panel para sugerir
-        # tinte sin sacrificar legibilidad (mezcla 92 % panel + 8 % nivel).
-        tint = self._mix_color(COLOR_PANEL, level.color, weight=0.08)
+        # 92 % panel + 8 % nivel = tinte sutil sin perder legibilidad
+        tint = self._mix_color(_t.COLOR_PANEL, level.color, weight=0.08)
         card_qss = (
             f"QFrame#IntensityCard {{ background-color: {tint}; "
-            f"border: 1px solid {COLOR_PANEL_BORDER}; border-radius: 10px; }}"
+            f"border: 1px solid {_t.COLOR_PANEL_BORDER}; "
+            f"border-radius: 10px; }}"
         )
-        self.setStyleSheet(self._base_qss + bar_qss + card_qss)
+        self.setStyleSheet(self._build_base_qss() + bar_qss + card_qss)
+
+    def _on_theme_changed(self, _theme: str) -> None:
+        """Slot conectado a ThemeManager.changed_signal."""
+
+        self._set_level(self._current_level)
 
     def _apply_local_qss(self, initial_color: str) -> None:
-        """Define el QSS estático del componente."""
+        """Configura el QSS inicial y la subscripción al cambio de tema."""
 
-        self._base_qss = f"""
+        self._set_level(INTENSITY_LEVELS[1])
+        # v0.6: re-pintar al cambiar tema
+        try:
+            from shakevision.ui.theme_manager import ThemeManager
+            ThemeManager.changed_signal().connect(self._on_theme_changed)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _build_base_qss(self) -> str:
+        """Genera el QSS de los labels leyendo del módulo theme en runtime."""
+
+        from shakevision.ui import theme as _t
+        return f"""
         QLabel#IntensityHeader {{
-            color: {COLOR_TEXT_SECONDARY};
+            color: {_t.COLOR_TEXT_SECONDARY};
             font-family: {FONT_STACK_SANS};
             font-size: 10px;
             font-weight: 600;
             letter-spacing: 1.2px;
             text-transform: uppercase;
         }}
-
         QLabel#IntensityRoman {{
-            color: {COLOR_TEXT_PRIMARY};
+            color: {_t.COLOR_TEXT_PRIMARY};
             font-family: {FONT_STACK_SANS};
             font-size: 36px;
             font-weight: 800;
             min-width: 56px;
         }}
-
         QLabel#IntensityTitle {{
-            color: {COLOR_TEXT_PRIMARY};
+            color: {_t.COLOR_TEXT_PRIMARY};
             font-family: {FONT_STACK_SANS};
             font-size: 22px;
             font-weight: 600;
         }}
-
         QLabel#IntensityDesc {{
-            color: {COLOR_TEXT_SECONDARY};
+            color: {_t.COLOR_TEXT_SECONDARY};
             font-family: {FONT_STACK_SANS};
             font-size: 12px;
             padding-top: 2px;
         }}
-
         QLabel#IntensityMetric {{
-            color: {COLOR_TEXT_MUTED};
+            color: {_t.COLOR_TEXT_MUTED};
             font-family: {FONT_STACK_MONO};
             font-size: 11px;
             padding-top: 4px;
         }}
         """
-        self._set_level(INTENSITY_LEVELS[1])
 
     @staticmethod
     def _mix_color(hex_a: str, hex_b: str, weight: float) -> str:

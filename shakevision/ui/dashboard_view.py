@@ -769,6 +769,36 @@ class DashboardPanel(QFrame):
         if self._pending_payload is not None:
             self._push_payload(self._pending_payload)
             self._pending_payload = None
+        # v0.6 Phase 11: empujar el tema actual + suscribirse a cambios
+        # para que las gráficas ECharts respondan al toggle dark/light.
+        self._push_theme()
+        try:
+            from shakevision.ui.theme_manager import ThemeManager
+            ThemeManager.changed_signal().connect(
+                lambda _t: self._push_theme()
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _push_theme(self) -> None:
+        """Envía el tema Qt actual al JS del dashboard.
+
+        El JS recompone TODAS las gráficas con la paleta correspondiente
+        (ver setTheme en dashboard.js). Idempotente.
+        """
+
+        if self._view is None or not self._ready:
+            return
+        try:
+            from shakevision.ui.theme_manager import ThemeManager
+            theme = ThemeManager.current_theme()    # "dark" | "light"
+        except Exception:  # noqa: BLE001
+            theme = "dark"
+        js = (
+            "window.shakevisionDashboard.setTheme("
+            f"{json.dumps(theme)});"
+        )
+        self._view.page().runJavaScript(js)
 
     def _fallback_label(self, reason: str) -> QLabel:
         label = QLabel(

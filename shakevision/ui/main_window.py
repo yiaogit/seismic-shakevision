@@ -1,5 +1,5 @@
 """
-Ventana principal de ShakeVision.
+Ventana principal de SeismicGuard.
 
 Reúne en una sola ``QMainWindow``:
   - El panel de control lateral (izquierda).
@@ -84,10 +84,10 @@ from shakevision.ui.macos_native import (
 from shakevision.ui.pro_window import ProWindow
 
 
-# Índices de las pestañas de nivel superior (solo 2 tras la
-# extracción de Pro a ventana flotante)
+# Índices de las pestañas de nivel superior (v0.5.3: Profile salió
+# a un diálogo, ya no es tab — su botón en AppHeader abre el modal).
 TAB_GLOBE: int = 0      # 🌍 Globo (vista por defecto)
-TAB_DATA: int = 1       # 📊 Datos
+TAB_DATA:  int = 1      # 📊 Datos
 
 # Periodo de refresco del helicorder (más lento que el oscilograma).
 # 24 h cambia muy despacio; cada 5 s es más que suficiente.
@@ -209,18 +209,57 @@ class MainWindow(QMainWindow):
         self._tabs = QTabWidget(parent=body)
         self._tabs.setDocumentMode(True)
         self._tabs.setTabPosition(QTabWidget.North)
-        self._tabs.currentChanged.connect(self._on_tab_changed)
+        # NOTA: el connect de currentChanged se hace MÁS ABAJO, tras
+        # crear todos los panels. Si se conecta aquí, el primer addTab
+        # dispara currentChanged y _on_tab_changed accede a panels
+        # que aún no existen → AttributeError al arrancar.
 
         # ── Tab 1: Globo 3D ── (vista por defecto, pantalla completa)
+        # v0.5 阶段 N: usamos QIcon real en lugar de emoji 🌍 en el
+        # título. Más legible, escala bien en HiDPI y respeta el tema.
+        from shakevision.ui.icons import get_icon as _get_icon_n
+        from shakevision.ui.theme_manager import ThemeManager as _TM_n
+        _theme_n = _TM_n.current_theme()
+
         self.globe_panel = GlobePanel(parent=self._tabs)
-        self._tabs.addTab(self.globe_panel, t("globe.tab_title"))
+        self._tabs.addTab(
+            self.globe_panel,
+            _get_icon_n("globe", theme=_theme_n, size=64),
+            t("globe.tab_title"),
+        )
 
         # ── Tab 2: Datos (7 gráficas ECharts, pantalla completa) ──
         self.dashboard_panel = DashboardPanel(parent=self._tabs)
-        self._tabs.addTab(self.dashboard_panel, t("dashboard.tab_title"))
+        self._tabs.addTab(
+            self.dashboard_panel,
+            _get_icon_n("chart", theme=_theme_n, size=64),
+            t("dashboard.tab_title"),
+        )
+
+        # NOTA v0.5.3: Profile dejó de ser tab — ahora se abre desde
+        # el botón 👤 de la AppHeader como diálogo modal (ProfileDialog).
+        # profile_panel se mantiene como atributo lazy (se instancia al
+        # abrir el diálogo) para no construir QNetworkAccessManager en
+        # vano si el usuario nunca abre Profile.
+        self.profile_dialog = None    # type: ignore[assignment]
+
+        # Tamaño visual del icono en la pestaña (Qt no usa el size del
+        # QIcon directamente para el render del tab).
+        from PySide6.QtCore import QSize as _QSize_n
+        self._tabs.setIconSize(_QSize_n(18, 18))
+
+        # Reaplicar iconos cuando el tema cambia (claro <-> oscuro)
+        # para que el color del trazo coincida con el texto del tab.
+        try:
+            _TM_n.changed_signal().connect(lambda _t: self._refresh_tab_icons())
+        except Exception:  # noqa: BLE001
+            pass
 
         # Globo es la vista por defecto (índice 0)
         self._tabs.setCurrentIndex(0)
+        # Conectar currentChanged AHORA, no antes: ya existen los 3
+        # panels, así que cualquier disparo subsiguiente es seguro.
+        self._tabs.currentChanged.connect(self._on_tab_changed)
         root.addWidget(self._tabs, stretch=1)
 
         # Animación de fade-in al cambiar de pestaña
@@ -263,6 +302,8 @@ class MainWindow(QMainWindow):
         self.app_header.pro_clicked.connect(self._on_pro_button_clicked)
         # Botón ⚙ → diálogo de preferencias (idioma + zona horaria)
         self.app_header.settings_clicked.connect(self._on_settings_clicked)
+        # Botón 👤 Profile (v0.5.3) → abre ProfileDialog modal.
+        self.app_header.profile_clicked.connect(self._open_profile_dialog)
 
         # Temporizador independiente para el helicorder (refresco lento)
         self._helicorder_timer = QTimer(self)
@@ -371,6 +412,31 @@ class MainWindow(QMainWindow):
         self.globe_panel.station_clicked.connect(
             self._on_globe_station_clicked
         )
+        # v0.6 Phase 13: right-click en sismo → toggle favorito.
+        self.globe_panel.favorite_toggled.connect(
+            self._on_globe_favorite_toggled
+        )
+        # Cuando el FavoritesStore cambie (por cualquier vía: globe,
+        # Profile dialog, settings import…), re-empuja la lista al
+        # globo para que actualice las ★ visuales.
+        try:
+            from shakevision.services.favorites_store import FavoritesStore
+            FavoritesStore.changed_signal().connect(
+                self._push_favorited_event_ids_to_globe
+            )
+        except Exception:  # noqa: BLE001
+            pass
+        # Push inicial cuando el globo esté listo (los favoritos
+        # persistidos en QSettings ya tienen IDs, hay que mostrarlos
+        # con ★ aunque el usuario no haga ningún cambio).
+        try:
+            bridge = getattr(self.globe_panel, "_bridge", None)
+            if bridge is not None:
+                bridge.globe_ready.connect(
+                    self._push_favorited_event_ids_to_globe
+                )
+        except Exception:  # noqa: BLE001
+            pass
 
         # Reconectar el botón "Reintentar" de los overlays
         for panel in (self.globe_panel, self.dashboard_panel):
@@ -796,6 +862,12 @@ class MainWindow(QMainWindow):
               duration=result.audio_duration_s),
             int(result.audio_duration_s * 1000) + 1500,
         )
+        # Métrica local: tiempo total escuchado (en segundos enteros).
+        try:
+            from shakevision.services.usage_tracker import UsageTracker
+            UsageTracker.record_audio_played(result.audio_duration_s)
+        except Exception:  # noqa: BLE001
+            pass
 
     def _on_playback_started(self) -> None:
         """Mientras suena el clip, el botón se convierte en "Parar".
@@ -1020,6 +1092,72 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     # Globe → Pro: click en estación → confirmación → add_station
     # ------------------------------------------------------------------
+    def _on_globe_favorite_toggled(self, quake_id: str) -> None:
+        """v0.6 Phase 13: right-click sobre un sismo en el globo.
+
+        Si el sismo ya está en favoritos → quitarlo. Si no → añadirlo
+        (con los metadatos completos del Earthquake actual). El
+        FavoritesStore emite ``changed_signal`` que dispara el push de
+        la lista actualizada al globo + refresh del Profile dialog.
+        """
+
+        if not quake_id:
+            return
+        try:
+            from shakevision.i18n import t
+            from shakevision.services.favorites_store import FavoritesStore
+        except Exception:  # noqa: BLE001
+            return
+
+        # Buscar el sismo en la caché reciente (la lista que se enviÃ³
+        # al globo). Es la fuente más fresca disponible en proceso.
+        quake = None
+        for q in getattr(self, "_latest_earthquakes", []) or []:
+            if q.id == quake_id:
+                quake = q
+                break
+
+        if FavoritesStore.is_favorite_event(quake_id):
+            FavoritesStore.remove_event(quake_id)
+            self._status_bar.showMessage(
+                t("status.favorite_removed", id=quake_id)
+                if quake is None
+                else t("status.favorite_removed_named",
+                       place=quake.place, mag=quake.magnitude),
+                3500,
+            )
+        else:
+            if quake is None:
+                # Sin metadatos no podemos crear el favorito. Aviso y salir.
+                self._status_bar.showMessage(
+                    t("status.favorite_not_found", id=quake_id), 3500,
+                )
+                return
+            FavoritesStore.add_event(
+                id=quake.id,
+                magnitude=float(quake.magnitude),
+                place=quake.place or "",
+                timestamp_unix=float(quake.timestamp_unix),
+            )
+            self._status_bar.showMessage(
+                t("status.favorite_added",
+                  place=quake.place, mag=quake.magnitude),
+                3500,
+            )
+
+    def _push_favorited_event_ids_to_globe(self) -> None:
+        """v0.6 Phase 13: empuja la lista actual de IDs favoritos al
+        JS del globo para que actualice las marcas ★. Slot de
+        ``FavoritesStore.changed_signal``."""
+
+        try:
+            from shakevision.services.favorites_store import FavoritesStore
+            ids = [e.id for e in FavoritesStore.list_events()]
+            if hasattr(self, "globe_panel"):
+                self.globe_panel.push_favorited_event_ids(ids)
+        except Exception:  # noqa: BLE001
+            pass
+
     def _on_globe_station_clicked(self, network: str, code: str) -> None:
         """Maneja el click sobre una estación en el globo 3D.
 
@@ -1035,6 +1173,15 @@ class MainWindow(QMainWindow):
              un StationPreset con el host correcto (rtserve.iris…) y
              llamar a pro_window.add_station(). Mostrar estado.
         """
+
+        # Métrica local: cada click cuenta, independientemente del
+        # resultado (proveedor / cancelación). El usuario está
+        # interactuando con el globo.
+        try:
+            from shakevision.services.usage_tracker import UsageTracker
+            UsageTracker.record_station_clicked()
+        except Exception:  # noqa: BLE001 — métricas nunca rompen UI
+            pass
 
         from PySide6.QtWidgets import QMessageBox
         from shakevision.config import (
@@ -1192,6 +1339,12 @@ class MainWindow(QMainWindow):
         self._status_bar.showMessage(
             t("status.report_exported", path=str(written)), 8000,
         )
+        # Métrica local
+        try:
+            from shakevision.services.usage_tracker import UsageTracker
+            UsageTracker.record_report_generated()
+        except Exception:  # noqa: BLE001
+            pass
 
     def _on_export_report_pdf(self) -> None:
         """Misma lógica que el HTML pero invocando QWebEngineView.printToPdf."""
@@ -1241,11 +1394,18 @@ class MainWindow(QMainWindow):
         # Crear el exportador (lo guardamos como atributo para que viva
         # mientras se completa la exportación asíncrona).
         self._pdf_exporter = PdfExporter(self)
-        self._pdf_exporter.finished.connect(
-            lambda p: self._status_bar.showMessage(
-                t("status.pdf_exported", path=str(p)), 8000,
+
+        def _on_pdf_done(path):
+            self._status_bar.showMessage(
+                t("status.pdf_exported", path=str(path)), 8000,
             )
-        )
+            try:
+                from shakevision.services.usage_tracker import UsageTracker
+                UsageTracker.record_report_generated()
+            except Exception:  # noqa: BLE001
+                pass
+
+        self._pdf_exporter.finished.connect(_on_pdf_done)
         self._pdf_exporter.failed.connect(
             lambda msg: self._status_bar.showMessage(
                 t("status.pdf_error", error=str(msg)), 8000,
@@ -1279,6 +1439,64 @@ class MainWindow(QMainWindow):
         dlg.settings_applied.connect(self._on_settings_applied)
         dlg.exec()
 
+    def _refresh_tab_icons(self) -> None:
+        """Re-pinta los iconos de las pestañas con el color del tema.
+
+        v0.5 阶段 N: las pestañas usan QIcon real (globe/chart).
+        Al cambiar de tema (claro ↔ oscuro) el trazo del icono debe
+        cambiar entre navy y blanco — lo logramos limpiando la caché
+        de get_icon y reasignando los QIcons a cada tab.
+
+        v0.5.3: ya no hay tab Profile — su icono se actualiza dentro
+        de AppHeader._refresh_button_icons.
+        """
+
+        try:
+            from shakevision.ui.icons import clear_icon_cache, get_icon
+            from shakevision.ui.theme_manager import ThemeManager as _TM
+            clear_icon_cache()
+            theme = _TM.current_theme()
+            self._tabs.setTabIcon(TAB_GLOBE,
+                                  get_icon("globe", theme=theme, size=64))
+            self._tabs.setTabIcon(TAB_DATA,
+                                  get_icon("chart", theme=theme, size=64))
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Tab icon refresh skip (%s)", exc)
+
+    def _open_profile_dialog(self) -> None:
+        """Abre el ProfileDialog modal (v0.5.3).
+
+        Lazy-construct: solo creamos el diálogo la primera vez que el
+        usuario lo abre. En subsiguientes aperturas reutilizamos la
+        misma instancia (más rápido + el QNetworkAccessManager interno
+        del avatar mantiene su caché HTTP).
+        """
+
+        from shakevision.ui.profile_dialog import ProfileDialog
+
+        if self.profile_dialog is None:
+            self.profile_dialog = ProfileDialog(self)
+            self.profile_dialog.request_github_login.connect(
+                self._open_github_login_dialog)
+        else:
+            # Refrescar datos cada vez que se reabre (stats pueden
+            # haber cambiado mientras estaba cerrado).
+            self.profile_dialog.refresh()
+        self.profile_dialog.show()
+        self.profile_dialog.raise_()
+        self.profile_dialog.activateWindow()
+
+    def _open_github_login_dialog(self) -> None:
+        """Lanza el diálogo de login GitHub (v0.5 阶段 K + L)."""
+
+        from shakevision.ui.github_login_dialog import GitHubLoginDialog
+
+        dlg = GitHubLoginDialog(self)
+        # Refrescar el Profile dialog si está visible
+        dlg.logged_in.connect(
+            lambda _u: self.profile_dialog and self.profile_dialog.refresh())
+        dlg.exec()
+
     def _on_settings_applied(self) -> None:
         """Tras aplicar preferencias: empujar payload del dashboard."""
 
@@ -1298,8 +1516,15 @@ class MainWindow(QMainWindow):
         new_widget = self._tabs.widget(index)
         if new_widget is None:
             return
-        # Saltar el fade en widgets que envuelven QWebEngineView
-        if new_widget in (self.globe_panel, self.dashboard_panel):
+        # Saltar el fade en widgets que envuelven QWebEngineView.
+        # v0.5.3: Profile salió a diálogo, solo quedan globe + dashboard.
+        skip_widgets = tuple(
+            w for w in (
+                getattr(self, "globe_panel", None),
+                getattr(self, "dashboard_panel", None),
+            ) if w is not None
+        )
+        if new_widget in skip_widgets:
             return
         self._fade_in_animation = make_fade_in(new_widget, duration_ms=180)
         self._fade_in_animation.start()

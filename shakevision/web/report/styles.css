@@ -1,5 +1,5 @@
 /* ============================================================
-   ShakeVision · Reporte de actividad — estilo "papel oscuro".
+   SeismicGuard · Reporte de actividad — estilo "papel oscuro".
    Embebido inline en el HTML generado: cero dependencias externas,
    se ve igual abierto en cualquier navegador y al imprimirse a PDF.
    ============================================================ */
@@ -226,9 +226,106 @@ footer.report-footer {
   justify-content: space-between;
 }
 
-/* ---------- Print: forzar fondo oscuro al imprimir ---------- */
+/* ---------- Print: A4 portrait con márgenes 18mm + no overflow ----------
+   v0.7-B: el reporte se renderiza al PDF vía Chromium printToPdf.
+   Antes el contenido se cortaba/desbordaba por varios motivos
+   acumulados:
+     1. .container max-width=920px > ancho imprimible A4 (174mm ≈
+        657px) → bordes derechos cortados.
+     2. .kpi-row con 4 columnas iguales = ~165px cada una; sumando
+        gaps superan los 657px disponibles.
+     3. table.events con td.time width=170px + td.depth=80px +
+        td.mag=70px + td.pager=80px = 400px reservados; en page
+        estrecha la columna "lugar" queda con <250px y los textos
+        largos hacen overflow horizontal.
+     4. .bar-row con primera columna 140px hace lo mismo cuando hay
+        nombres de país largos como "Bosnia and Herzegovina".
+     5. table sin overflow-wrap → no rompe palabras largas.
+
+   Solución global:
+     • Eliminamos max-width fijo del container en print.
+     • KPIs pasan a 2 columnas (más amplias) en print.
+     • Tablas: word-break + columnas más estrechas para tiempo/profundidad.
+     • Bar rows: primera columna 100px en print (suficiente con wrap).
+     • section/tr/.kpi-card con page-break-inside: avoid + break-inside.
+     • orphans/widows para evitar líneas huérfanas al partir página.
+*/
 @media print {
-  html, body { background: #0a0a0a !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .container { padding: 0; max-width: none; }
-  section { page-break-inside: avoid; }
+  html, body {
+    background: #ffffff !important;
+    color: #18181b !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    font-size: 11px;
+  }
+  .container {
+    padding: 0;
+    max-width: none;
+    width: 100%;
+  }
+  /* Mantenemos los fondos oscuros de los cards / tabla para preservar
+     legibilidad visual y branding, pero ya no usamos el fondo negro
+     global del body (deja al PDF un look "polished" estilo informe
+     técnico en lugar de pantalla de monitoreo). */
+  header.report-header { border-color: #d4d4d8; }
+  header.report-header .subtitle, header.report-header .meta { color: #52525b; }
+  header.report-header .meta strong, header.report-header h1 { color: #18181b; }
+
+  section h2 { color: #52525b; border-bottom-color: #e4e4e7; }
+  section { page-break-inside: auto; }       /* permite split largos */
+  section + section { page-break-before: auto; }
+
+  .kpi-row {
+    grid-template-columns: repeat(2, 1fr);    /* 4 → 2 cols en print */
+    gap: 8px;
+  }
+  .kpi-card {
+    background: #f4f4f5; border-color: #d4d4d8;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .kpi-card .label { color: #52525b; }
+  .kpi-card .value { color: #18181b; }
+
+  .bar-row {
+    grid-template-columns: 100px 1fr 48px;    /* 140px → 100px first col */
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .bar-label { color: #18181b; word-break: break-word; }
+  .bar-track { background: #e4e4e7; }
+  .bar-value { color: #52525b; }
+
+  table.events {
+    table-layout: fixed;
+    width: 100%;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+  table.events thead { display: table-header-group; }   /* repite header en cada página */
+  table.events tr {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  table.events thead th, table.events tbody td {
+    color: #18181b;
+    border-color: #e4e4e7;
+  }
+  table.events td.mag    { width: 50px; }
+  table.events td.time   { width: 130px; }
+  table.events td.depth  { width: 60px; }
+  table.events td.pager  { width: 60px; }
+  /* la quinta columna (place) auto-fit con wrap */
+
+  .timeline-svg { background: #f4f4f5; border-color: #d4d4d8; }
+
+  footer.report-footer {
+    border-top-color: #d4d4d8;
+    color: #71717a;
+    page-break-inside: avoid;
+  }
+
+  /* Tipografía de impresión: evita huérfanas y viudas */
+  p, li, td, th { orphans: 2; widows: 2; }
+  h1, h2 { page-break-after: avoid; break-after: avoid; }
 }
