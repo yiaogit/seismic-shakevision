@@ -26,20 +26,22 @@ LOCALES_DIR = (
     / "shakevision" / "i18n" / "locales"
 )
 
+# v0.7-C: el tab "Backup" fue reemplazado por "Reset" (clear cache).
+# Las claves settings.backup.* desaparecen del JSON; en su lugar
+# están settings.reset.*. Mantenemos los tests del módulo
+# SettingsBackup en sí (siguen existiendo como API, solo no expuestos
+# en la UI), pero los tests de presencia i18n apuntan a las claves
+# nuevas.
 REQUIRED_KEYS = (
-    "settings.tab.backup",
-    "settings.backup.help",
-    "settings.backup.export_btn",
-    "settings.backup.import_btn",
-    "settings.backup.replace_label",
-    "settings.backup.export_dialog_title",
-    "settings.backup.import_dialog_title",
-    "settings.backup.confirm_replace_title",
-    "settings.backup.confirm_replace_body",
-    "settings.backup.export_ok",
-    "settings.backup.export_error",
-    "settings.backup.import_ok",
-    "settings.backup.import_error",
+    "settings.tab.reset",
+    "settings.reset.heading",
+    "settings.reset.help",
+    "settings.reset.button",
+    "settings.reset.confirm_title",
+    "settings.reset.confirm_body",
+    "settings.reset.ok",
+    "settings.reset.partial",
+    "settings.reset.error",
 )
 
 
@@ -82,17 +84,14 @@ def test_backup_i18n_keys_present(locale: str) -> None:
     assert not missing, f"{locale}: missing {missing}"
 
 
-def test_backup_format_strings_have_placeholders() -> None:
-    """export_ok/import_ok deben tener {path}; import_ok extra {ok}/{total}."""
+def test_reset_format_strings_have_placeholders() -> None:
+    """v0.7-C: settings.reset.partial debe tener {errors};
+    settings.reset.error debe tener {error}."""
 
     for loc in ("en", "es", "zh", "fr"):
         d = json.loads((LOCALES_DIR / f"{loc}.json").read_text("utf-8"))
-        assert "{path}" in d["settings.backup.export_ok"]
-        assert "{path}" in d["settings.backup.import_ok"]
-        assert "{ok}" in d["settings.backup.import_ok"]
-        assert "{total}" in d["settings.backup.import_ok"]
-        assert "{error}" in d["settings.backup.export_error"]
-        assert "{error}" in d["settings.backup.import_error"]
+        assert "{errors}" in d["settings.reset.partial"]
+        assert "{error}" in d["settings.reset.error"]
 
 
 # ============================================================

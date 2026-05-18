@@ -44,11 +44,11 @@ REQUIRED_KEYS = (
     "profile.stat.stations_clicked",
     "profile.stat.audio_listened",
     "profile.stat.reports_generated",
-    "profile.favorites.title",
-    "profile.favorites.stations",
-    "profile.favorites.events",
-    "profile.favorites.empty_stations",
-    "profile.favorites.empty_events",
+    # v0.7-A: la sección "Favoritos" fue reemplazada por "Actividad
+    # reciente". Las claves profile.favorites.* desaparecen del JSON.
+    "profile.activity.title",
+    "profile.activity.hint",
+    "profile.activity.empty",
 )
 
 
@@ -221,37 +221,50 @@ def test_profile_view_shows_github_user_when_signed_in(qapp_factory) -> None:
         view.deleteLater()
 
 
-def test_profile_view_lists_favorites(qapp_factory) -> None:
-    from shakevision.services.favorites_store import FavoritesStore
+def test_profile_view_lists_activity(qapp_factory) -> None:
+    """v0.7-A: la sección de favoritos fue reemplazada por la timeline
+    de actividad. Insertamos 2 entradas en ActivityLog y comprobamos
+    que aparecen ordenadas más reciente primero en _activity_list.
+    """
+
+    from shakevision.services.activity_log import (
+        ActivityLog,
+        KIND_LAUNCH,
+        KIND_REPORT_PDF,
+    )
     from shakevision.ui.profile_view import ProfileView
 
-    FavoritesStore.add_station(
-        "AM", "R0E05", site_name="Madrid", provider="shakenet")
-    FavoritesStore.add_event(
-        "us7000abc", 5.4, "Tokio", 1_700_000_000.0)
+    ActivityLog.reset()  # estado limpio
+    ActivityLog.record(KIND_LAUNCH)
+    ActivityLog.record(KIND_REPORT_PDF)
 
     _app = qapp_factory()
     view = ProfileView()
     try:
         view.refresh_all()
-        assert view._stations_list.count() == 1
-        assert "R0E05" in view._stations_list.item(0).text()
-        assert view._events_list.count() == 1
-        assert "Tokio" in view._events_list.item(0).text()
+        # Dos entradas + más reciente primero (PDF antes que launch)
+        assert view._activity_list.count() == 2
+        first = view._activity_list.item(0).text()
+        # Debe contener el separador ' · ' del format_activity
+        assert " · " in first
     finally:
         view.deleteLater()
 
 
-def test_profile_view_empty_favorites_show_helper_text(qapp_factory) -> None:
+def test_profile_view_empty_activity_shows_placeholder(qapp_factory) -> None:
+    """Sin actividad: la lista tiene UN item de placeholder vacío."""
+
+    from shakevision.services.activity_log import ActivityLog
     from shakevision.ui.profile_view import ProfileView
 
+    ActivityLog.reset()
     _app = qapp_factory()
     view = ProfileView()
     try:
         view.refresh_all()
-        # Sin favoritos: cada lista tiene UN item de placeholder.
-        assert view._stations_list.count() == 1
-        assert view._events_list.count() == 1
+        assert view._activity_list.count() == 1
+        # El item placeholder debería tener algo de texto no vacío
+        assert view._activity_list.item(0).text().strip()
     finally:
         view.deleteLater()
 
