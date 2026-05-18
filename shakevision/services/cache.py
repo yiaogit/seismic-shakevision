@@ -79,12 +79,21 @@ class FileCache:
         os.replace(tmp, target)
 
     def age_seconds(self, key: str) -> Optional[float]:
-        """Devuelve la edad de la entrada o ``None`` si no existe."""
+        """Devuelve la edad de la entrada o ``None`` si no existe.
+
+        La edad se acota a 0 si fuera negativa. En Windows el
+        ``mtime`` de NTFS y ``time.time()`` pueden tener desfase de
+        cientos de nanosegundos en el mismo tick de reloj, generando
+        valores como ``-2.4e-07`` que no tienen sentido físico para
+        el caller (una entrada recién escrita "tiene edad 0", nunca
+        negativa). En POSIX el problema rara vez aparece pero el
+        clamp es inofensivo.
+        """
 
         path = self._path_for(key)
         if not path.exists():
             return None
-        return time.time() - path.stat().st_mtime
+        return max(0.0, time.time() - path.stat().st_mtime)
 
     def invalidate(self, key: str) -> None:
         """Elimina explícitamente la entrada (sin error si ya no existe)."""
