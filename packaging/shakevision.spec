@@ -66,6 +66,11 @@ hiddenimports = [
     "tzdata",
     # zoneinfo a veces necesita pisarse explícitamente
     "zoneinfo",
+    # tzlocal y sus dependencias internas — sin esto la detección
+    # de zona horaria de Windows falla silenciosamente en el bundle.
+    "tzlocal",
+    "tzlocal.utils",
+    "tzlocal.windows_tz",
     # PySide6 sub-módulos que QtWebEngine activa por su cuenta
     "PySide6.QtWebEngineCore",
     "PySide6.QtWebEngineWidgets",
@@ -127,6 +132,16 @@ else:
         ICON_PATH = str(candidate)
 
 # ------------------------------------------------------------
+# Recurso VS_VERSIONINFO para Windows (reduce el warning de
+# SmartScreen porque el PE deja de ser anónimo).
+# ------------------------------------------------------------
+WIN_VERSION_INFO = None
+if sys.platform == "win32":
+    candidate = ROOT / "packaging" / "windows" / "version_info.txt"
+    if candidate.is_file():
+        WIN_VERSION_INFO = str(candidate)
+
+# ------------------------------------------------------------
 # EXE (entrada de la carpeta onedir)
 # ------------------------------------------------------------
 exe = EXE(                                       # noqa: F821
@@ -146,6 +161,7 @@ exe = EXE(                                       # noqa: F821
     codesign_identity=None,
     entitlements_file=None,
     icon=ICON_PATH,
+    version=WIN_VERSION_INFO,  # solo se aplica en Windows
 )
 
 # ------------------------------------------------------------
@@ -170,7 +186,7 @@ if sys.platform == "darwin":
         name="ShakeVision.app",
         icon=ICON_PATH,
         bundle_identifier="org.shakevision.app",
-        version="0.1.1",
+        version="0.3.0",
         info_plist={
             "CFBundleName": "ShakeVision",
             "CFBundleDisplayName": "ShakeVision",

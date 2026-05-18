@@ -18,7 +18,7 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -26,17 +26,22 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QFrame,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMessageBox,
     QPushButton,
     QSizePolicy,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from shakevision.i18n import LocaleService, t
 from shakevision.i18n.service import LANGUAGE_LABELS, SUPPORTED_LANGUAGES
+from shakevision.services.shake_presets import LanShakePreset, ShakePresetStore
 from shakevision.services.timezone_service import TimezoneService
 
 
@@ -71,16 +76,31 @@ class SettingsDialog(QDialog):
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
         root.setContentsMargins(20, 18, 20, 18)
-        root.setSpacing(18)
+        root.setSpacing(12)
 
-        # ─── Sección IDIOMA ───
-        root.addLayout(self._build_language_section())
-        root.addWidget(self._separator())
+        # ─── Tab widget ───
+        # En v0.3.0 el diálogo creció con la sección "My Shakes". En
+        # vez de seguir apilando secciones verticales (que rebasaría
+        # alto de pantalla en laptops 13"), separamos en pestañas.
+        self._tabs = QTabWidget(self)
+        self._tabs.setDocumentMode(True)
 
-        # ─── Sección REGIÓN Y HORA ───
-        root.addLayout(self._build_locale_section())
+        # ── Tab General (idioma + región + dirección) ──
+        general = QWidget(self._tabs)
+        general_layout = QVBoxLayout(general)
+        general_layout.setContentsMargins(8, 8, 8, 8)
+        general_layout.setSpacing(14)
+        general_layout.addLayout(self._build_language_section())
+        general_layout.addWidget(self._separator())
+        general_layout.addLayout(self._build_locale_section())
+        general_layout.addStretch(1)
+        self._tabs.addTab(general, t("settings.tab.general"))
 
-        root.addStretch(1)
+        # ── Tab My Shakes (LAN Raspberry Shake presets) ──
+        shakes = self._build_my_shakes_tab()
+        self._tabs.addTab(shakes, t("settings.tab.my_shakes"))
+
+        root.addWidget(self._tabs, stretch=1)
 
         # ─── Botones inferiores ───
         buttons = QDialogButtonBox()
@@ -172,6 +192,173 @@ class SettingsDialog(QDialog):
         layout.addWidget(addr_help)
 
         return layout
+
+    # ------------------------------------------------------------------
+    # Tab "My Shakes"
+    # ------------------------------------------------------------------
+    def _build_my_shakes_tab(self) -> QWidget:
+        """Construye la pestaña de gestión de Shakes LAN."""
+
+        page = QWidget(self._tabs)
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(8)
+
+        # Encabezado explicativo
+        self._shakes_help = QLabel()
+        self._shakes_help.setWordWrap(True)
+        self._shakes_help.setStyleSheet(
+            "color: rgba(255,255,255,0.55); font-size: 11px;"
+        )
+        layout.addWidget(self._shakes_help)
+
+        # Lista de presets
+        self._shakes_list = QListWidget()
+        self._shakes_list.setAlternatingRowColors(True)
+        self._shakes_list.setSelectionMode(QListWidget.SingleSelection)
+        self._shakes_list.itemDoubleClicked.connect(self._on_shake_edit)
+        layout.addWidget(self._shakes_list, stretch=1)
+
+        # Mensaje "no shakes" cuando la lista está vacía
+        self._shakes_empty = QLabel()
+        self._shakes_empty.setAlignment(Qt.AlignCenter)
+        self._shakes_empty.setStyleSheet(
+            "color: rgba(255,255,255,0.4); font-size: 13px; padding: 24px;"
+        )
+        layout.addWidget(self._shakes_empty)
+
+        # Botonera inferior: Add / Rename / Delete
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(6)
+        self._shake_add_btn = QPushButton()
+        self._shake_add_btn.clicked.connect(self._on_shake_add)
+        btn_row.addWidget(self._shake_add_btn)
+        self._shake_rename_btn = QPushButton()
+        self._shake_rename_btn.clicked.connect(self._on_shake_rename)
+        btn_row.addWidget(self._shake_rename_btn)
+        self._shake_delete_btn = QPushButton()
+        self._shake_delete_btn.clicked.connect(self._on_shake_delete)
+        btn_row.addWidget(self._shake_delete_btn)
+        btn_row.addStretch(1)
+        layout.addLayout(btn_row)
+
+        # Suscribirse a cambios externos del store (otra ventana, etc.)
+        ShakePresetStore.changed_signal().connect(self._reload_shakes_list)
+        self._reload_shakes_list()
+
+        self._retranslate_shakes_tab()
+        return page
+
+    def _retranslate_shakes_tab(self) -> None:
+        """Re-aplica i18n en la pestaña My Shakes."""
+
+        self._shakes_help.setText(t("settings.my_shakes.help"))
+        self._shake_add_btn.setText(t("settings.my_shakes.add"))
+        self._shake_rename_btn.setText(t("settings.my_shakes.rename"))
+        self._shake_delete_btn.setText(t("settings.my_shakes.delete"))
+        self._shakes_empty.setText(t("settings.my_shakes.empty"))
+        # Tabs
+        if hasattr(self, "_tabs"):
+            self._tabs.setTabText(0, t("settings.tab.general"))
+            self._tabs.setTabText(1, t("settings.tab.my_shakes"))
+
+    @Slot()
+    def _reload_shakes_list(self) -> None:
+        """Recarga la lista desde el store."""
+
+        self._shakes_list.clear()
+        presets = ShakePresetStore.all()
+        for p in presets:
+            item = QListWidgetItem(
+                f"{p.label}    —    {p.host}:{p.port}  ·  {p.network}.{p.station}"
+            )
+            item.setData(Qt.UserRole, p.host)   # clave para mutar
+            self._shakes_list.addItem(item)
+        # Empty state
+        has_any = len(presets) > 0
+        self._shakes_empty.setVisible(not has_any)
+        self._shakes_list.setVisible(has_any)
+        self._shake_rename_btn.setEnabled(has_any)
+        self._shake_delete_btn.setEnabled(has_any)
+
+    @Slot()
+    def _on_shake_add(self) -> None:
+        """Abre AddShakeDialog para crear un preset nuevo."""
+
+        # Importación tardía para evitar ciclo
+        from shakevision.ui.add_shake_dialog import AddShakeDialog
+
+        dialog = AddShakeDialog(parent=self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        lan = dialog.result_preset()
+        if lan is None:
+            return
+        ShakePresetStore.add(lan)
+        # changed_signal triggea _reload_shakes_list
+
+    @Slot()
+    def _on_shake_edit(self, item: QListWidgetItem) -> None:
+        """Doble-click en la lista → editar preset existente."""
+
+        from shakevision.ui.add_shake_dialog import AddShakeDialog
+
+        host = item.data(Qt.UserRole)
+        existing = ShakePresetStore.find_by_host(host)
+        if existing is None:
+            return
+        dialog = AddShakeDialog(parent=self, initial=existing)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        updated = dialog.result_preset()
+        if updated is None:
+            return
+        # Si el usuario cambió el host, borramos el antiguo primero.
+        if updated.host.lower() != existing.host.lower():
+            ShakePresetStore.delete(existing.host)
+        ShakePresetStore.add(updated)
+
+    @Slot()
+    def _on_shake_rename(self) -> None:
+        """Pide un nuevo label para el item seleccionado."""
+
+        item = self._shakes_list.currentItem()
+        if item is None:
+            return
+        host = item.data(Qt.UserRole)
+        existing = ShakePresetStore.find_by_host(host)
+        if existing is None:
+            return
+        new_label, ok = QInputDialog.getText(
+            self,
+            t("settings.my_shakes.rename"),
+            t("settings.my_shakes.rename_prompt"),
+            text=existing.label,
+        )
+        if ok and new_label.strip():
+            ShakePresetStore.rename(host, new_label.strip())
+
+    @Slot()
+    def _on_shake_delete(self) -> None:
+        """Borra el item seleccionado tras confirmar."""
+
+        item = self._shakes_list.currentItem()
+        if item is None:
+            return
+        host = item.data(Qt.UserRole)
+        existing = ShakePresetStore.find_by_host(host)
+        if existing is None:
+            return
+        reply = QMessageBox.question(
+            self,
+            t("settings.my_shakes.delete"),
+            t("settings.my_shakes.delete_confirm",
+              label=existing.label, host=existing.host),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply == QMessageBox.Yes:
+            ShakePresetStore.delete(host)
 
     @staticmethod
     def _separator() -> QFrame:

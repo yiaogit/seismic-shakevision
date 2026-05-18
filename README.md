@@ -45,9 +45,47 @@
 
 | 平台                              | 下载文件                                       | 安装方式                                              |
 |-----------------------------------|------------------------------------------------|-------------------------------------------------------|
-| 🪟 **Windows 10 / 11 x64**        | `ShakeVision-X.Y.Z-windows-x64.zip`            | 解压到任意目录 → 双击 `ShakeVision.exe`              |
-| 🍎 **macOS Apple Silicon (M1–M5)**| `ShakeVision-X.Y.Z-macos-arm64.dmg`            | 打开 DMG → 拖入 `/Applications` → 首次右键 → 打开    |
-| 🐧 **Linux x64**                  | `ShakeVision-X.Y.Z-linux-x64.AppImage`         | `chmod +x ShakeVision-*.AppImage` → 双击              |
+| 🪟 **Windows 10 / 11 x64**        | `ShakeVision-X.Y.Z-windows-x64.zip`            | 解压 → 双击 `ShakeVision.exe`（**首次**会触发 SmartScreen，见下） |
+| 🍎 **macOS Apple Silicon (M1–M5)**| `ShakeVision-X.Y.Z-macos-arm64.dmg`            | 打开 DMG → 拖入 `/Applications` → 首次右键 → 打开                |
+| 🐧 **Linux x64**                  | `ShakeVision-X.Y.Z-linux-x64.AppImage`         | `chmod +x ShakeVision-*.AppImage` → 双击                          |
+
+#### 🛡 Windows SmartScreen / macOS Gatekeeper 首次启动须知
+
+ShakeVision 当前**未做代码签名**（EV 证书约 $300/年；列入 v1.0 路线图）。
+因此首次启动时操作系统会拦截：
+
+<details>
+<summary><b>🪟 Windows — "Windows protected your PC"</b></summary>
+
+下载完 ZIP 解压后双击 `ShakeVision.exe`，会看到蓝色弹窗：
+
+```
+Windows protected your PC
+Microsoft Defender SmartScreen prevented an unrecognized app from starting.
+```
+
+操作：
+
+1. 点弹窗里的 **"More info"**（左下角小字）
+2. 弹窗展开后出现 **"Run anyway"** 按钮 —— 点它
+3. 之后再启动就不会再问
+
+> 这一步只需做一次。SmartScreen 在你的本地建立信任后，下次直接打开。
+> 如果你不愿点 "Run anyway"，可以从源码运行（见 [从源码运行](#-从源码运行)）。
+
+</details>
+
+<details>
+<summary><b>🍎 macOS — "ShakeVision can't be opened because Apple cannot check it for malicious software"</b></summary>
+
+把 `.app` 拖到 `/Applications` 后第一次启动时，会被 Gatekeeper 拦下。操作：
+
+1. **不要** 双击启动；改为 **右键（或按住 Control + 点击）** `ShakeVision.app`
+2. 选择菜单里的 **"Open"**
+3. 弹窗里再点 **"Open"** 确认
+4. 之后正常双击即可
+
+</details>
 
 > 🍎 **Intel Mac 用户**：不再发布 Intel 二进制（M1+ 已主导市场超过 4 年）。
 > 请按 [从源码运行](#-从源码运行) 部分本地构建。
@@ -287,10 +325,10 @@ git push origin v0.1.1
 
 - [x] **v0.1.0** — 全功能源码版（i18n + 时区 + Pro 浮窗 + 设置面板）
 - [x] **v0.1.1** — 二进制安装包（Windows `.zip` + macOS arm64 `.dmg` + Linux `.AppImage`）
-- [ ] **v0.2.0** — 历史回放：从 IRIS FDSN dataselect 下载 MiniSEED 可调速度回放
-- [ ] **v0.3.0** — 自定义 LAN Raspberry Shake 连接 UI（输入 IP）
+- [x] **v0.2.0** — 历史回放：从 IRIS FDSN dataselect 下载 MiniSEED，可调速度回放
+- [x] **v0.3.0** — 自定义 LAN Raspberry Shake 连接 UI（下拉 "➕ Add LAN Shake…" + Settings "My Shakes" 标签页）
 - [ ] **v0.4.0** — 主题切换（亮色 / 高对比度）
-- [ ] **v1.0.0** — 代码签名 + macOS 公证；移除 "未识别开发者" 警告
+- [ ] **v1.0.0** — 代码签名（Windows EV cert + macOS Developer ID + 公证）；彻底移除 SmartScreen / Gatekeeper 警告
 
 ---
 

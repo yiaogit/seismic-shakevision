@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shakevision"
-version = "0.1.1"
+version = "0.3.0"
 description = "ShakeVision OpenData Monitor - estación local de monitoreo sísmico basada en datos abiertos de Raspberry Shake."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -36,6 +36,11 @@ dependencies = [
     # tzdata es el paquete oficial que la provee. Solo se instala en
     # Windows para no inflar el wheel en las otras plataformas.
     "tzdata; sys_platform == 'win32'",
+    # `tzlocal` cruza nombres de zona del SO al estándar IANA. Es
+    # imprescindible en Windows (el registro guarda "China Standard
+    # Time", no "Asia/Shanghai"); en macOS/Linux también funciona y
+    # nos sirve de fallback uniforme cuando /etc/localtime es opaco.
+    "tzlocal>=5.0",
 ]
 
 [project.optional-dependencies]

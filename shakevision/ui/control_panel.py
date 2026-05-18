@@ -16,7 +16,7 @@ from __future__ import annotations
 from collections import deque
 from typing import Iterable
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -46,6 +46,16 @@ from shakevision.processing.sonifier import (
     MIN_SPEED_FACTOR,
     estimate_audio_duration_s,
 )
+from shakevision.services.shake_presets import (
+    LanShakePreset,
+    ShakePresetStore,
+)
+
+
+# Identificador interno del item "+ Add LAN Shake..." en el combo.
+# Lo usamos como userData para distinguirlo de los presets reales en
+# ``_on_station_changed`` y evitar emitir station_changed con datos basura.
+_ADD_LAN_SHAKE_SENTINEL = object()
 
 
 class ControlPanel(QFrame):
@@ -115,6 +125,12 @@ class ControlPanel(QFrame):
         for s in stations:
             # Guardar el preset entero en userData para recuperarlo al cambiar
             self.station_combo.addItem(s.label, userData=s)
+        # Cargar Shakes LAN guardados (v0.3.0) — vienen del store y
+        # entran como dinámicos para que cuenten en el FIFO de 8.
+        for lan in ShakePresetStore.all():
+            self._add_lan_shake_to_combo(lan)
+        # ── Sentinela "+ Add LAN Shake..." al final ──
+        self._add_lan_sentinel_to_combo()
         self.station_combo.currentIndexChanged.connect(self._on_station_changed)
         layout.addWidget(self.station_combo)
 
@@ -126,6 +142,10 @@ class ControlPanel(QFrame):
 
         # Mostrar el detalle inicial
         self._refresh_station_detail()
+
+        # Suscripción al store: cambios externos (Settings → My Shakes,
+        # otra ventana, etc.) deben reflejarse aquí inmediatamente.
+        ShakePresetStore.changed_signal().connect(self._refresh_lan_shakes_from_store)
 
         return layout
 
@@ -319,6 +339,13 @@ class ControlPanel(QFrame):
         self._trigger_section_title.setText(t("controls.section.trigger"))
         self._sound_section_title.setText(t("controls.section.sound"))
 
+        # Re-etiquetar el item sentinela ("+ Add LAN Shake...") tras
+        # cambio de idioma. Localizarlo por userData en lugar de índice.
+        for i in range(self.station_combo.count()):
+            if self.station_combo.itemData(i) is _ADD_LAN_SHAKE_SENTINEL:
+                self.station_combo.setItemText(i, t("controls.station.add_lan_shake"))
+                break
+
         self.connect_button.setText(t("controls.connect"))
         self.disconnect_button.setText(t("controls.disconnect"))
 
@@ -416,12 +443,124 @@ class ControlPanel(QFrame):
     # Manejadores de señales internas
     # ------------------------------------------------------------------
     def _on_station_changed(self, _index: int) -> None:
-        """Reemite la estación seleccionada hacia el exterior."""
+        """Reemite la estación seleccionada hacia el exterior.
+
+        Intercepta el item especial "+ Add LAN Shake..." → en lugar
+        de tratarlo como un preset, abre el diálogo y revierte la
+        selección visible al item previo (para que el usuario vea su
+        elección anterior mientras decide).
+        """
+
+        data = self.station_combo.currentData()
+        if data is _ADD_LAN_SHAKE_SENTINEL:
+            self._open_add_lan_shake_dialog()
+            return
 
         self._refresh_station_detail()
-        preset: StationPreset | None = self.station_combo.currentData()
-        if preset is not None:
-            self.station_changed.emit(preset)
+        if isinstance(data, StationPreset):
+            self.station_changed.emit(data)
+
+    # ------------------------------------------------------------------
+    # LAN Shakes — sentinela + diálogo + sincronización con el store
+    # ------------------------------------------------------------------
+    def _add_lan_sentinel_to_combo(self) -> None:
+        """Inserta o re-inserta la fila '+ Add LAN Shake...' al final."""
+
+        # Si ya está, removerlo para garantizar que SIEMPRE quede el último.
+        for i in range(self.station_combo.count()):
+            if self.station_combo.itemData(i) is _ADD_LAN_SHAKE_SENTINEL:
+                self.station_combo.removeItem(i)
+                break
+        self.station_combo.addItem(
+            t("controls.station.add_lan_shake"),
+            userData=_ADD_LAN_SHAKE_SENTINEL,
+        )
+
+    def _add_lan_shake_to_combo(self, lan: "LanShakePreset") -> None:
+        """Inserta un LanShakePreset como un StationPreset normal."""
+
+        preset = lan.to_station_preset()
+        # Reusamos append_dynamic_station para respetar el FIFO de 8.
+        # Pero esa función inserta tras el último item; aseguramos que
+        # el sentinela quede después llamando a _add_lan_sentinel_to_combo.
+        self.append_dynamic_station(preset)
+        self._add_lan_sentinel_to_combo()
+
+    def _open_add_lan_shake_dialog(self) -> None:
+        """Abre AddShakeDialog, persiste el resultado y selecciona el preset."""
+
+        # Importación tardía para evitar ciclo con ui/add_shake_dialog.py
+        from shakevision.ui.add_shake_dialog import AddShakeDialog
+
+        # Antes de abrir, revertir la selección al item anterior para
+        # que la UI no se quede pintando "+ Add LAN Shake..." si el
+        # usuario cancela.
+        self._restore_previous_combo_index()
+
+        dialog = AddShakeDialog(parent=self)
+        if dialog.exec() != dialog.Accepted:
+            return
+        lan = dialog.result_preset()
+        if lan is None:
+            return
+
+        # Persistir (puede sobrescribir si el host ya existía)
+        ShakePresetStore.add(lan)
+        # El store emite presets_changed → _refresh_lan_shakes_from_store
+        # se encarga de añadir / seleccionar en el combo.
+
+    def _restore_previous_combo_index(self) -> None:
+        """Selecciona el primer item válido distinto del sentinela."""
+
+        for i in range(self.station_combo.count()):
+            if self.station_combo.itemData(i) is not _ADD_LAN_SHAKE_SENTINEL:
+                self.station_combo.blockSignals(True)
+                self.station_combo.setCurrentIndex(i)
+                self.station_combo.blockSignals(False)
+                self._refresh_station_detail()
+                return
+
+    @Slot()
+    def _refresh_lan_shakes_from_store(self) -> None:
+        """Sincroniza el combo con la lista actual del store.
+
+        Estrategia: borrar todos los items dinámicos cuyo host coincide
+        con algún preset del store o que ya no existen, y re-insertar
+        los actuales. Conserva los presets estáticos (XX/MOCK + AM
+        defaults de AppConfig) y selecciona el último Shake añadido si
+        el usuario acaba de añadir uno.
+        """
+
+        from shakevision.services.shake_presets import ShakePresetStore
+
+        store_by_host = {p.host.lower(): p for p in ShakePresetStore.all()}
+
+        # Recopilar índices de items dinámicos que vinieron del store.
+        # Heurística: presets con seedlink_host no nulo y network "AM".
+        to_remove: list[int] = []
+        for i in range(self.station_combo.count()):
+            d = self.station_combo.itemData(i)
+            if d is _ADD_LAN_SHAKE_SENTINEL:
+                continue
+            if isinstance(d, StationPreset) and d.seedlink_host and d.network == "AM":
+                to_remove.append(i)
+        for i in reversed(to_remove):
+            self.station_combo.removeItem(i)
+            # También limpiar de _dynamic_stations si estaba
+            self._dynamic_stations = type(self._dynamic_stations)(
+                [d for d in self._dynamic_stations
+                 if not (isinstance(d, StationPreset)
+                         and d.seedlink_host
+                         and d.network == "AM")],
+                maxlen=self._dynamic_stations.maxlen,
+            )
+
+        # Re-insertar los presets actuales del store
+        for lan in store_by_host.values():
+            self.append_dynamic_station(lan.to_station_preset())
+
+        # Asegurar que el sentinela queda el último
+        self._add_lan_sentinel_to_combo()
 
     def _on_threshold_slider_changed(self, raw_value: int) -> None:
         """Convierte el valor del slider a flotante y reemite."""

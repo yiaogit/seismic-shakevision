@@ -56,9 +56,15 @@ def detect_system_timezone() -> Optional[str]:
          (típico en macOS y la mayoría de Linux). Extraemos el sufijo
          tras ``zoneinfo/``.
       2. Variable de entorno ``TZ`` (POSIX, si está configurada).
-      3. ``datetime.now().astimezone().tzinfo`` — devuelve un objeto
-         con offset; si su ``str()`` es un nombre IANA válido, lo
-         usamos. Si no, probamos a mapearlo via ``ZoneInfo``.
+      3. ``tzlocal`` — biblioteca que centraliza la detección:
+         * En Windows lee el registro y traduce
+           "China Standard Time" → "Asia/Shanghai" usando la tabla
+           oficial de Unicode CLDR.
+         * En POSIX hace lo mismo que las estrategias 1-2 más
+           fallbacks adicionales.
+         Es la estrategia que cubre Windows de forma fiable.
+      4. ``datetime.now().astimezone().tzinfo`` — último recurso para
+         entornos donde tzlocal no esté instalado.
 
     Devuelve el nombre IANA (``"America/Mexico_City"``, ``"Asia/Shanghai"``…)
     o ``None`` si ninguna estrategia produjo un nombre válido.
@@ -80,7 +86,18 @@ def detect_system_timezone() -> Optional[str]:
     if tz_env and _is_valid_iana(tz_env):
         return tz_env
 
-    # 3) datetime.astimezone()
+    # 3) tzlocal (cobertura principal de Windows)
+    try:
+        import tzlocal
+        # tzlocal >= 4 devuelve `zoneinfo.ZoneInfo`; .key es el nombre IANA.
+        zone = tzlocal.get_localzone()
+        iana = getattr(zone, "key", None) or str(zone)
+        if iana and _is_valid_iana(iana):
+            return iana
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("tzlocal no disponible o falló: %s", exc)
+
+    # 4) datetime.astimezone()  (last resort)
     try:
         local = _dt.datetime.now().astimezone()
         info = local.tzinfo

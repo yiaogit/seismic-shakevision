@@ -75,10 +75,133 @@
     return t(bucket.i18nKey);
   }
 
-  // Inicializar el chart ECharts
+  // ============================================================
+  // Inicialización del chart con auto-recuperación de WebGL/canvas
+  // ------------------------------------------------------------
+  // Problema observado en Windows: tras minimizar/restaurar la ventana
+  // o cuando el proceso GPU de Chromium reinicia, el contexto WebGL
+  // del canvas se pierde y zrender se queda con un "root" null. El
+  // siguiente setOption explota con
+  //     Uncaught TypeError: Cannot read properties of null
+  //                          (reading 'getRoots')
+  //
+  // Mecánica de recuperación:
+  //   1. Mantenemos ``chart`` en una variable mutable (no const).
+  //   2. ``installContextLostHandler()`` engancha 'webglcontextlost'
+  //      y 'webglcontextrestored' al canvas para reaccionar inmediato.
+  //   3. ``safeSetOption()`` envuelve TODOS los setOption: si captura
+  //      el error de getRoots o detecta isDisposed/getZr() null,
+  //      reconstruye la instancia entera y re-aplica el último estado.
+  //   4. ``visibilitychange`` y un latido de 10 s vigilan el estado
+  //      por si el evento webglcontextlost no se disparara en algún
+  //      driver Windows / GPU.
+  // ============================================================
   const container = document.getElementById("globe");
-  const chart = echarts.init(container, null, { renderer: "canvas" });
-  window.addEventListener("resize", () => chart.resize());
+  // ``chart`` es ``let`` para poder sustituirlo al reinicializar.
+  let chart = createChart();
+
+  function createChart() {
+    const c = echarts.init(container, null, { renderer: "canvas" });
+    installContextLostHandler(c);
+    return c;
+  }
+
+  function installContextLostHandler(c) {
+    // El canvas vive dentro del div container; ECharts lo crea como
+    // primer hijo. Lo buscamos por type para resistir versiones.
+    const canvas = container.querySelector("canvas");
+    if (!canvas) return;
+    canvas.addEventListener("webglcontextlost", (ev) => {
+      // Sin preventDefault Chromium NO dispara webglcontextrestored.
+      ev.preventDefault();
+      console.warn("Globe: WebGL context lost — programando recuperación");
+      // Pequeño debounce: a veces Chromium emite lost+restored seguidos
+      setTimeout(rebuildChart, 250);
+    }, false);
+    canvas.addEventListener("webglcontextrestored", () => {
+      console.info("Globe: WebGL context restored — reconstruyendo chart");
+      rebuildChart();
+    }, false);
+  }
+
+  function isChartAlive(c) {
+    try {
+      if (!c || typeof c.isDisposed !== "function") return false;
+      if (c.isDisposed()) return false;
+      const zr = c.getZr && c.getZr();
+      // zrender expone getRoots(); si throw o devuelve null, está roto.
+      if (!zr || typeof zr.painter === "undefined") return false;
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function rebuildChart() {
+    try { if (chart) chart.dispose(); } catch (_) { /* ignore */ }
+    chart = createChart();
+    // Restaurar el estado completo: base option + capa activa + datos.
+    try { chart.setOption(baseOption); } catch (_) { /* ignore primer pinta */ }
+    // ``applyActiveLayer`` repinta todas las series con los datos
+    // cacheados en ``state``; si aún no hay datos, no hace nada visible.
+    try { applyActiveLayer(); } catch (_) { /* idem */ }
+  }
+
+  // Wrapper defensivo de setOption. Devuelve true si OK, false si falló.
+  function safeSetOption(opt, extra) {
+    if (!isChartAlive(chart)) {
+      console.warn("Globe: chart no vivo, reconstruyendo antes de setOption");
+      rebuildChart();
+    }
+    try {
+      if (extra !== undefined) chart.setOption(opt, extra);
+      else chart.setOption(opt);
+      return true;
+    } catch (err) {
+      const msg = (err && err.message) || String(err);
+      // Cualquier error que huela a "root null" / "getRoots" / "dispose":
+      if (/getRoots|root|dispose|disposed|null/i.test(msg)) {
+        console.warn("Globe: setOption falló (" + msg + "), reconstruyendo");
+        rebuildChart();
+        try {
+          if (extra !== undefined) chart.setOption(opt, extra);
+          else chart.setOption(opt);
+          return true;
+        } catch (err2) {
+          console.error("Globe: setOption falló también tras rebuild", err2);
+          return false;
+        }
+      }
+      // Otros errores: re-lanzar para no enmascarar bugs reales.
+      throw err;
+    }
+  }
+
+  window.addEventListener("resize", () => {
+    if (isChartAlive(chart)) {
+      try { chart.resize(); } catch (_) { rebuildChart(); }
+    } else {
+      rebuildChart();
+    }
+  });
+
+  // Cuando la pestaña/ventana vuelve a ser visible, verifica salud.
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && !isChartAlive(chart)) {
+      console.warn("Globe: chart muerto al recuperar visibilidad, rebuild");
+      rebuildChart();
+    }
+  });
+
+  // Latido de seguridad cada 10 s — en algunos drivers Windows el
+  // evento webglcontextlost no llega y solo descubrimos el problema
+  // al siguiente push de datos. El check es baratísimo.
+  setInterval(() => {
+    if (!isChartAlive(chart)) {
+      console.warn("Globe: heartbeat detectó chart muerto, rebuild");
+      rebuildChart();
+    }
+  }, 10000);
 
   // Configuración base del globo (estilo "ciencia oscura")
   const baseOption = {
@@ -156,7 +279,7 @@
     series: [],
   };
 
-  chart.setOption(baseOption);
+  safeSetOption(baseOption);
 
   // ============================================================
   // Construcción dinámica de las series según la capa activa
@@ -298,7 +421,7 @@
       }
     }
 
-    chart.setOption({
+    safeSetOption({
       tooltip: {
         backgroundColor: "rgba(17,17,17,0.95)",
         borderColor: "rgba(255,255,255,0.08)",
@@ -411,7 +534,7 @@
     syncRotateBtnUI(false);
 
     suppressWheelExit = true;
-    chart.setOption({
+    safeSetOption({
       globe: {
         viewControl: {
           distance: ZOOM_VIEW_DISTANCE,
@@ -432,7 +555,7 @@
 
     const willRotate = !userPausedRotation;
     suppressWheelExit = true;
-    chart.setOption({
+    safeSetOption({
       globe: {
         viewControl: {
           distance: DEFAULT_VIEW.distance,
@@ -577,12 +700,17 @@
   // Controles de cámara: zoom + reset + pausa rotación
   // ============================================================
   function getCameraDistance() {
-    const opt = chart.getOption();
-    return (opt.globe?.[0]?.viewControl?.distance) || 200;
+    if (!isChartAlive(chart)) return 200;
+    try {
+      const opt = chart.getOption();
+      return (opt.globe?.[0]?.viewControl?.distance) || 200;
+    } catch (_) {
+      return 200;
+    }
   }
 
   function setCameraDistance(d) {
-    chart.setOption({
+    safeSetOption({
       globe: { viewControl: { distance: d } }
     });
   }
@@ -602,7 +730,7 @@
     zoomedIn = false;
     const willRotate = !userPausedRotation;
     suppressWheelExit = true;
-    chart.setOption({
+    safeSetOption({
       globe: {
         viewControl: {
           ...DEFAULT_VIEW,
@@ -639,7 +767,7 @@
     }
     // En vista mundial: aplicar inmediatamente.
     rotating = !userPausedRotation;
-    chart.setOption({
+    safeSetOption({
       globe: { viewControl: { autoRotate: rotating } }
     });
     syncRotateBtnUI(rotating);

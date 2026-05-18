@@ -58,6 +58,7 @@ from shakevision.ui.control_panel import ControlPanel
 from shakevision.ui.helicorder_widget import HelicorderPanel
 from shakevision.ui.intensity_card import IntensityCard
 from shakevision.ui.particle_motion_widget import ParticleMotionPanel
+from shakevision.ui.replay_panel import ReplayPanel
 from shakevision.ui.spectrogram_widget import SpectrogramPanel
 from shakevision.ui.waveform_widget import WaveformPanel
 
@@ -66,6 +67,7 @@ from shakevision.ui.waveform_widget import WaveformPanel
 PRO_LIVE: int = 0
 PRO_HELICORDER: int = 1
 PRO_PARTICLE: int = 2
+PRO_REPLAY: int = 3
 
 # Tamaño por defecto la primera vez que se abre la ventana
 _DEFAULT_WIDTH: int = 1200
@@ -91,11 +93,12 @@ class ProWindow(QMainWindow):
     disconnect_clicked = Signal()
     listen_clicked = Signal(int, int)       # (seconds, speed_factor)
 
-    # Sub-pestaña actualmente visible (0/1/2). MainWindow lo lee para
+    # Sub-pestaña actualmente visible (0/1/2/3). MainWindow lo lee para
     # decidir si refrescar oscilograma/espectrograma o no.
     PRO_LIVE: int = PRO_LIVE
     PRO_HELICORDER: int = PRO_HELICORDER
     PRO_PARTICLE: int = PRO_PARTICLE
+    PRO_REPLAY: int = PRO_REPLAY
 
     def __init__(
         self,
@@ -165,6 +168,11 @@ class ProWindow(QMainWindow):
         )
         self.subtabs.addTab(self.particle_panel, t("pro.subtab.particle"))
 
+        # ── Sub-tab "Replay" (descarga IRIS + reproducción histórica) ──
+        # Tiene su propio buffer/processor; no comparte estado con el live.
+        self.replay_panel = ReplayPanel(config=config, parent=self.subtabs)
+        self.subtabs.addTab(self.replay_panel, t("pro.subtab.replay"))
+
         right_layout.addWidget(self.subtabs, stretch=1)
         root.addWidget(right, stretch=1)
 
@@ -190,6 +198,7 @@ class ProWindow(QMainWindow):
         self.subtabs.setTabText(PRO_LIVE, t("pro.subtab.live"))
         self.subtabs.setTabText(PRO_HELICORDER, t("pro.subtab.helicorder"))
         self.subtabs.setTabText(PRO_PARTICLE, t("pro.subtab.particle"))
+        self.subtabs.setTabText(PRO_REPLAY, t("pro.subtab.replay"))
 
     # ------------------------------------------------------------------
     # API pública
@@ -239,9 +248,16 @@ class ProWindow(QMainWindow):
         De esta forma todos los widgets (WaveformPanel, helicorder, …)
         siguen vivos y la próxima vez que el usuario abra Pro se ve
         exactamente como la dejó.
+
+        El ReplayPanel sí libera su ReplaySource activo (si lo hay) para
+        evitar que un timer siga emitiendo después de cerrar la ventana.
         """
 
         self._save_geometry()
+        try:
+            self.replay_panel.close_resources()
+        except Exception:  # noqa: BLE001
+            pass
         event.ignore()
         self.hide()
 
