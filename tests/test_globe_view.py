@@ -95,12 +95,16 @@ def test_web_globe_files_exist() -> None:
 
 
 def test_index_html_references_required_components() -> None:
-    """El HTML debe cargar Globe.gl, qwebchannel y nuestro globe.js."""
+    """El HTML debe cargar ECharts-GL, qwebchannel y nuestro globe.js.
+
+    (El motor 3D pasó de Globe.gl/Three.js a ECharts-GL — ver tarea
+    "Replace 3D engine".)
+    """
 
     from shakevision.ui.globe_view import WEB_GLOBE_DIR
 
     html = (WEB_GLOBE_DIR / "index.html").read_text(encoding="utf-8")
-    assert "globe.gl" in html.lower()
+    assert "echarts" in html.lower()
     assert "qwebchannel" in html.lower()
     assert "globe.js" in html
     # Contenedor con id="globe"

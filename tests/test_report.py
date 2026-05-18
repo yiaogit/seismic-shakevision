@@ -32,6 +32,25 @@ from shakevision.services.report import (  # noqa: E402
 
 
 # ============================================================
+# Fixture: forzar locale español para todo el módulo
+# ============================================================
+# El reporte es i18n: en EN dice "No data", en ES "Sin datos".
+# Las aserciones de este módulo están escritas con los strings
+# castellanos (que es el idioma "humano" de referencia del producto),
+# así que cambiamos el locale al inicio y lo restauramos al final.
+@pytest.fixture(autouse=True)
+def _spanish_locale():
+    from shakevision.i18n import LocaleService
+
+    prev = LocaleService.current_language()
+    LocaleService.set_language("es")
+    try:
+        yield
+    finally:
+        LocaleService.set_language(prev)
+
+
+# ============================================================
 # Helper
 # ============================================================
 def _q(mag: float, depth: float = 10.0,

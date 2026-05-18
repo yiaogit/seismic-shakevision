@@ -74,8 +74,8 @@ def test_trend_assigns_event_to_correct_bucket() -> None:
     # El bucket "más reciente" es el último
     assert out[-1]["count"] == 2
     assert out[-1]["max_mag"] == 6.0
-    # Ts en milisegundos para ECharts
-    assert out[-1]["ts"] > 1_000_000_000_000
+    # Ts en milisegundos para ECharts (orden 10^11+, claramente no segundos)
+    assert out[-1]["ts"] > 1e11
 
 
 def test_trend_ignores_events_outside_window() -> None:

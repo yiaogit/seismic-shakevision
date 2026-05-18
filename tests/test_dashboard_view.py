@@ -75,10 +75,13 @@ def test_aggregate_by_country_returns_top_n_sorted() -> None:
         _q(4.0, place="a, Indonesia"),
     ]
     out = aggregate_by_country(quakes, top_n=2)
-    assert out == [
-        {"name": "Indonesia", "count": 3},
-        # Empate Japan vs Chile: la API solo garantiza el primero
-    ]
+    # Top_n=2 → devuelve 2 filas. Indonesia gana sin empate; el
+    # segundo puesto es ambiguo (Japan vs Chile empatan a 1) y la API
+    # solo garantiza el primero.
+    assert len(out) == 2
+    assert out[0] == {"name": "Indonesia", "count": 3}
+    assert out[1]["count"] == 1
+    assert out[1]["name"] in ("Japan", "Chile")
 
 
 def test_aggregate_by_country_empty_returns_empty() -> None:
@@ -165,6 +168,8 @@ def test_build_payload_returns_all_keys() -> None:
     ]
     payload = build_payload(quakes, now_unix=now)
     expected = {
+        # i18n + zona horaria del usuario (inyectados desde Phase A i18n)
+        "lang", "i18n", "timezone",
         "period_seconds",
         "count_24h", "max_magnitude", "latest_iso", "country_count",
         "country_top10", "magnitude_buckets", "depth_buckets",
@@ -215,7 +220,9 @@ def test_build_payload_respects_period_window() -> None:
 
 
 def test_build_payload_timeline_capped_at_24h() -> None:
-    """Aunque pidamos 7 días, la timeline nunca pasa de 24 h."""
+    """Para periodos > 24 h se usa la vista de densidad (burbujas)
+    y ``timeline_24h`` queda vacío. La cota efectiva la asegura el
+    cambio de modo (``timeline_mode == "density"``)."""
 
     from shakevision.ui.dashboard_view import build_payload as _bp
 
@@ -225,9 +232,12 @@ def test_build_payload_timeline_capped_at_24h() -> None:
         _q(5.0, ts=now - 100,       place="x, A"),
     ]
     payload = _bp(quakes, now_unix=now, period_seconds=7 * 86400)
-    # 2 sismos dentro de 7d, pero la timeline solo recoge los de las
-    # últimas 24 h → solo 1.
-    assert len(payload["timeline_24h"]) == 1
+    # Con period > 24 h el scatter queda vacío y la página dibuja
+    # ``timeline_density`` en su lugar.
+    assert payload["timeline_mode"] == "density"
+    assert payload["timeline_24h"] == []
+    # La vista de densidad sí debe traer las 2 burbujas (día 0 y día 3).
+    assert len(payload["timeline_density"]) == 2
 
 
 # ============================================================

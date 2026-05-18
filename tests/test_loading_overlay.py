@@ -27,7 +27,10 @@ def test_loading_overlay_shows_loading(qt_app) -> None:
     parent.resize(400, 300)
     overlay = LoadingOverlay(parent)
     overlay.show_loading("Cargando", "subtítulo")
-    assert overlay.isVisible()
+    # En modo offscreen el padre nunca se hace "visible" en pantalla,
+    # así que ``isVisible()`` siempre devuelve False. Lo que importa
+    # es que el overlay no esté explícitamente oculto.
+    assert not overlay.isHidden()
 
 
 def test_loading_overlay_shows_error_with_retry(qt_app) -> None:
@@ -35,7 +38,7 @@ def test_loading_overlay_shows_error_with_retry(qt_app) -> None:
     parent.resize(400, 300)
     overlay = LoadingOverlay(parent)
     overlay.show_error("Falló la red")
-    assert overlay.isVisible()
+    assert not overlay.isHidden()
 
 
 def test_loading_overlay_emits_retry_clicked(qt_app) -> None:
