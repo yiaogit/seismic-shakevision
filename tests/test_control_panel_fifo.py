@@ -71,12 +71,16 @@ def test_fifo_evicts_oldest_when_capacity_exceeded(panel) -> None:
     panel.append_dynamic_station(_preset("IU", "NEW"))
     assert panel.dynamic_station_count() == panel.MAX_DYNAMIC_STATIONS
 
-    # S000 ya no debe estar en el combo
+    # S000 ya no debe estar en el combo. Filtramos por isinstance porque
+    # v0.3.0 añadió un sentinel "➕ Add LAN Shake…" cuyo userData es un
+    # ``object()`` puro, no StationPreset.
+    from shakevision.config import StationPreset as _SP
+
     found_s000 = False
     found_new = False
     for i in range(panel.station_combo.count()):
         d = panel.station_combo.itemData(i)
-        if d is None:
+        if not isinstance(d, _SP):
             continue
         if d.network == "IU" and d.station == "S000":
             found_s000 = True
@@ -89,8 +93,14 @@ def test_fifo_evicts_oldest_when_capacity_exceeded(panel) -> None:
 def test_config_presets_never_evicted(panel) -> None:
     """Aunque el FIFO se llene, las estaciones de AppConfig se preservan."""
 
-    # AppConfig() trae Demo (XX.MOCK) y LAN Shake (AM.LOCAL) por defecto
-    initial_count = panel.station_combo.count()
+    from shakevision.config import StationPreset as _SP
+
+    # AppConfig() trae Demo (XX.MOCK) y LAN Shake (AM.LOCAL) por defecto.
+    # Contamos solo presets reales (no el sentinel "➕ Add LAN Shake…").
+    initial_real_count = sum(
+        1 for i in range(panel.station_combo.count())
+        if isinstance(panel.station_combo.itemData(i), _SP)
+    )
     for i in range(panel.MAX_DYNAMIC_STATIONS + 5):
         panel.append_dynamic_station(_preset("IU", f"X{i:03d}"))
 
@@ -98,10 +108,10 @@ def test_config_presets_never_evicted(panel) -> None:
     presets_in_combo = [
         panel.station_combo.itemData(i)
         for i in range(panel.station_combo.count())
-        if panel.station_combo.itemData(i) is not None
+        if isinstance(panel.station_combo.itemData(i), _SP)
     ]
     nslc = {(p.network, p.station) for p in presets_in_combo}
     assert ("XX", "MOCK") in nslc, "Demo no debe ser desalojada"
     assert ("AM", "LOCAL") in nslc, "LAN Shake no debe ser desalojada"
-    # Total = presets fijos iniciales + MAX_DYNAMIC_STATIONS
-    assert panel.station_combo.count() == initial_count + panel.MAX_DYNAMIC_STATIONS
+    # Total presets reales = presets fijos iniciales + MAX_DYNAMIC_STATIONS
+    assert len(presets_in_combo) == initial_real_count + panel.MAX_DYNAMIC_STATIONS

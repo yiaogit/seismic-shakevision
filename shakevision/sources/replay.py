@@ -61,15 +61,19 @@ class _ReplayClock:
       * ``speed``         — factor de aceleración (1.0 = tiempo real)
       * ``duration_s``    — duración total del clip
       * ``paused``        — flag
-      * ``last_real_t``   — wall-clock de la última llamada a tick()
-        (para descontar el tiempo transcurrido en cuanto se reanuda)
+      * ``last_real_t``   — wall-clock de la última llamada a tick(),
+        o ``None`` si aún no se ha llamado nunca. Usamos ``None`` como
+        sentinel para "no inicializado" porque ``0.0`` es un instante
+        válido (los tests usan now=0.0 como origen de tiempos) y
+        confundirlo con "primera llamada" causaba que el cursor
+        nunca avanzara cuando el caller arrancaba en t=0.
     """
 
     duration_s: float
     speed: float = DEFAULT_SPEED
     cursor_s: float = 0.0
     paused: bool = False
-    last_real_t: float = 0.0
+    last_real_t: Optional[float] = None
 
     def tick(self, now: float) -> tuple[float, float]:
         """Avanza el cursor según el tiempo wall-clock transcurrido y
@@ -79,7 +83,7 @@ class _ReplayClock:
         ``last_real_t`` para que al reanudar no haya un salto.
         """
 
-        if self.last_real_t <= 0.0:
+        if self.last_real_t is None:
             self.last_real_t = now
             return self.cursor_s, self.cursor_s
 
@@ -97,7 +101,7 @@ class _ReplayClock:
 
     def reset(self) -> None:
         self.cursor_s = 0.0
-        self.last_real_t = 0.0
+        self.last_real_t = None
 
     @property
     def at_end(self) -> bool:
@@ -235,7 +239,7 @@ class ReplaySource(DataSource):
             self.status_changed.emit("replay.status.empty_stream")
             return
         self._running = True
-        self._clock.last_real_t = 0.0
+        self._clock.last_real_t = None
         self._timer.start()
         self.status_changed.emit("replay.status.playing")
 
@@ -258,7 +262,7 @@ class ReplaySource(DataSource):
         if not self._running or not self._clock.paused:
             return
         self._clock.paused = False
-        self._clock.last_real_t = 0.0
+        self._clock.last_real_t = None
         self.status_changed.emit("replay.status.resumed")
 
     def set_speed(self, factor: float) -> None:
@@ -270,7 +274,7 @@ class ReplaySource(DataSource):
     def seek(self, position_s: float) -> None:
         self._clock.seek_to(position_s)
         # Resetear el reloj para no acumular delta entre cambios
-        self._clock.last_real_t = 0.0
+        self._clock.last_real_t = None
         self.progress.emit(self._clock.cursor_s, self._duration_s)
 
     # ------------------------------------------------------------------
