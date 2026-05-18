@@ -44,6 +44,13 @@ jobs:
   build-windows:
     name: Build · Windows (x64)
     runs-on: windows-latest
+    env:
+      # Fuerza UTF-8 en stdout/stderr de Python en Windows. Sin esto,
+      # los símbolos Unicode (▶ ✓ ⚠ ✗) revientan con
+      # `UnicodeEncodeError: 'charmap'` en cmd.exe / pwsh por defecto
+      # (cp1252). `build.py` también hace `reconfigure` por si acaso.
+      PYTHONIOENCODING: utf-8
+      PYTHONUTF8: '1'
     steps:
       - uses: actions/checkout@v4
 

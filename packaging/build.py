@@ -43,6 +43,30 @@ from pathlib import Path
 from typing import Optional
 
 # ============================================================
+# Compatibilidad de consola en Windows CI
+# ------------------------------------------------------------
+# El runner de GitHub Actions abre `stdout` en cp1252 / cp65001
+# en función de cómo se invoque PowerShell. Caracteres como
+# "▶", "✓", "✗", "⚠" hacen estallar `print()` con
+# `UnicodeEncodeError`. Reconfiguramos a UTF-8 (Python 3.7+)
+# y, si fallara, caemos a un set ASCII puro.
+# ============================================================
+def _stdout_supports_utf8() -> bool:
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+_UTF8 = _stdout_supports_utf8()
+_SYM_STEP = "▶" if _UTF8 else ">"
+_SYM_OK   = "✓" if _UTF8 else "+"
+_SYM_WARN = "⚠" if _UTF8 else "!"
+_SYM_FAIL = "✗" if _UTF8 else "x"
+
+# ============================================================
 # Rutas y metadatos
 # ============================================================
 ROOT = Path(__file__).resolve().parent.parent
@@ -79,19 +103,19 @@ def _arch_label() -> str:
 # Helpers de logging
 # ============================================================
 def _step(msg: str) -> None:
-    print(f"\n\033[1;36m▶ {msg}\033[0m", flush=True)
+    print(f"\n\033[1;36m{_SYM_STEP} {msg}\033[0m", flush=True)
 
 
 def _ok(msg: str) -> None:
-    print(f"\033[1;32m✓\033[0m {msg}", flush=True)
+    print(f"\033[1;32m{_SYM_OK}\033[0m {msg}", flush=True)
 
 
 def _warn(msg: str) -> None:
-    print(f"\033[1;33m⚠\033[0m {msg}", flush=True)
+    print(f"\033[1;33m{_SYM_WARN}\033[0m {msg}", flush=True)
 
 
 def _die(msg: str, code: int = 1) -> None:
-    print(f"\033[1;31m✗\033[0m {msg}", file=sys.stderr, flush=True)
+    print(f"\033[1;31m{_SYM_FAIL}\033[0m {msg}", file=sys.stderr, flush=True)
     sys.exit(code)
 
 
