@@ -31,6 +31,11 @@ dependencies = [
     "numpy>=1.24",
     "scipy>=1.10",
     "obspy>=1.4.0",
+    # En Windows el stdlib `zoneinfo` no incluye base de datos IANA
+    # (macOS y la mayoría de distros Linux tienen /usr/share/zoneinfo);
+    # tzdata es el paquete oficial que la provee. Solo se instala en
+    # Windows para no inflar el wheel en las otras plataformas.
+    "tzdata; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]

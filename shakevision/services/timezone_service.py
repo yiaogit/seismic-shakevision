@@ -149,13 +149,29 @@ class _Singleton(QObject):
     def current_iana(self) -> str:
         return self._current
 
-    def current_zone(self) -> ZoneInfo:
-        """Devuelve el ``ZoneInfo`` listo para usar con datetime."""
+    def current_zone(self):
+        """Devuelve el tzinfo listo para usar con datetime.
+
+        Estrategia con dos niveles de fallback:
+          1. ``ZoneInfo(self._current)``  — caso normal.
+          2. ``ZoneInfo("UTC")``          — si la zona pedida no
+             existe en la base IANA del sistema.
+          3. ``datetime.timezone.utc``    — usado cuando *ni* siquiera
+             ``UTC`` se puede cargar (típicamente Windows sin el
+             paquete ``tzdata`` instalado). Esto garantiza que las
+             llamadas a ``format_local`` / ``to_iso_local`` siempre
+             devuelvan algo y no se rompa la app por un detalle de
+             empaquetado.
+        """
 
         try:
             return ZoneInfo(self._current)
         except (ZoneInfoNotFoundError, ValueError, OSError):
+            pass
+        try:
             return ZoneInfo(_FALLBACK_TIMEZONE)
+        except (ZoneInfoNotFoundError, ValueError, OSError):
+            return _dt.timezone.utc
 
     def set_timezone(self, iana_name: str) -> bool:
         """Cambia la zona. Devuelve True si el nombre es válido."""
@@ -259,7 +275,7 @@ class TimezoneService:
         return _get_instance().current_iana()
 
     @staticmethod
-    def current_zone() -> ZoneInfo:
+    def current_zone() -> _dt.tzinfo:
         return _get_instance().current_zone()
 
     @staticmethod
