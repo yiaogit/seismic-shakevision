@@ -24,6 +24,7 @@ import pyqtgraph as pg
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
+from shakevision.i18n import LocaleService, t
 from shakevision.processing.buffer import BufferSnapshot
 from shakevision.ui.theme import (
     COLOR_BACKGROUND,
@@ -65,8 +66,10 @@ class WaveformPanel(QFrame):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(6)
 
-        # Cabecera con la etiqueta de la estación actual
-        self.station_header = QLabel("Estación: —")
+        # Cabecera con la etiqueta de la estación actual. Guardamos
+        # la etiqueta cruda para poder retraducir al cambiar idioma.
+        self._station_text: str = "—"
+        self.station_header = QLabel(t("waveform.station_label", label="—"))
         self.station_header.setObjectName("SectionTitle")
         self.station_header.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         layout.addWidget(self.station_header)
@@ -91,7 +94,7 @@ class WaveformPanel(QFrame):
 
         # Solo el gráfico inferior muestra etiqueta del eje X (segundos);
         # los otros la ocultan para ganar espacio vertical.
-        self._plots[_CHANNELS[-1]].setLabel("bottom", "Tiempo (s)")
+        self._plots[_CHANNELS[-1]].setLabel("bottom", t("waveform.axis_time"))
         for channel in _CHANNELS[:-1]:
             self._plots[channel].getAxis("bottom").setStyle(showValues=False)
 
@@ -100,13 +103,27 @@ class WaveformPanel(QFrame):
         for plot in self._plots.values():
             plot.setYRange(-2.0, 2.0, padding=0.0)
 
+        # Re-traducir cabecera y eje X al cambiar idioma en caliente.
+        LocaleService.language_changed_signal().connect(self._retranslate)
+
     # ------------------------------------------------------------------
     # API pública
     # ------------------------------------------------------------------
     def set_station_label(self, label: str) -> None:
         """Actualiza la cabecera con la estación seleccionada."""
 
-        self.station_header.setText(f"Estación: {label}")
+        self._station_text = label
+        self.station_header.setText(
+            t("waveform.station_label", label=label)
+        )
+
+    def _retranslate(self) -> None:
+        """Re-aplica labels traducidos al cambiar idioma."""
+
+        self.station_header.setText(
+            t("waveform.station_label", label=self._station_text)
+        )
+        self._plots[_CHANNELS[-1]].setLabel("bottom", t("waveform.axis_time"))
 
     def update_from_snapshot(self, snapshot: BufferSnapshot) -> None:
         """Refresca las tres trazas a partir de una instantánea del búfer."""

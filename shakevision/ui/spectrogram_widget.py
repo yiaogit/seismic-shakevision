@@ -21,6 +21,7 @@ import pyqtgraph as pg
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
+from shakevision.i18n import LocaleService, t
 from shakevision.processing.spectrum import SpectrumResult
 from shakevision.ui.theme import (
     COLOR_BACKGROUND,
@@ -46,11 +47,11 @@ class SpectrogramPanel(QFrame):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(6)
 
-        # Cabecera
-        header = QLabel("Espectrograma (EHZ)")
-        header.setObjectName("SectionTitle")
-        header.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        layout.addWidget(header)
+        # Cabecera (i18n-aware)
+        self._header = QLabel(t("spectrogram.title"))
+        self._header.setObjectName("SectionTitle")
+        self._header.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        layout.addWidget(self._header)
 
         # PlotWidget contenedor
         self._plot = pg.PlotWidget(background=COLOR_BACKGROUND)
@@ -61,10 +62,12 @@ class SpectrogramPanel(QFrame):
         self._plot.getAxis("left").setPen(COLOR_PANEL_BORDER)
         self._plot.getAxis("bottom").setTextPen(COLOR_TEXT_SECONDARY)
         self._plot.getAxis("left").setTextPen(COLOR_TEXT_SECONDARY)
-        self._plot.setLabel("bottom", "Tiempo (s)")
-        self._plot.setLabel("left", "Frecuencia (Hz)")
+        self._plot.setLabel("bottom", t("spectrogram.axis_time"))
+        self._plot.setLabel("left", t("spectrogram.axis_freq"))
         self._plot.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         layout.addWidget(self._plot, stretch=1)
+
+        LocaleService.language_changed_signal().connect(self._retranslate)
 
         # ImageItem que muestra la matriz de potencia
         self._image = pg.ImageItem()
@@ -84,6 +87,13 @@ class SpectrogramPanel(QFrame):
     # ------------------------------------------------------------------
     # API pública
     # ------------------------------------------------------------------
+    def _retranslate(self) -> None:
+        """Re-aplica labels traducidos al cambiar idioma."""
+
+        self._header.setText(t("spectrogram.title"))
+        self._plot.setLabel("bottom", t("spectrogram.axis_time"))
+        self._plot.setLabel("left", t("spectrogram.axis_freq"))
+
     def update_from_spectrum(self, spectrum: SpectrumResult) -> None:
         """Refresca el mapa de calor con un nuevo ``SpectrumResult``."""
 

@@ -72,7 +72,8 @@ class AudioPlayer(QObject):
         """
 
         if samples.size == 0:
-            self.playback_failed.emit("No hay audio que reproducir")
+            # ``audio.error.*`` son claves i18n; MainWindow las traduce.
+            self.playback_failed.emit("audio.error.no_samples")
             return False
 
         # Detener cualquier reproducción previa
@@ -81,9 +82,7 @@ class AudioPlayer(QObject):
         # Comprobar que haya un dispositivo de salida disponible
         device = QMediaDevices.defaultAudioOutput()
         if device.isNull():
-            self.playback_failed.emit(
-                "No se detectó ningún dispositivo de audio de salida"
-            )
+            self.playback_failed.emit("audio.error.no_device")
             return False
 
         # Configurar el formato (mono int16 a la frecuencia indicada)
@@ -93,9 +92,7 @@ class AudioPlayer(QObject):
         fmt.setSampleFormat(QAudioFormat.Int16)
 
         if not device.isFormatSupported(fmt):
-            self.playback_failed.emit(
-                f"El dispositivo no soporta {audio_rate_hz} Hz mono int16"
-            )
+            self.playback_failed.emit("audio.error.format_unsupported")
             return False
 
         # Empaquetar las muestras como QByteArray dentro de un QBuffer.
@@ -107,7 +104,7 @@ class AudioPlayer(QObject):
         self._buffer = QBuffer(self)
         self._buffer.setData(data)
         if not self._buffer.open(QIODevice.ReadOnly):
-            self.playback_failed.emit("No se pudo abrir el búfer interno")
+            self.playback_failed.emit("audio.error.buffer_open")
             return False
 
         # ─── ORDEN CRÍTICO ───

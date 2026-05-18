@@ -29,6 +29,7 @@ import pyqtgraph as pg
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
+from shakevision.i18n import LocaleService, t
 from shakevision.ui.theme import (
     COLOR_BACKGROUND,
     COLOR_PANEL_BORDER,
@@ -157,10 +158,12 @@ class HelicorderPanel(QFrame):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(6)
 
-        header = QLabel(f"Helicorder · EHZ · {hours} h × {minutes_per_row} min/fila")
-        header.setObjectName("SectionTitle")
-        header.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        layout.addWidget(header)
+        self._header = QLabel(
+            t("helicorder.title", hours=hours, minutes=minutes_per_row)
+        )
+        self._header.setObjectName("SectionTitle")
+        self._header.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        layout.addWidget(self._header)
 
         self._plot = pg.PlotWidget(background=COLOR_BACKGROUND)
         self._plot.setMouseEnabled(x=False, y=True)
@@ -170,10 +173,14 @@ class HelicorderPanel(QFrame):
         self._plot.getAxis("left").setPen(COLOR_PANEL_BORDER)
         self._plot.getAxis("bottom").setTextPen(COLOR_TEXT_SECONDARY)
         self._plot.getAxis("left").setTextPen(COLOR_TEXT_SECONDARY)
-        self._plot.setLabel("bottom", f"Minutos en la fila (0 → {minutes_per_row})")
-        self._plot.setLabel("left", "Hora (más reciente abajo)")
+        self._plot.setLabel(
+            "bottom", t("helicorder.axis_x", minutes=minutes_per_row),
+        )
+        self._plot.setLabel("left", t("helicorder.axis_y"))
         self._plot.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         layout.addWidget(self._plot, stretch=1)
+
+        LocaleService.language_changed_signal().connect(self._retranslate)
 
         # Una pareja (low, high) FillBetween por fila — eso da el aspecto
         # de "tira de tinta" típica del helicorder.
@@ -209,6 +216,18 @@ class HelicorderPanel(QFrame):
     # ------------------------------------------------------------------
     # API pública
     # ------------------------------------------------------------------
+    def _retranslate(self) -> None:
+        """Re-aplica las cadenas i18n al cambiar de idioma."""
+
+        self._header.setText(
+            t("helicorder.title",
+              hours=self._hours, minutes=self._minutes_per_row)
+        )
+        self._plot.setLabel(
+            "bottom", t("helicorder.axis_x", minutes=self._minutes_per_row),
+        )
+        self._plot.setLabel("left", t("helicorder.axis_y"))
+
     def ingest(self, samples: np.ndarray) -> None:
         """Recibe un nuevo bloque de muestras del canal Z."""
 

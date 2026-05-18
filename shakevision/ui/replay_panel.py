@@ -30,12 +30,10 @@ from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal, Slot
 from PySide6.QtWidgets import (
     QComboBox,
     QDateTimeEdit,
-    QDoubleSpinBox,
     QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QProgressBar,
     QPushButton,
     QSlider,
     QSpinBox,
@@ -137,9 +135,11 @@ class ReplayPanel(QWidget):
         self._download_worker: Optional[_DownloadWorker] = None
 
         # Buffer/Processor/Spectrum independientes del Live tab.
+        # Nota: el RingBuffer del proyecto usa `capacity_seconds`, no
+        # `buffer_seconds`. Mantener el nombre alineado con processing/buffer.py.
         self._buffer = RingBuffer(
             sample_rate_hz=config.stream.sample_rate_hz,
-            buffer_seconds=config.stream.buffer_seconds,
+            capacity_seconds=config.stream.buffer_seconds,
         )
         self._processor = WaveformProcessor(
             sample_rate_hz=config.stream.sample_rate_hz, filt=config.filt,
@@ -147,6 +147,9 @@ class ReplayPanel(QWidget):
         self._spectrum = SpectrumComputer(
             sample_rate_hz=config.stream.sample_rate_hz,
         )
+        # Cuenta cada cuántos frames refrescamos espectrograma (igual
+        # que MainWindow: 30 FPS para waveform / 10 FPS para spectrum).
+        self._spectrum_frame_skip = 0
 
         self._build_ui()
         self._refresh_timer = QTimer(self)
@@ -173,6 +176,7 @@ class ReplayPanel(QWidget):
         form.addWidget(self._lbl_net, 0, 0)
         self.net_edit = QLineEdit("IU")
         self.net_edit.setMaximumWidth(60)
+        self.net_edit.setToolTip(t("replay.tooltip.network"))
         form.addWidget(self.net_edit, 0, 1)
 
         # Station
@@ -180,6 +184,7 @@ class ReplayPanel(QWidget):
         form.addWidget(self._lbl_sta, 0, 2)
         self.sta_edit = QLineEdit("ANMO")
         self.sta_edit.setMaximumWidth(100)
+        self.sta_edit.setToolTip(t("replay.tooltip.station"))
         form.addWidget(self.sta_edit, 0, 3)
 
         # Location
@@ -187,6 +192,7 @@ class ReplayPanel(QWidget):
         form.addWidget(self._lbl_loc, 0, 4)
         self.loc_edit = QLineEdit("00")
         self.loc_edit.setMaximumWidth(60)
+        self.loc_edit.setToolTip(t("replay.tooltip.location"))
         form.addWidget(self.loc_edit, 0, 5)
 
         # Channel
@@ -194,40 +200,85 @@ class ReplayPanel(QWidget):
         form.addWidget(self._lbl_cha, 0, 6)
         self.cha_edit = QLineEdit("BH?")
         self.cha_edit.setMaximumWidth(80)
+        self.cha_edit.setToolTip(t("replay.tooltip.channel"))
         form.addWidget(self.cha_edit, 0, 7)
 
         # Start datetime (UTC)
+        # IMPORTANTE: QDateTimeEdit con `setCalendarPopup(True)` muestra
+        # el calendario al pulsar la flecha, pero EL CAMPO mismo permite
+        # editar horas/minutos/segundos por sección. Para que el usuario
+        # vea que es editable a nivel segundo, abrimos el control en la
+        # sección "minuto" + KeyboardTracking para que las flechas ↑↓
+        # actúen sobre la sección bajo el cursor.
         self._lbl_start = QLabel()
         form.addWidget(self._lbl_start, 1, 0)
         self.start_dt = QDateTimeEdit()
-        self.start_dt.setDisplayFormat("yyyy-MM-dd HH:mm:ss 'UTC'")
+        self.start_dt.setDisplayFormat("yyyy-MM-dd  HH:mm:ss  'UTC'")
         self.start_dt.setCalendarPopup(True)
+        self.start_dt.setKeyboardTracking(True)
         self.start_dt.setDateTime(
-            QDateTime.currentDateTimeUtc().addSecs(-3600)   # hace 1 hora
+            QDateTime.currentDateTimeUtc().addSecs(-3600)
         )
+        # Empezar con el cursor en la sección "minutos" (más útil para
+        # ajustar precisión que en el año).
+        self.start_dt.setCurrentSection(QDateTimeEdit.MinuteSection)
         form.addWidget(self.start_dt, 1, 1, 1, 3)
 
-        # Duration
+        # Duration con presets rápidos (30s / 1m / 2m / 5m / 30m)
+        # ──────────────────────────────────────────────────────────────
+        # 120 s es el default sensato: cubre P+S+coda de un sismo
+        # regional sin esperar a descargar 5 minutos de ruido.
+        # Los botones cambian el spinbox directamente para que el
+        # usuario también pueda ajustar a un valor arbitrario.
         self._lbl_dur = QLabel()
         form.addWidget(self._lbl_dur, 1, 4)
         self.dur_spin = QSpinBox()
         self.dur_spin.setRange(10, 6 * 3600)
-        self.dur_spin.setValue(300)
+        self.dur_spin.setValue(120)
         self.dur_spin.setSuffix(" s")
+        self.dur_spin.setMinimumWidth(110)
         form.addWidget(self.dur_spin, 1, 5)
 
         # Speed
+        # ──────────────────────────────────────────────────────────────
+        # setMinimumWidth/setMinimumContentsLength evita que "×60" se
+        # corte. El popup también respeta el ancho.
         self._lbl_speed = QLabel()
         form.addWidget(self._lbl_speed, 1, 6)
         self.speed_combo = QComboBox()
         for sp in SPEED_OPTIONS:
             self.speed_combo.addItem(f"×{sp:g}", userData=sp)
-        # Seleccionar 1.0
         self.speed_combo.setCurrentIndex(SPEED_OPTIONS.index(DEFAULT_SPEED))
         self.speed_combo.currentIndexChanged.connect(self._on_speed_changed)
+        self.speed_combo.setMinimumWidth(96)
+        self.speed_combo.setSizeAdjustPolicy(
+            QComboBox.AdjustToContents
+        )
         form.addWidget(self.speed_combo, 1, 7)
 
         root.addLayout(form)
+
+        # ─── Fila de "presets de duración" ───────────────────────────
+        # Atajos típicos para reconstruir un evento. Pulsar el botón
+        # solo cambia el valor del spinbox; el usuario aún tiene que
+        # pulsar "Descargar" para confirmar.
+        preset_row = QHBoxLayout()
+        preset_row.setSpacing(4)
+        self._lbl_dur_preset = QLabel()
+        preset_row.addWidget(self._lbl_dur_preset)
+        self._duration_preset_buttons: list[QPushButton] = []
+        for label, seconds in (
+            ("30 s", 30), ("1 min", 60), ("2 min", 120),
+            ("5 min", 300), ("10 min", 600), ("30 min", 1800),
+        ):
+            btn = QPushButton(label)
+            btn.setMaximumWidth(70)
+            btn.setProperty("seconds", seconds)
+            btn.clicked.connect(self._on_duration_preset_clicked)
+            preset_row.addWidget(btn)
+            self._duration_preset_buttons.append(btn)
+        preset_row.addStretch(1)
+        root.addLayout(preset_row)
 
         # ─── Botonera (Download / Play / Pause / Stop) ───
         btn_row = QHBoxLayout()
@@ -270,19 +321,32 @@ class ReplayPanel(QWidget):
         splitter.setStretchFactor(1, 35)
         root.addWidget(splitter, stretch=1)
 
-        # ─── Barra de progreso del clip ───
+        # ─── Cursor único de reproducción ───────────────────────────
+        # Antes había DOS controles (QProgressBar + QSlider) que se
+        # solapaban y confundían al usuario. Ahora hay UN solo QSlider
+        # con flancos "tiempo actual" a la izquierda y "duración total"
+        # a la derecha, igual que un reproductor de vídeo.
         prog_row = QHBoxLayout()
-        prog_row.setSpacing(6)
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 1000)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setFormat("0:00 / 0:00")
-        prog_row.addWidget(self.progress_bar, stretch=1)
+        prog_row.setSpacing(8)
+        self.time_cursor_label = QLabel("0:00")
+        self.time_cursor_label.setObjectName("StatusValue")
+        self.time_cursor_label.setMinimumWidth(48)
+        self.time_cursor_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        prog_row.addWidget(self.time_cursor_label)
+
         self.cursor_slider = QSlider(Qt.Horizontal)
         self.cursor_slider.setRange(0, 1000)
         self.cursor_slider.setEnabled(False)
         self.cursor_slider.sliderMoved.connect(self._on_seek)
+        # También permitimos click directo en una posición (no solo
+        # arrastrar): el ratón pulsado se trata como seek inmediato.
+        self.cursor_slider.actionTriggered.connect(self._on_slider_action)
         prog_row.addWidget(self.cursor_slider, stretch=1)
+
+        self.time_total_label = QLabel("0:00")
+        self.time_total_label.setObjectName("StatusValue")
+        self.time_total_label.setMinimumWidth(48)
+        prog_row.addWidget(self.time_total_label)
         root.addLayout(prog_row)
 
         # Overlay para fase de descarga
@@ -306,6 +370,12 @@ class ReplayPanel(QWidget):
         self.play_btn.setText(t("replay.button.play"))
         self.pause_btn.setText(t("replay.button.pause"))
         self.stop_btn.setText(t("replay.button.stop"))
+        self._lbl_dur_preset.setText(t("replay.field.duration_preset"))
+        # Re-aplicar tooltips traducidos
+        self.net_edit.setToolTip(t("replay.tooltip.network"))
+        self.sta_edit.setToolTip(t("replay.tooltip.station"))
+        self.loc_edit.setToolTip(t("replay.tooltip.location"))
+        self.cha_edit.setToolTip(t("replay.tooltip.channel"))
 
     # ------------------------------------------------------------------
     # Sugerencia desde el globo (Pro tab puede usarlo en futuro)
@@ -397,7 +467,10 @@ class ReplayPanel(QWidget):
             return
 
         self._source.data_ready.connect(self._on_batch)
-        self._source.status_changed.connect(self.status_label.setText)
+        # ReplaySource emite KEYS i18n ("replay.status.*"); las
+        # traducimos con t() antes de mostrarlas. Las keys también
+        # admiten {placeholders} para futuras versiones.
+        self._source.status_changed.connect(self._on_source_status)
         self._source.progress.connect(self._on_progress)
         self._source.finished.connect(self._on_source_finished)
 
@@ -441,6 +514,7 @@ class ReplayPanel(QWidget):
         self.play_btn.setEnabled(True)
         self.pause_btn.setEnabled(False)
         self.cursor_slider.setValue(0)
+        self.time_cursor_label.setText("0:00")
 
     def _on_speed_changed(self, _idx: int) -> None:
         if self._source is None:
@@ -455,17 +529,68 @@ class ReplayPanel(QWidget):
         position = (raw / 1000.0) * self._source.duration_seconds
         self._source.seek(position)
 
+    def _on_slider_action(self, action: int) -> None:
+        """Permite hacer click directo en la barra para saltar a esa
+        posición (no solo arrastrar). Qt envía ``SliderAction`` para
+        cualquier interacción, así que filtramos las acciones de
+        click (move y SliderPressed) y aplicamos el seek correspondiente.
+        """
+
+        # Qt usa enteros enum: 0=NoAction; las acciones útiles son
+        # SliderMove, SliderPressed, SliderPageStepAdd/Sub.
+        from PySide6.QtWidgets import QAbstractSlider
+        if action in (
+            QAbstractSlider.SliderPressed,
+            QAbstractSlider.SliderPageStepAdd,
+            QAbstractSlider.SliderPageStepSub,
+        ):
+            self._on_seek(self.cursor_slider.sliderPosition())
+
+    def _on_duration_preset_clicked(self) -> None:
+        """Cambia el spinbox de duración al valor del botón pulsado."""
+
+        btn = self.sender()
+        if btn is None:
+            return
+        seconds = btn.property("seconds")
+        if seconds is None:
+            return
+        self.dur_spin.setValue(int(seconds))
+
+    @Slot(str)
+    def _on_source_status(self, key_or_text: str) -> None:
+        """Traduce la clave i18n emitida por ReplaySource y la muestra.
+
+        Si el string no parece una clave (no empieza por ``replay.``)
+        se asume texto libre por compatibilidad con código legacy.
+        """
+
+        if key_or_text.startswith("replay.status."):
+            text = t(key_or_text,
+                     label=self._source.station_label if self._source else "",
+                     speed=self._source.speed if self._source else 1.0)
+        else:
+            text = key_or_text
+        self.status_label.setText(text)
+
     # ------------------------------------------------------------------
     # Stream loop
     # ------------------------------------------------------------------
     @Slot(object)
     def _on_batch(self, batch: SampleBatch) -> None:
-        """Acumula el batch en el buffer interno. El refresh lo pintará."""
+        """Acumula el batch en el buffer interno. El refresh lo pintará.
 
-        # Reusar el procesador? Por simplicidad, lo aplicamos en el
-        # refresh tick (no aquí), igual que MainWindow. Aquí solo
-        # escribimos al buffer.
-        self._buffer.append(batch)
+        Usa la misma firma de write que MainWindow (timestamp + z/n/e
+        separados); pasar el objeto SampleBatch entero no funciona porque
+        RingBuffer.write espera kwargs explícitos.
+        """
+
+        self._buffer.write(
+            timestamp_unix=batch.timestamp_unix,
+            z=batch.z,
+            n=batch.n,
+            e=batch.e,
+        )
 
     @Slot()
     def _on_refresh_tick(self) -> None:
@@ -473,29 +598,40 @@ class ReplayPanel(QWidget):
 
         if self._source is None:
             return
-        snapshot = self._buffer.snapshot(
-            self._config.stream.display_window_seconds
-        )
-        if snapshot.times.size == 0:
+        if self._buffer.total_written == 0:
             return
-        filtered = self._processor.apply_snapshot(snapshot)
-        self.waveform_panel.update_snapshot(filtered)
-        try:
-            spec = self._spectrum.compute(filtered.samples.get("Z"))
-            if spec is not None:
-                self.spectrogram_panel.update_spectrogram(spec)
-        except Exception:  # noqa: BLE001
-            # Spectrogram puede fallar en ventanas muy cortas; no es crítico
-            pass
+        raw = self._buffer.read_window(
+            seconds=self._config.stream.display_window_seconds
+        )
+        processed = self._processor.apply_snapshot(raw)
+        self.waveform_panel.update_from_snapshot(processed)
+        # Spectrogram: 1 de cada 3 frames (≈10 FPS) — patrón idéntico
+        # al MainWindow para no saturar SciPy.
+        self._spectrum_frame_skip = (self._spectrum_frame_skip + 1) % 3
+        if self._spectrum_frame_skip == 0:
+            try:
+                z_samples = processed.samples.get("Z")
+                if z_samples is not None and z_samples.size > 0:
+                    spec = self._spectrum.compute(z_samples)
+                    if spec is not None:
+                        self.spectrogram_panel.update_from_spectrum(spec)
+            except Exception:  # noqa: BLE001
+                # Espectrograma puede fallar con ventanas muy cortas
+                # (FFT exige cierto mínimo de muestras); ignorarlo.
+                pass
 
     @Slot(float, float)
     def _on_progress(self, cursor_s: float, duration_s: float) -> None:
+        """Actualiza el cursor único y las etiquetas mm:ss laterales.
+
+        El cursor NO se actualiza si el usuario está arrastrando
+        manualmente (sliderDown) para evitar que el "tic tac" del
+        clock pelee con el dedo del usuario.
+        """
+
         pct = 0 if duration_s <= 0 else int(1000 * cursor_s / duration_s)
-        self.progress_bar.setValue(pct)
-        self.progress_bar.setFormat(
-            f"{_format_mm_ss(cursor_s)} / {_format_mm_ss(duration_s)}"
-        )
-        # Solo actualizar el slider si el usuario NO lo está arrastrando
+        self.time_cursor_label.setText(_format_mm_ss(cursor_s))
+        self.time_total_label.setText(_format_mm_ss(duration_s))
         if not self.cursor_slider.isSliderDown():
             self.cursor_slider.blockSignals(True)
             self.cursor_slider.setValue(pct)
@@ -523,8 +659,10 @@ class ReplayPanel(QWidget):
         self.play_btn.setEnabled(False)
         self.pause_btn.setEnabled(False)
         self.stop_btn.setEnabled(False)
+        self.cursor_slider.setEnabled(False)
         self.cursor_slider.setValue(0)
-        self.progress_bar.setValue(0)
+        self.time_cursor_label.setText("0:00")
+        self.time_total_label.setText("0:00")
 
     @Slot()
     def _cleanup_download_thread(self) -> None:

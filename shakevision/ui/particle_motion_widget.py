@@ -29,6 +29,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPen
 from PySide6.QtWidgets import QFrame, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
+from shakevision.i18n import LocaleService, t
 from shakevision.ui.theme import (
     COLOR_BACKGROUND,
     COLOR_PANEL_BORDER,
@@ -89,12 +90,13 @@ class ParticleMotionPanel(QFrame):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(6)
 
-        header = QLabel(
-            f"Movimiento de partícula · plano N-E · ventana {window_seconds:.1f} s"
+        self._window_seconds_val = float(window_seconds)
+        self._header = QLabel(
+            t("particle.title", seconds=self._window_seconds_val)
         )
-        header.setObjectName("SectionTitle")
-        header.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        layout.addWidget(header)
+        self._header.setObjectName("SectionTitle")
+        self._header.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        layout.addWidget(self._header)
 
         self._plot = pg.PlotWidget(background=COLOR_BACKGROUND)
         self._plot.setMouseEnabled(x=False, y=False)
@@ -105,10 +107,19 @@ class ParticleMotionPanel(QFrame):
         self._plot.getAxis("left").setPen(COLOR_PANEL_BORDER)
         self._plot.getAxis("bottom").setTextPen(COLOR_TEXT_SECONDARY)
         self._plot.getAxis("left").setTextPen(COLOR_TEXT_SECONDARY)
-        self._plot.setLabel("bottom", "Este (EHE)")
-        self._plot.setLabel("left", "Norte (EHN)")
+        self._plot.setLabel("bottom", t("particle.axis_east"))
+        self._plot.setLabel("left", t("particle.axis_north"))
         self._plot.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         layout.addWidget(self._plot, stretch=1)
+
+        LocaleService.language_changed_signal().connect(self._retranslate)
+
+    def _retranslate(self) -> None:
+        self._header.setText(
+            t("particle.title", seconds=self._window_seconds_val)
+        )
+        self._plot.setLabel("bottom", t("particle.axis_east"))
+        self._plot.setLabel("left", t("particle.axis_north"))
 
         # Crear ``n_segments`` curvas individuales: cada una recibirá su
         # propio color del gradiente. Es más caro que una sola curva

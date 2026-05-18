@@ -231,15 +231,13 @@ class ReplaySource(DataSource):
         if self._running:
             return
         if self._duration_s <= 0:
-            self.status_changed.emit("⚠ Stream vacío — nada que reproducir.")
+            # Emitimos i18n KEY; ReplayPanel la traduce con t().
+            self.status_changed.emit("replay.status.empty_stream")
             return
         self._running = True
-        self._clock.last_real_t = 0.0   # se inicializará en el primer tick
+        self._clock.last_real_t = 0.0
         self._timer.start()
-        self.status_changed.emit(
-            f"▶ Reproduciendo {self._station_label} "
-            f"(×{self._clock.speed:.1f})"
-        )
+        self.status_changed.emit("replay.status.playing")
 
     def stop(self) -> None:
         if not self._running:
@@ -247,28 +245,27 @@ class ReplaySource(DataSource):
         self._running = False
         self._timer.stop()
         self._clock.reset()
-        self.status_changed.emit("⏹ Reproducción detenida.")
+        self.status_changed.emit("replay.status.stopped")
         self.progress.emit(0.0, self._duration_s)
 
     def pause(self) -> None:
         if not self._running or self._clock.paused:
             return
         self._clock.paused = True
-        self.status_changed.emit("⏸ Pausado")
+        self.status_changed.emit("replay.status.paused")
 
     def resume(self) -> None:
         if not self._running or not self._clock.paused:
             return
         self._clock.paused = False
-        # last_real_t se resetea para no inflar el delta acumulado
         self._clock.last_real_t = 0.0
-        self.status_changed.emit("▶ Reanudado")
+        self.status_changed.emit("replay.status.resumed")
 
     def set_speed(self, factor: float) -> None:
         factor = max(0.01, float(factor))
         self._clock.speed = factor
         self.speed_changed.emit(factor)
-        self.status_changed.emit(f"⚡ Velocidad ×{factor:.1f}")
+        self.status_changed.emit("replay.status.speed_changed")
 
     def seek(self, position_s: float) -> None:
         self._clock.seek_to(position_s)
@@ -310,7 +307,7 @@ class ReplaySource(DataSource):
             self._timer.stop()
             self._running = False
             self.finished.emit()
-            self.status_changed.emit("✓ Reproducción completada.")
+            self.status_changed.emit("replay.status.completed")
 
 
 # ============================================================

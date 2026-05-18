@@ -755,7 +755,18 @@ class MainWindow(QMainWindow):
     # Sonificación bajo demanda
     # ------------------------------------------------------------------
     def _on_listen_clicked(self, seconds: int, speed_factor: int) -> None:
-        """Toma la última ventana del búfer y la reproduce acelerada."""
+        """Toma la última ventana del búfer y la reproduce acelerada.
+
+        Comportamiento toggle: si ya hay un clip en reproducción cuando
+        el usuario pulsa de nuevo el botón, se detiene en lugar de
+        intentar arrancar otro. Esto evita que el usuario quede
+        atascado mirando "▶ Reproduciendo…" tras un clip muy corto
+        (típico con speed=60× → 1 s de audio).
+        """
+
+        if self._audio_player.is_playing:
+            self._audio_player.stop()
+            return
 
         if self._buffer.total_written == 0:
             self._status_bar.showMessage(t("status.no_audio_yet"), 4000)
@@ -787,21 +798,35 @@ class MainWindow(QMainWindow):
         )
 
     def _on_playback_started(self) -> None:
-        """Deshabilita el botón para evitar reproducciones solapadas."""
+        """Mientras suena el clip, el botón se convierte en "Parar".
+
+        Cambio v0.3.1: el botón permanece ENABLED durante la
+        reproducción para que el usuario pueda interrumpir
+        clip-extra-cortos (speed=60× da ~1 s de audio). El texto
+        viene de i18n; el comportamiento toggle se gestiona en
+        ``_on_listen_clicked``.
+        """
 
         self.control_panel.set_listen_button_enabled(
-            False, label="🔊 Reproduciendo…"
+            True, label=t("controls.sound.stop_playing")
         )
 
     def _on_playback_finished(self) -> None:
-        """Restaura el botón al terminar el clip."""
+        """Restaura el botón al terminar el clip + notifica al usuario."""
 
         self.control_panel.set_listen_button_enabled(True)
+        self._status_bar.showMessage(t("status.playback_finished"), 2500)
 
     def _on_playback_failed(self, message: str) -> None:
-        """Muestra el error y restaura el botón."""
+        """Muestra el error y restaura el botón.
 
-        self._status_bar.showMessage(t("status.audio_error", message=message), 5000)
+        ``message`` puede llegar como i18n key (preferido, AudioPlayer
+        emite identificadores) o como texto libre legacy. Si parece
+        una key (empieza por "audio.error.") la traducimos.
+        """
+
+        text = t(message) if message.startswith("audio.error.") else message
+        self._status_bar.showMessage(t("status.audio_error", message=text), 5000)
         self.control_panel.set_listen_button_enabled(True)
 
     # ------------------------------------------------------------------

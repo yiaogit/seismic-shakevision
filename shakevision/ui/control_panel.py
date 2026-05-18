@@ -379,6 +379,10 @@ class ControlPanel(QFrame):
             se eliminan: el FIFO solo aplica a las dinámicas.
           * Después de añadir, se selecciona automáticamente la nueva
             estación (lo que dispara ``station_changed`` hacia main).
+          * **El sentinela "➕ Add LAN Shake…" (introducido en v0.3.0)
+            siempre debe quedar en la ÚLTIMA posición.** Insertamos
+            la nueva fila *antes* de ese ítem y seleccionamos su
+            índice real, nunca ``count - 1`` (que sería el sentinela).
 
         Devuelve ``True`` si añadió una entrada nueva al combo,
         ``False`` si solo seleccionó una existente.
@@ -386,9 +390,12 @@ class ControlPanel(QFrame):
 
         # ¿Ya existe? Comparamos por N.S.L (sin canal, el canal Z se
         # asume EHZ por defecto y no debe forzar duplicados).
+        # Se hace ``isinstance`` para saltar el sentinel cuyo userData
+        # no es un StationPreset (era la causa de un AttributeError
+        # silencioso que rompía toda la rutina de añadir estación).
         for i in range(self.station_combo.count()):
-            existing: StationPreset | None = self.station_combo.itemData(i)
-            if existing is None:
+            existing = self.station_combo.itemData(i)
+            if not isinstance(existing, StationPreset):
                 continue
             if (existing.network == preset.network
                     and existing.station == preset.station
@@ -400,16 +407,27 @@ class ControlPanel(QFrame):
         if len(self._dynamic_stations) >= self.MAX_DYNAMIC_STATIONS:
             oldest = self._dynamic_stations.popleft()
             for i in range(self.station_combo.count()):
-                d: StationPreset | None = self.station_combo.itemData(i)
+                d = self.station_combo.itemData(i)
                 if d is oldest:
                     self.station_combo.removeItem(i)
                     break
 
-        # Insertar al final y seleccionar.
-        self.station_combo.addItem(preset.label, userData=preset)
+        # Calcular la posición de inserción: justo ANTES del sentinel
+        # si existe; si no, al final del combo.
+        sentinel_idx = self._sentinel_index()
+        insert_idx = sentinel_idx if sentinel_idx >= 0 else self.station_combo.count()
+        self.station_combo.insertItem(insert_idx, preset.label, userData=preset)
         self._dynamic_stations.append(preset)
-        self.station_combo.setCurrentIndex(self.station_combo.count() - 1)
+        self.station_combo.setCurrentIndex(insert_idx)
         return True
+
+    def _sentinel_index(self) -> int:
+        """Devuelve el índice del item '+ Add LAN Shake…' o -1 si falta."""
+
+        for i in range(self.station_combo.count()):
+            if self.station_combo.itemData(i) is _ADD_LAN_SHAKE_SENTINEL:
+                return i
+        return -1
 
     def dynamic_station_count(self) -> int:
         """Cuántas estaciones dinámicas están actualmente en el combo."""
@@ -428,10 +446,15 @@ class ControlPanel(QFrame):
         return label
 
     def _refresh_station_detail(self) -> None:
-        """Actualiza el texto descriptivo del preset seleccionado."""
+        """Actualiza el texto descriptivo del preset seleccionado.
 
-        preset: StationPreset | None = self.station_combo.currentData()
-        if preset is None:
+        Defiende contra el sentinel "➕ Add LAN Shake…" (cuyo userData
+        no es un StationPreset) — si por algún camino quedara como
+        currentData, se ignora en lugar de provocar AttributeError.
+        """
+
+        preset = self.station_combo.currentData()
+        if not isinstance(preset, StationPreset):
             self.station_detail.setText("—")
             return
         self.station_detail.setText(
