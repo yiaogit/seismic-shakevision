@@ -32,8 +32,6 @@ from PySide6.QtWidgets import QFrame, QLabel, QSizePolicy, QVBoxLayout, QWidget
 from shakevision.i18n import LocaleService, t
 from shakevision.ui.theme import (
     COLOR_BACKGROUND,
-    COLOR_PANEL_BORDER,
-    COLOR_TEXT_SECONDARY,
     WAVEFORM_COLORS,
 )
 

@@ -59,7 +59,6 @@ import json
 import logging
 from dataclasses import asdict
 from pathlib import Path
-from typing import Optional
 
 from shakevision import __version__
 

@@ -46,11 +46,6 @@ from shakevision.processing.intensity import (
     IntensitySnapshot,
 )
 from shakevision.ui.theme import (
-    COLOR_PANEL,
-    COLOR_PANEL_BORDER,
-    COLOR_TEXT_MUTED,
-    COLOR_TEXT_PRIMARY,
-    COLOR_TEXT_SECONDARY,
     FONT_STACK_MONO,
     FONT_STACK_SANS,
 )

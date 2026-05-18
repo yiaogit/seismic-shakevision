@@ -28,7 +28,6 @@ from enum import Enum
 from typing import Optional
 
 from PySide6.QtCore import QSize, Signal
-from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -43,15 +42,15 @@ from shakevision.i18n import LocaleService, t
 from shakevision.ui.animations import clear_opacity_effect, make_pulse_opacity
 from shakevision.ui.icons import clear_icon_cache, get_icon, logo_pixmap
 from shakevision.ui.layer_mode_manager import LayerModeManager
+# Las 5 constantes COLOR_ACCENT / COLOR_PANEL / COLOR_PANEL_BORDER /
+# COLOR_TEXT_PRIMARY / COLOR_TEXT_SECONDARY se re-importan dentro de
+# ``_build_qss`` vía ``from shakevision.ui import theme as _t`` porque
+# necesitan leerse en cada cambio de tema (no se cachean al import).
+# Solo dejamos arriba las que sí se usan a nivel módulo.
 from shakevision.ui.theme import (
-    COLOR_ACCENT,
     COLOR_ACCENT_WARM,
     COLOR_OK,
-    COLOR_PANEL,
-    COLOR_PANEL_BORDER,
     COLOR_TEXT_MUTED,
-    COLOR_TEXT_PRIMARY,
-    COLOR_TEXT_SECONDARY,
     FONT_STACK_MONO,
     FONT_STACK_SANS,
 )

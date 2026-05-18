@@ -33,7 +33,6 @@ from shakevision.i18n import LocaleService, t
 from shakevision.ui.theme import (
     COLOR_BACKGROUND,
     COLOR_PANEL_BORDER,
-    COLOR_TEXT_SECONDARY,
 )
 
 

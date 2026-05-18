@@ -49,7 +49,7 @@ import logging
 from pathlib import Path
 from typing import Dict, Final, Literal, Optional
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
 
 

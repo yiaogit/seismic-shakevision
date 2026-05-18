@@ -19,12 +19,6 @@ import datetime as _dt
 import logging
 from typing import Optional
 
-
-def _safe_today() -> str:
-    """YYYY-MM-DD del día actual — usado como sufijo del fichero de backup."""
-
-    return _dt.date.today().isoformat()
-
 from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtWidgets import (
     QComboBox,
@@ -50,6 +44,16 @@ from shakevision.i18n import LocaleService, t
 from shakevision.i18n.service import LANGUAGE_LABELS, SUPPORTED_LANGUAGES
 from shakevision.services.shake_presets import ShakePresetStore
 from shakevision.services.timezone_service import TimezoneService
+
+
+def _safe_today() -> str:
+    """YYYY-MM-DD del día actual — usado como sufijo del fichero de backup.
+
+    v0.7-C: el tab "Backup" fue reemplazado por "Reset"; este helper
+    se mantiene por compatibilidad si alguien lo importa.
+    """
+
+    return _dt.date.today().isoformat()
 
 
 logger = logging.getLogger(__name__)

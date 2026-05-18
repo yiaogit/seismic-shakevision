@@ -37,9 +37,11 @@
 | 🔬 **Pro Workbench**      | 独立浮窗：实时三通道波形 + 频谱图 + 24h 鼓式记录 + N-E 质点轨迹 + STA/LTA 触发录波 + MMI 烈度卡                                  |
 | 🔊 **Sonification**       | 把最近 60 秒的地动信号变速并播放成可听音频（1× – 60×）                                                                            |
 | 🌐 **i18n**               | 全栈 4 语言（EN / ES / 简中 / FR）即时切换，包括 Web 视图、图表内部、tooltip、HTML 报告                                          |
-| 🕒 **Timezone-aware**     | 系统时区自动检测 + 手动覆盖；所有时间戳一致显示用户时区                                                                          |
-| 📄 **Reports**            | 一键导出单文件 HTML 报告（含 SVG 时间线）+ PDF 导出（QWebEngine printToPdf）                                                     |
-| ⚡ **Live SeedLink**      | 直连 IRIS `rtserve.iris.washington.edu:18000`，IU/US/II/IC 网络自动路由，分阶段连接状态显示，可随时取消                          |
+| 🕒 **时区感知**           | 系统时区自动检测 + 手动覆盖；所有时间戳一致显示用户时区                                                                          |
+| 📄 **报告导出**           | 一键导出单文件 HTML 报告（含 SVG 时间线）+ PDF 导出（QWebEngine printToPdf，v0.7 修复内容溢出）                                  |
+| ⚡ **实时 SeedLink**      | 直连 IRIS `rtserve.iris.washington.edu:18000`，IU/US/II/IC 网络自动路由，分阶段连接状态显示，可随时取消                          |
+| 👤 **个人中心**           | GitHub OAuth（Device Flow）+ 使用统计 + **最近活动时间线**（最近 50 条操作，相对时间戳，仅本地存储）                              |
+| 📍 **位置检测**           | IP 地理定位（一键，永不后台调用）推荐附近台站并同步时区                                                                          |
 
 ---
 
@@ -207,22 +209,22 @@ seismic-shakevision/
 │   ├── config.py             # SeedLink 服务器注册表 + 默认台站
 │   ├── sources/              # DataSource 抽象 + Mock / SeedLink
 │   ├── processing/           # RingBuffer / Filters / Detector / Spectrum / Recorder / Intensity / Sonifier
-│   ├── services/             # USGS / IRIS / ShakeNet 客户端 + Worker + Report + Timezone
-│   ├── ui/                   # PySide6 主窗口 + 浮窗 + 各 widget + Settings + LoadingOverlay
-│   ├── i18n/                 # LocaleService + 4 份对齐字典（each 260 keys）
+│   ├── services/             # USGS / IRIS / ShakeNet 客户端 + Worker + Report + Timezone + ActivityLog + Location + ClearCache
+│   ├── ui/                   # PySide6 主窗口 + 浮窗 + 各 widget + Settings + Profile + Onboarding
+│   ├── i18n/                 # LocaleService + 4 份对齐字典（each 435 keys）
 │   ├── web/{globe,dashboard,report}/   # 嵌入式 HTML/JS/CSS
 │   └── assets/{fonts,icons}/ # 字体（脚本下载，不入仓）
 │
-├── tests/                    # pytest 单元 + 集成（30+ 模块）
+├── tests/                    # pytest 单元 + 集成（40+ 模块）
 ├── packaging/                # ⭐ PyInstaller spec + 跨平台 build.py + 平台资源
 │   ├── shakevision.spec
 │   ├── build.py
 │   └── README.md             # 打包深度说明
-├── scripts/                  # install_libs.sh / install_fonts.sh
+├── scripts/                  # install_libs.sh / install_fonts.sh / download_globe_assets.py
 ├── .github/workflows/        # ci.yml（每次 push） + release.yml（tag 触发）
 ├── CHANGELOG.md
 ├── pyproject.toml
-└── README.md
+└── README.md                 # 本文件（外加 README.en.md / README.es.md / README.fr.md）
 ```
 
 ---
@@ -334,7 +336,8 @@ git push origin v0.1.1
 - [x] **v0.1.1** — 二进制安装包（Windows `.zip` + macOS arm64 `.dmg` + Linux `.AppImage`）
 - [x] **v0.2.0** — 历史回放：从 IRIS FDSN dataselect 下载 MiniSEED，可调速度回放
 - [x] **v0.3.0** — 自定义 LAN Raspberry Shake 连接 UI（下拉 "➕ Add LAN Shake…" + Settings "My Shakes" 标签页）
-- [ ] **v0.4.0** — 主题切换（亮色 / 高对比度）
+- [x] **v0.7.0** — 品牌重塑为 SeismicGuard、macOS Sonoma 风格主题、Onboarding 引导、Profile 活动时间线、IP 地理定位、PDF 溢出修复
+- [ ] **v0.8.0** — 地球收藏地震 UX（按钮式，替代延后的右键方案）
 - [ ] **v1.0.0** — 代码签名（Windows EV cert + macOS Developer ID + 公证）；彻底移除 SmartScreen / Gatekeeper 警告
 
 ---

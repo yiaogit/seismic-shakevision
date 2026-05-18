@@ -190,7 +190,7 @@ def test_import_partial_dict_does_not_crash() -> None:
     from shakevision.services.settings_backup import SettingsBackup
 
     FavoritesStore.add_station("AM", "EXISTING")
-    summary = SettingsBackup.import_from_dict(
+    SettingsBackup.import_from_dict(
         {"schema_version": 1, "theme": {"mode": "dark"}})
     # No debe haber claves de favoritos en el summary (no se procesó)
     # y los favoritos existentes deben permanecer.

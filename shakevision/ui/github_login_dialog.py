@@ -159,7 +159,9 @@ class GitHubLoginDialog(QDialog):
         layout.setSpacing(10)
 
         self._intro_heading = QLabel()
-        f = self._intro_heading.font(); f.setPointSize(14); f.setBold(True)
+        f = self._intro_heading.font()
+        f.setPointSize(14)
+        f.setBold(True)
         self._intro_heading.setFont(f)
         layout.addWidget(self._intro_heading)
 
@@ -198,7 +200,9 @@ class GitHubLoginDialog(QDialog):
         layout.setSpacing(10)
 
         self._wait_heading = QLabel()
-        f = self._wait_heading.font(); f.setPointSize(13); f.setBold(True)
+        f = self._wait_heading.font()
+        f.setPointSize(13)
+        f.setBold(True)
         self._wait_heading.setFont(f)
         layout.addWidget(self._wait_heading)
 
@@ -243,7 +247,9 @@ class GitHubLoginDialog(QDialog):
         layout.setSpacing(10)
 
         self._success_heading = QLabel()
-        f = self._success_heading.font(); f.setPointSize(14); f.setBold(True)
+        f = self._success_heading.font()
+        f.setPointSize(14)
+        f.setBold(True)
         self._success_heading.setFont(f)
         layout.addWidget(self._success_heading)
 

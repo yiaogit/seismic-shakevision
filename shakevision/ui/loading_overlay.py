@@ -32,9 +32,6 @@ from PySide6.QtWidgets import (
 )
 
 from shakevision.ui.theme import (
-    COLOR_ACCENT,
-    COLOR_ALERT,
-    COLOR_PANEL_BORDER,
     COLOR_TEXT_PRIMARY,
     COLOR_TEXT_SECONDARY,
     FONT_STACK_SANS,

@@ -160,7 +160,6 @@ def test_make_circular_pixmap_corners_are_transparent(qapp_factory) -> None:
     img = out.toImage()
     # Esquinas deben ser transparentes
     for x, y in [(0, 0), (71, 0), (0, 71), (71, 71)]:
-        c = QColor(img.pixel(x, y))
         # En Qt, pixel() devuelve un int RGB sin alpha; pero la
         # transparencia se preserva en pixelColor.
         assert img.pixelColor(x, y).alpha() == 0, (

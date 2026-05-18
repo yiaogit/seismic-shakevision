@@ -33,7 +33,6 @@ Refresh
 
 from __future__ import annotations
 
-import datetime as _dt
 import logging
 from typing import Optional
 
@@ -128,7 +127,9 @@ class _StatCard(QFrame):
         v.setContentsMargins(14, 12, 14, 12)
         v.setSpacing(4)
         self._value_label = QLabel(value)
-        f = QFont(); f.setPointSize(20); f.setBold(True)
+        f = QFont()
+        f.setPointSize(20)
+        f.setBold(True)
         self._value_label.setFont(f)
         self._value_label.setObjectName("ProfileStatValue")
         self._label_label = QLabel(label)
@@ -242,7 +243,9 @@ class ProfileView(QFrame):
         info = QVBoxLayout()
         info.setSpacing(4)
         self._name_label = QLabel("…")
-        nf = QFont(); nf.setPointSize(16); nf.setBold(True)
+        nf = QFont()
+        nf.setPointSize(16)
+        nf.setBold(True)
         self._name_label.setFont(nf)
         self._name_label.setObjectName("ProfileName")
         self._handle_label = QLabel("")
@@ -269,7 +272,9 @@ class ProfileView(QFrame):
         v.setContentsMargins(0, 0, 0, 0)
         v.setSpacing(8)
         self._stats_title = QLabel()
-        sf = QFont(); sf.setPointSize(13); sf.setBold(True)
+        sf = QFont()
+        sf.setPointSize(13)
+        sf.setBold(True)
         self._stats_title.setFont(sf)
         self._stats_title.setObjectName("ProfileSectionTitle")
         v.addWidget(self._stats_title)
@@ -309,7 +314,9 @@ class ProfileView(QFrame):
         v.setSpacing(8)
 
         self._activity_title = QLabel()
-        ff = QFont(); ff.setPointSize(13); ff.setBold(True)
+        ff = QFont()
+        ff.setPointSize(13)
+        ff.setBold(True)
         self._activity_title.setFont(ff)
         self._activity_title.setObjectName("ProfileSectionTitle")
         v.addWidget(self._activity_title)

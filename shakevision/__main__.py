@@ -26,8 +26,13 @@ import traceback
 # para que el usuario vea POR QUÉ se cuelga, en vez de "splash → nada".
 faulthandler.enable()
 
-from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QApplication
+# NOTA: los siguientes imports ocurren intencionalmente DESPUÉS de
+# faulthandler.enable() y sys.excepthook = _excepthook para garantizar
+# que cualquier crash al importar Qt o nuestras propias módulos
+# todavía produce un stack trace legible en stderr / log. ruff E402
+# se silencia con noqa.
+from PySide6.QtCore import QTimer  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
 
 
 # Logger module-level (se usa en _after_splash / _show_window_*).
@@ -50,22 +55,22 @@ def _excepthook(exc_type, exc_value, exc_tb):
 
 sys.excepthook = _excepthook
 
-from shakevision import APP_NAME, __version__
-from shakevision.config import DEFAULT_APP_CONFIG
-from shakevision.services.usage_tracker import UsageTracker
-from shakevision.ui.localizame_view import (
+from shakevision import APP_NAME, __version__  # noqa: E402
+from shakevision.config import DEFAULT_APP_CONFIG  # noqa: E402
+from shakevision.services.usage_tracker import UsageTracker  # noqa: E402
+from shakevision.ui.localizame_view import (  # noqa: E402
     LocalizameScreen,
     has_been_completed as localizame_completed,
     mark_completed as mark_localizame_completed,
 )
-from shakevision.ui.main_window import MainWindow
-from shakevision.ui.onboarding_wizard import (
+from shakevision.ui.main_window import MainWindow  # noqa: E402
+from shakevision.ui.onboarding_wizard import (  # noqa: E402
     OnboardingWizard,
     has_been_completed as onboarding_completed,
 )
-from shakevision.ui.splash import SplashScreen
-from shakevision.ui.theme_manager import ThemeManager
-from shakevision.utils.logging import setup_logging
+from shakevision.ui.splash import SplashScreen  # noqa: E402
+from shakevision.ui.theme_manager import ThemeManager  # noqa: E402
+from shakevision.utils.logging import setup_logging  # noqa: E402
 
 
 def main() -> int:

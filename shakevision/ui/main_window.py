@@ -1461,7 +1461,9 @@ class MainWindow(QMainWindow):
             self._tabs.setTabIcon(TAB_DATA,
                                   get_icon("chart", theme=theme, size=64))
         except Exception as exc:  # noqa: BLE001
-            logger.debug("Tab icon refresh skip (%s)", exc)
+            import logging
+            logging.getLogger(__name__).debug(
+                "Tab icon refresh skip (%s)", exc)
 
     def _open_profile_dialog(self) -> None:
         """Abre el ProfileDialog modal (v0.5.3).

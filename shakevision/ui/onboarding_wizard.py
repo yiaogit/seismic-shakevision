@@ -35,7 +35,7 @@ import logging
 from typing import Optional
 
 from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtGui import QFont, QKeyEvent, QPixmap
+from PySide6.QtGui import QFont, QKeyEvent
 from PySide6.QtWidgets import (
     QButtonGroup,
     QComboBox,
