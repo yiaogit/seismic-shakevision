@@ -87,19 +87,15 @@ jobs:
           retention-days: 7
 
   # ============================================================
-  # MACOS — corre en macos-14 (Apple Silicon) por defecto
+  # MACOS — solo Apple Silicon (arm64)
+  # ------------------------------------------------------------
+  # No empaquetamos Intel x64 (M-series llevan en el mercado desde
+  # 2020 y los runners de Intel se están retirando). Los usuarios
+  # con Mac Intel pueden ejecutar desde código fuente.
   # ============================================================
   build-macos:
-    name: Build · macOS (${{ matrix.arch }})
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: macos-13     # Intel x64
-            arch: x64
-          - runner: macos-14     # Apple Silicon arm64
-            arch: arm64
+    name: Build · macOS (arm64)
+    runs-on: macos-14   # Apple Silicon
     steps:
       - uses: actions/checkout@v4
 
@@ -126,7 +122,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: macos-bundle-${{ matrix.arch }}
+          name: macos-bundle-arm64
           path: |
             dist/ShakeVision-*-macos-*.dmg
             dist/ShakeVision-*-checksums.txt

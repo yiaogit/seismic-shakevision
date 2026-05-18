@@ -32,17 +32,21 @@ python packaging\build.py
 
 Salida → `dist\ShakeVision-0.1.1-windows-x64.zip` (~250 MB).
 
-### macOS · genera un `.dmg`
+### macOS · genera un `.dmg` (arm64 / Apple Silicon)
 
 ```bash
 # Opcional: brew install create-dmg   (si no, se usa hdiutil)
 python packaging/build.py
 ```
 
-Salida → `dist/ShakeVision-0.1.1-macos-{x64|arm64}.dmg`.
-El bundle interno es un `.app` notarizable; sin firma sale como
-"app de desarrollador no identificado" hasta que el usuario haga
-right-click → Abrir la primera vez.
+Salida → `dist/ShakeVision-0.1.1-macos-arm64.dmg`.
+
+> **Solo se publican binarios para Apple Silicon (M1–M5).**
+> Los usuarios con Mac Intel pueden ejecutar el proyecto desde
+> código fuente (ver guía en el README principal). El bundle
+> interno es un `.app` notarizable; sin firma sale como "app de
+> desarrollador no identificado" hasta que el usuario haga
+> right-click → Abrir la primera vez.
 
 ### Linux · genera un `.AppImage`
 
@@ -77,11 +81,11 @@ git push origin v0.1.1
 ```
 
 GitHub Actions lanza tres jobs en paralelo
-(`windows-latest`, `macos-13` Intel + `macos-14` Apple Silicon,
-`ubuntu-22.04`), cada uno ejecuta `python packaging/build.py`, sube
-sus artefactos y un cuarto job (`publish`) los reúne en una Release
-nueva con el cuerpo extraído de `CHANGELOG.md` y una tabla de
-SHA-256 checksums.
+(`windows-latest`, `macos-14` Apple Silicon, `ubuntu-22.04`),
+cada uno ejecuta `python packaging/build.py`, sube sus artefactos
+y un cuarto job (`publish`) los reúne en una Release nueva con
+el cuerpo extraído de `CHANGELOG.md` y una tabla de SHA-256
+checksums.
 
 ### Pre-releases
 

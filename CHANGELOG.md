@@ -11,9 +11,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 📦 **Binary installers release.**
 
 ### Added
-- **Pre-built binaries for Windows, macOS (Intel + Apple Silicon) and Linux.**
+- **Pre-built binaries for Windows, macOS (Apple Silicon) and Linux.**
   - Windows: `.zip` (portable, descomprime y ejecuta `ShakeVision.exe`)
-  - macOS: `.dmg` con `.app` notarizable (arrastra a /Applications)
+  - macOS arm64: `.dmg` con `.app` notarizable (arrastra a /Applications).
+    Intel Mac no se distribuye en binario — los usuarios M1+ ya son
+    mayoría desde 2020; los de Intel pueden ejecutar desde fuente.
   - Linux: `.AppImage` autoejecutable (`chmod +x` y doble-click)
 - Pipeline de empaquetado reproducible (`packaging/build.py` + `shakevision.spec`)
   basado en PyInstaller **onedir** (rápido al arrancar, AV-friendly).
