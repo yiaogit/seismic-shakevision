@@ -85,7 +85,10 @@ def test_clock_reset() -> None:
     c.tick(now=5.0)
     c.reset()
     assert c.cursor_s == 0.0
-    assert c.last_real_t == 0.0
+    # ``reset()`` deja last_real_t como None (sentinel "no inicializado")
+    # para que el siguiente tick() arranque de cero sin confundir el
+    # instante ``now=0.0`` con "primera llamada".
+    assert c.last_real_t is None
 
 
 # ============================================================
