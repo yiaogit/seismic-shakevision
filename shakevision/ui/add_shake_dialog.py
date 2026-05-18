@@ -25,7 +25,7 @@ from __future__ import annotations
 import socket
 from typing import Optional
 
-from PySide6.QtCore import QObject, QThread, Qt, Signal, Slot
+from PySide6.QtCore import QObject, QThread, Signal, Slot
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
     QDialog,

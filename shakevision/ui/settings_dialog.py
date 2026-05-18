@@ -41,7 +41,7 @@ from PySide6.QtWidgets import (
 
 from shakevision.i18n import LocaleService, t
 from shakevision.i18n.service import LANGUAGE_LABELS, SUPPORTED_LANGUAGES
-from shakevision.services.shake_presets import LanShakePreset, ShakePresetStore
+from shakevision.services.shake_presets import ShakePresetStore
 from shakevision.services.timezone_service import TimezoneService
 
 

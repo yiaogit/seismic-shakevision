@@ -7,7 +7,6 @@ de ReplaySource con un mock de ``obspy.Stream`` construido en memoria.
 
 from __future__ import annotations
 
-import time as _time
 from unittest.mock import MagicMock
 
 import numpy as np

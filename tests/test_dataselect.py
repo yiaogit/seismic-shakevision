@@ -12,7 +12,6 @@ Mockean ``urllib.request.urlopen`` para validar:
 
 from __future__ import annotations
 
-import io
 import urllib.error
 from datetime import datetime, timedelta, timezone
 from pathlib import Path

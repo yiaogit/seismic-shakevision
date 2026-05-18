@@ -21,7 +21,6 @@ LoadingOverlay (mismos widgets que usa el Live tab).
 from __future__ import annotations
 
 import logging
-import time as _time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Optional

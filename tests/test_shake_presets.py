@@ -23,7 +23,6 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QCoreApplication, QSettings  # noqa: E402
 
 from shakevision.services.shake_presets import (  # noqa: E402
-    DEFAULT_PORT,
     LanShakePreset,
     ShakePresetStore,
     _reset_for_tests,
