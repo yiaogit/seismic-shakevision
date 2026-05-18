@@ -52,8 +52,14 @@ coverage.xml
 # Empaquetado y binarios
 # ============================================================
 *.spec
+# Excepción: el spec de PyInstaller del proyecto sí se versiona
+!packaging/shakevision.spec
 *.exe
 *.app
+*.dmg
+*.AppImage
+# Carpetas de trabajo de PyInstaller / build.py
+packaging/__pycache__/
 
 # ============================================================
 # Editores e IDE

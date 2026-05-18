@@ -6,6 +6,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ---
 
+## [0.1.1] — 2025-05-18
+
+📦 **Binary installers release.**
+
+### Added
+- **Pre-built binaries for Windows, macOS (Intel + Apple Silicon) and Linux.**
+  - Windows: `.zip` (portable, descomprime y ejecuta `ShakeVision.exe`)
+  - macOS: `.dmg` con `.app` notarizable (arrastra a /Applications)
+  - Linux: `.AppImage` autoejecutable (`chmod +x` y doble-click)
+- Pipeline de empaquetado reproducible (`packaging/build.py` + `shakevision.spec`)
+  basado en PyInstaller **onedir** (rápido al arrancar, AV-friendly).
+- Workflow `release.yml` que se dispara con cualquier tag `vX.Y.Z`,
+  construye los tres binarios en paralelo y publica la GitHub Release
+  con notas extraídas automáticamente de este CHANGELOG y tabla de
+  SHA-256 checksums.
+
+### Fixed
+- **Windows**: `tzdata` añadido como dependencia condicional
+  (`sys_platform == 'win32'`) — sin él `zoneinfo` rechazaba incluso
+  `ZoneInfo("UTC")` por falta de base IANA en el SO.
+- **timezone_service**: tercer nivel de fallback a `datetime.timezone.utc`
+  para que `format_local` / `to_iso_local` nunca lancen excepción
+  aunque la base IANA esté rota o desinstalada.
+
+### CI / tests
+- Alineados 14 tests obsoletos con el comportamiento actual del código
+  (i18n por defecto en EN, swap del motor 3D a ECharts-GL, redesign
+  del dashboard, sosfiltfilt edge ringing, etc.).
+- Ruff sin errores en toda la base.
+
+---
+
 ## [0.1.0] — 2025-05-15
 
 🎉 **First public release.**
@@ -87,6 +119,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## Releases
 
-- **0.1.0** — 2025-05-15 — First public release (this entry)
+- **0.1.1** — 2025-05-18 — Binary installers (Win / mac / Linux)
+- **0.1.0** — 2025-05-15 — First public release
 
-See [GitHub Releases](https://github.com/yiaogit/seismic-shakevision/releases) for downloadable artifacts (v0.1.1 onwards).
+See [GitHub Releases](https://github.com/yiaogit/seismic-shakevision/releases) for downloadable artifacts.
