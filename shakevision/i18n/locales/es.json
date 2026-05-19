@@ -1,7 +1,6 @@
 {
   "_meta.language_name": "Español",
   "_meta.language_code": "es",
-
   "settings.title": "Preferencias",
   "settings.section.locale": "Región y hora",
   "settings.section.language": "Idioma",
@@ -27,13 +26,12 @@
   "settings.status.applied": "Preferencias aplicadas.",
   "settings.status.timezone_changed": "Zona horaria cambiada a {tz}.",
   "settings.status.language_changed": "Idioma cambiado a {lang}.",
-
   "header.action.pro": "Banco de trabajo",
-  "header.action.pro_tooltip": "Abrir banco de trabajo Pro (oscilograma, espectrograma, helicorder, hodograma…)",
+  "header.action.pro_tooltip": "Abrir el banco de trabajo (oscilograma, espectrograma, helicorder, hodograma…)",
   "header.action.settings_tooltip": "Preferencias",
-  "header.theme.tooltip_auto":  "Tema: Automático (según la hora local). Clic para cambiar a Claro.",
+  "header.theme.tooltip_auto": "Tema: Automático (según la hora local). Clic para cambiar a Claro.",
   "header.theme.tooltip_light": "Tema: Claro. Clic para cambiar a Oscuro.",
-  "header.theme.tooltip_dark":  "Tema: Oscuro. Clic para volver a Automático.",
+  "header.theme.tooltip_dark": "Tema: Oscuro. Clic para volver a Automático.",
   "header.mode.standard": "STD",
   "header.mode.professional": "PRO",
   "header.mode.tooltip_standard": "Modo estándar. El globo y la paleta siguen el tema actual (claro/oscuro/auto).",
@@ -42,16 +40,14 @@
   "header.status.connecting": "Conectando…",
   "header.status.connected": "Conectado",
   "header.status.error": "Error",
-
   "menu.file": "&Archivo",
   "menu.file.export_html": "&Exportar reporte HTML…",
   "menu.file.export_pdf": "Exportar reporte &PDF…",
   "menu.file.exit": "&Salir",
   "menu.view": "&Ver",
-  "menu.view.show_pro": "Mostrar &Pro",
+  "menu.view.show_pro": "Mostrar &Banco",
   "menu.help": "Ay&uda",
   "menu.help.about": "&Acerca de",
-
   "controls.section.station": "Estación",
   "controls.section.filter": "Filtro pasa banda",
   "controls.section.trigger": "Detector STA/LTA",
@@ -70,13 +66,11 @@
   "controls.sound.speed": "Velocidad",
   "controls.sound.audio_duration_seconds": "≈ {value:.1f} s de audio",
   "controls.sound.audio_duration_ms": "≈ {value:.0f} ms de audio",
-
   "pro.window_title": "SeismicGuard · Banco de trabajo",
   "pro.subtab.live": "📡 En vivo",
   "pro.subtab.helicorder": "📜 Diario 24h",
   "pro.subtab.particle": "🌀 Hodograma",
   "pro.subtab.replay": "⏯ Replay",
-
   "replay.field.network": "Red",
   "replay.field.station": "Estación",
   "replay.field.location": "Loc",
@@ -95,7 +89,6 @@
   "replay.error.no_traces": "IRIS devolvió un stream vacío.",
   "replay.error.network": "No se pudo contactar IRIS dataselect: {detail}",
   "replay.error.unexpected": "Error inesperado: {detail}",
-
   "controls.station.add_lan_shake": "➕ Añadir Shake LAN…",
   "dialog.add_shake.title": "Añadir Raspberry Shake LAN",
   "dialog.add_shake.label": "Etiqueta",
@@ -108,17 +101,15 @@
   "dialog.add_shake.tcp_timeout": "✗ Timeout TCP (5 s) a {host}:{port}. ¿Firewall o IP incorrecta?",
   "dialog.add_shake.tcp_unreachable": "✗ {host}:{port} inalcanzable: {detail}",
   "dialog.add_shake.dns_fail": "✗ DNS falló para {host}: {detail}",
-
   "settings.tab.general": "General",
   "settings.tab.my_shakes": "Mis Shakes",
-  "settings.my_shakes.help": "Administra tus propios Raspberry Shake de la red local. Cada entrada aparece en el desplegable de Estación del modo Pro.",
+  "settings.my_shakes.help": "Administra tus propios Raspberry Shake de la red local. Cada entrada aparece en el desplegable de Estación del banco de trabajo.",
   "settings.my_shakes.empty": "Aún no tienes Shakes LAN. Pulsa «Añadir…» para registrar uno.",
   "settings.my_shakes.add": "Añadir…",
   "settings.my_shakes.rename": "Renombrar",
   "settings.my_shakes.delete": "Borrar",
   "settings.my_shakes.rename_prompt": "Nueva etiqueta:",
   "settings.my_shakes.delete_confirm": "¿Borrar «{label}» ({host})? Esta acción no se puede deshacer.",
-
   "settings.tab.reset": "Restablecer",
   "settings.reset.heading": "Limpiar caché y restablecer SeismicGuard",
   "settings.reset.help": "Borra todas tus preferencias, favoritos, Shakes LAN, estadísticas de uso y datos cacheados localmente. La app se cerrará y la próxima vez que la abras verás el flujo de bienvenida como si la acabaras de instalar. Las grabaciones sísmicas en disco no se tocan.",
@@ -128,7 +119,6 @@
   "settings.reset.ok": "✓ Caché borrada. Cerrando la app…",
   "settings.reset.partial": "Caché borrada con algunas advertencias: {errors}. Cerrando la app…",
   "settings.reset.error": "✗ Error al limpiar caché: {error}",
-
   "replay.field.duration_preset": "Presets rápidos:",
   "replay.tooltip.network": "Código de red FDSN. IU=Red Global, US=USNSN, AM=Raspberry Shake.",
   "replay.tooltip.station": "Código de estación tal como lo publica la red (ej. ANMO, MAJO, R0E05).",
@@ -141,14 +131,12 @@
   "replay.status.resumed": "▶ Reanudado",
   "replay.status.speed_changed": "⚡ Velocidad ×{speed:.1f}",
   "replay.status.completed": "✓ Reproducción completada.",
-
   "controls.sound.stop_playing": "⏹ Detener reproducción",
   "status.playback_finished": "Clip de audio finalizado.",
   "audio.error.no_samples": "No hay audio que reproducir.",
   "audio.error.no_device": "No se detectó ningún dispositivo de salida de audio.",
   "audio.error.format_unsupported": "El dispositivo de audio no soporta este formato.",
   "audio.error.buffer_open": "No se pudo abrir el búfer interno de audio.",
-
   "waveform.station_label": "Estación: {label}",
   "waveform.axis_time": "Tiempo (s)",
   "spectrogram.title": "Espectrograma (EHZ)",
@@ -160,16 +148,13 @@
   "particle.title": "Movimiento de partícula · plano N-E · ventana {seconds:.1f} s",
   "particle.axis_east": "Este (EHE)",
   "particle.axis_north": "Norte (EHN)",
-
   "globe.tab_title": "Globo",
   "globe.loading_title": "Inicializando globo 3D",
   "globe.loading_subtitle": "Cargando recursos y conectando con USGS…",
   "globe.error_title": "No se pudieron cargar los datos",
-
   "localizame.heading": "Localizándote",
   "localizame.detected_prefix": "Zona horaria: ",
   "localizame.detected_unknown": "Desconocida — usando UTC",
-
   "onboarding.counter": "Paso {current}/{total}",
   "onboarding.btn.back": "Atrás",
   "onboarding.btn.skip": "Saltar",
@@ -198,7 +183,6 @@
   "onboarding.layer.professional": "Profesional (holográfico)",
   "onboarding.done.heading": "Todo listo",
   "onboarding.done.body": "SeismicGuard está listo. Pulsa Empezar para entrar a la app. Puedes volver a abrir esta guía desde Ayuda → Ejecutar onboarding de nuevo.",
-
   "github.login.intro_heading": "Inicia sesión con GitHub",
   "github.login.intro_body": "Vincula tu cuenta de GitHub para personalizar tu perfil en SeismicGuard con tu nombre de usuario y avatar. Solo pedimos acceso de lectura a tu perfil público — nunca a tus repositorios u organizaciones.",
   "github.login.wait_heading": "Autoriza SeismicGuard",
@@ -217,7 +201,6 @@
   "github.login.error_expired": "El código expiró antes de autorizar. Inténtalo de nuevo.",
   "github.login.error_cancelled": "Inicio de sesión cancelado.",
   "github.login.error_unknown": "Error inesperado: {error}",
-
   "header.action.profile_tooltip": "Abrir tu perfil",
   "profile.tab_title": "Perfil",
   "profile.dialog_title": "Perfil",
@@ -251,12 +234,10 @@
   "activity.location_detected": "Detectaste tu ubicación: {place}",
   "activity.github_login": "Iniciaste sesión en GitHub",
   "activity.github_logout": "Cerraste sesión de GitHub",
-
   "dashboard.tab_title": "Datos",
   "dashboard.loading_title": "Inicializando análisis de datos",
   "dashboard.loading_subtitle": "Procesando catálogo de sismos USGS…",
   "dashboard.error_title": "No se pudieron cargar los datos",
-
   "intensity.title": "Intensidad sentida",
   "intensity.level.1": "Imperceptible",
   "intensity.level.2": "Muy débil",
@@ -286,7 +267,6 @@
   "intensity.metric_empty": "PGV — cm/s   ·   MMI —",
   "intensity.label.pgv": "Velocidad pico",
   "intensity.label.mmi": "MMI",
-
   "status.ready": "Listo. Selecciona una estación y pulsa «Conectar».",
   "status.station_selected": "Estación seleccionada: {station}",
   "status.filter_enabled": "Filtro {low:.2f}–{high:.2f} Hz (orden {order})",
@@ -329,21 +309,18 @@
   "status.pager_region": "PAGER: región = {region}",
   "status.retrying_usgs": "Reintentando descarga de USGS…",
   "status.station_not_found": "Estación {network}.{code} no encontrada en el catálogo (aún cargando). Inténtalo en unos segundos.",
-  "status.station_added": "✅ {network}.{code} añadida a Pro ({n}/{cap}). Abre la ventana Pro y pulsa «Conectar» para iniciar.",
+  "status.station_added": "✅ {network}.{code} añadida al banco ({n}/{cap}). Abre el banco de trabajo y pulsa «Conectar» para iniciar.",
   "status.station_already_there": "{network}.{code} ya estaba en la lista; seleccionada.",
-
   "period.last_hour": "última hora",
   "period.last_6h": "últimas 6 horas",
   "period.last_day": "último día",
   "period.last_week": "última semana",
   "period.last_month": "último mes",
   "region.everywhere": "todo el mundo",
-
   "dialog.shake.title": "Raspberry Shake — solo información",
   "dialog.shake.body": "<b>{network}.{code}</b><br><br><b>{site}</b><br>Latitud: {lat:.3f}°<br>Longitud: {lon:.3f}°<br>Elevación: {elev:.0f} m<br><br><i>Las estaciones Raspberry Shake remotas no tienen un servidor SeedLink público; solo se puede conectar a tu propio dispositivo en la red local (rs.local). El soporte de conexión LAN se añadirá en una iteración posterior.</i>",
   "dialog.usgs.title": "Conectar a {network}.{code}",
-  "dialog.usgs.body": "<b>{network}.{code}</b><br><b>{site}</b><br><br>Latitud: {lat:.3f}°<br>Longitud: {lon:.3f}°<br>Elevación: {elev:.0f} m<br><br>Servidor SeedLink: <code>{host}:{port}</code><br>Canales: <code>{channels}</code><br>Ranura: {slot}/{cap}<br><br>¿Añadir esta estación a la lista del banco de trabajo Pro?",
-
+  "dialog.usgs.body": "<b>{network}.{code}</b><br><b>{site}</b><br><br>Latitud: {lat:.3f}°<br>Longitud: {lon:.3f}°<br>Elevación: {elev:.0f} m<br><br>Servidor SeedLink: <code>{host}:{port}</code><br>Canales: <code>{channels}</code><br>Ranura: {slot}/{cap}<br><br>¿Añadir esta estación a la lista del banco de trabajo?",
   "web.dashboard.kpi.count": "Sismos / {period}",
   "web.dashboard.kpi.max_mag": "Magnitud máx.",
   "web.dashboard.kpi.latest": "Más reciente",
@@ -380,7 +357,6 @@
   "web.dashboard.tooltip.events_max_mag": "{count} eventos · M máx {max:.1f}",
   "web.dashboard.tooltip.mean_mag": "M media {mean:.2f}",
   "web.dashboard.tooltip.depth_km": "Profundidad {depth:.1f} km",
-
   "web.globe.mag_bucket.micro": "< 3.0  Micro",
   "web.globe.mag_bucket.light": "3 – 4.5  Ligero",
   "web.globe.mag_bucket.moderate": "4.5 – 6  Moderado",
@@ -396,7 +372,6 @@
   "web.globe.tooltip.alt": "Alt",
   "web.globe.tooltip.depth": "Profundidad: {km:.1f} km",
   "web.globe.tooltip.pager": "PAGER:",
-
   "web.globe.legend.title": "Magnitud",
   "web.globe.legend.devices_title": "Estaciones",
   "web.globe.legend.both_title": "Magnitud · Estaciones",
@@ -422,7 +397,6 @@
   "web.globe.loading": "Cargando…",
   "web.globe.error.title": "No se pudo cargar el globo",
   "web.globe.error.deps_missing": "ECharts no se descargó.<br>Ejecuta: <span class='mono'>bash scripts/install_libs.sh</span>",
-
   "report.kpi.count_24h": "Sismos / 24 h",
   "report.kpi.max_mag": "Magnitud máx.",
   "report.kpi.latest": "Más reciente",
@@ -454,11 +428,19 @@
   "report.html.section.timeline": "Línea temporal últimas 24 h",
   "report.html.section.events": "Eventos significativos (24 h, M ≥ 3.0)",
   "report.html.footer.sources": "Fuentes: <strong>USGS Earthquake Hazards</strong> · <strong>Raspberry Shake / FDSN</strong>",
-
   "common.ok": "Aceptar",
   "common.cancel": "Cancelar",
   "common.yes": "Sí",
   "common.no": "No",
   "common.close": "Cerrar",
-  "common.error": "Error"
+  "common.error": "Error",
+  "settings.reset.cache_size": "La caché en disco ocupa actualmente {size} MB.",
+  "settings.reset.item.preferences": "Todas las preferencias (idioma, zona horaria, tema, modo de capa)",
+  "settings.reset.item.favorites": "Sismos y estaciones favoritas",
+  "settings.reset.item.lan_shakes": "Presets de Raspberry Shake LAN",
+  "settings.reset.item.usage": "Estadísticas de uso (lanzamientos, tiempo, contadores)",
+  "settings.reset.item.activity": "Registro de actividad reciente",
+  "settings.reset.item.cache": "Caché en disco (respuestas USGS/IRIS, reportes generados)",
+  "profile.github.counts": "📦 {repos} repos · 👥 {followers} seguidores · → siguiendo {following}",
+  "github.login.client_id_help": "¿No tienes client ID? <a href=\"https://github.com/settings/applications/new\">Registra una OAuth App gratis en GitHub</a> — tarda 30 s y solo pide un nombre."
 }

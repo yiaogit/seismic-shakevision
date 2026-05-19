@@ -6,6 +6,188 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ---
 
+## [0.7.5] — 2026-05-19
+
+🔌 **One-click GitHub sign-in + Workbench rename polish + Onboarding /
+Settings dropdown fixes.** Follow-up patch release that wraps up the
+loose ends from v0.7.4: the residual "Pro" copy after the Workbench
+rename, the clipped Localizame screen on Windows, missing Reset-tab
+labels, and the timezone dropdown losing its arrow indicator under
+the heavy QSS override. Plus, the GitHub Connect button is finally
+fully functional out of the box.
+
+### Fixed
+- **GitHub Connect button was a dead click** — pressing
+  `Connect with GitHub` from the Profile dialog could appear to do
+  nothing. Root cause: when `start_device_flow()` raised
+  `NotConfiguredError` or a network error, the dialog called
+  `setText` on `_wait_status`, which lives on the **WAITING** page —
+  but the user was still on the **INTRO** page, so the error was
+  written to a hidden label. Added a visible `_intro_status` error
+  label on the INTRO page and routed all start-time errors there.
+- **GitHub login required two clicks to reach the browser** —
+  previously the flow was *Connect → see code → click "Open GitHub"
+  → browser opens*. Now `QDesktopServices.openUrl(verification_uri)`
+  fires automatically right after `start_device_flow()` succeeds, so
+  the user lands on `github.com/login/device` in a single click. The
+  "Open GitHub" button on the WAITING page is kept as a fallback for
+  headless environments where the open fails.
+- **Timezone combo arrow vanished on Windows (Onboarding + Settings)**
+  — Qt's `QComboBox` heavy QSS override caused the `::down-arrow`
+  indicator image to fail to resolve on Windows, leaving the combo
+  with zero visual affordance to open its popup. Replaced the image
+  with a border-triangle trick (`border-top: 6px solid; border-left/
+  right: 5px solid transparent`) in both `onboarding_wizard.py`
+  (`#WizardCombo`) and global `theme.py` (all `QComboBox`). No
+  external asset needed, works on all three platforms.
+- **Settings → Reset tab labels were blank** — the
+  `_retranslate_shakes_tab` cascade (which also paints the Reset
+  widgets after the v0.7.4 redesign) was invoked once at the end of
+  `_build_my_shakes_tab`, BEFORE `_build_reset_tab` ran. So
+  `hasattr(self, "_reset_heading")` was always False at that point
+  and the Reset texts were never applied. Added a second explicit
+  `_retranslate_shakes_tab()` call after `_build_reset_tab()` so the
+  Reset widgets exist when text is set.
+- **Localizame screen clipped on Windows** — at SCREEN 560 × 400 the
+  layout had the heading sitting at y = 384–404 right at the bottom
+  edge, and the detected-zone line at y = 410–436 was completely cut
+  off. Bumped canvas to 600 × 480 and reduced halo radius 180 → 150,
+  giving 26 px of bottom margin. macOS/Linux were less affected only
+  because of subtle DPI scaling differences.
+- **Residual "Pro" copy after the Workbench rename** — 5 i18n keys
+  still surfaced the old "Pro" branding to users
+  (`menu.view.show_pro` → "Show Pro", `header.action.pro_tooltip`,
+  `settings.my_shakes.help`, `status.station_added` toast,
+  `dialog.usgs.body` prompt). Rewrote all five across all four
+  locales — now reads "Workbench" / "工作台" / "Banco" / "atelier".
+  Grep on the value side of every locale now returns zero standalone
+  "Pro" hits.
+
+### Added
+- **`DEFAULT_CLIENT_ID` baked into `github_auth.py`** — registered
+  the public OAuth App "SeismicGuard-shakevision"
+  (`Ov23liBIJOgeeGVfFW9B`) with Device Flow enabled and shipped its
+  Client ID in code. End users no longer need to register their own
+  OAuth App or set `$SEISMICGUARD_GITHUB_CLIENT_ID` — the Connect
+  button works out of the box. Priority chain remains
+  `env > QSettings > DEFAULT_CLIENT_ID > ""` so power users can
+  still override.
+- **`QLabel#DialogError` QSS** — subtle red inline-error styling
+  (`color: alert; font-size: label`) for any future dialog that
+  wants inline feedback instead of opening another modal.
+- **GitHub login dialog: "Don't have a client ID?" hint** — links
+  out to `https://github.com/settings/applications/new` so power
+  users who *do* want their own OAuth App have a one-click path to
+  register one. Localised in all four languages.
+- **Client ID field always visible** — previously the field was
+  hidden once a `client_id` was configured, leaving users with no
+  way to update or replace a stale one. Now it's always shown,
+  pre-populated with the current value.
+
+### Changed
+- Version bumped 0.7.4 → 0.7.5 in `pyproject.toml`,
+  `shakevision/__init__.py`, and `packaging/shakevision.spec`.
+- `packaging/windows/version_info.txt` modernised — was still at
+  `0.3.0` from the original Windows-build commit and still branded
+  "ShakeVision Contributors / ShakeVision OpenData Monitor". Now
+  reads `0.7.5.0` with the SeismicGuard branding, so Windows' file
+  properties dialog matches the actual product.
+- i18n: 1 new key × 4 locales (`github.login.client_id_help`) —
+  total **444 keys × 4 locales**, parity preserved.
+
+---
+
+## [0.7.4] — 2026-05-19
+
+🪟 **Windows polish + Onboarding UX + Profile extensions** — batch
+fix for 7 user-reported issues on the Windows .exe build.
+
+### Fixed
+- **Onboarding timezone combo bug (#2)** — entering the timezone page
+  programmatically opened the `QComboBox` popup, but in macOS it left
+  the combo in a state where subsequent clicks would NOT reopen the
+  popup. Removed the auto-popup; the page enters with focus on the
+  combo and the placeholder shows the detected zone, which is enough
+  affordance.
+- **Onboarding light theme unreadable (#3)** — the wizard's QSS was
+  hardcoded to a dark navy palette. Switching to light theme left
+  text invisible. QSS now reads from `shakevision.ui.theme.COLOR_*`
+  and subscribes to `ThemeManager.changed_signal` for live updates.
+- **Onboarding theme step had non-functional "Auto" option (#4)** —
+  the `auto` radio was a no-op in practice (`ThemeManager` only honors
+  light/dark). Removed; users now choose light or dark only.
+- **Windows dialog generic icons (#6)** — `Settings`, `Profile`,
+  `Workbench` and other secondary windows showed Windows' default
+  Python icon next to them in the taskbar. Added a single
+  `app.setWindowIcon(QIcon(branding/app_icon.png))` after
+  QApplication construction — propagates to all top-level windows on
+  Windows. macOS/Linux were unaffected and remain so (no-op there).
+
+### Added
+- **Settings → Reset tab redesigned (#5)** — replaced the lone red
+  button with a warning card: ⚠ icon + heading + body + a 6-item grid
+  showing what will be cleared (Preferences, Favorites, LAN Shakes,
+  Usage stats, Activity log, Disk cache), and a footer showing the
+  current disk cache size in MB. The destructive button sits outside
+  the card for visual separation.
+- **Profile dialog now shows extended GitHub info (#7)** — after
+  login, the identity card surfaces bio + location/company + counts
+  (`📦 N repos · 👥 N followers · → N following`). All sourced from
+  the public `/user` API endpoint with `read:user` scope (no
+  additional permissions). `GitHubAuthService.fetch_user_profile`
+  extended to return bio, company, blog, location, created_at,
+  public_repos, followers, following, public_gists.
+
+### Known issues (documented, not code-fixable)
+- **Windows timezone/region detection accuracy (#1)** — Windows groups
+  Madrid + Paris + Brussels + Copenhagen into one "Romance Standard
+  Time" registry entry; `tzlocal` maps it to the IANA canonical
+  `Europe/Paris`, so a Madrid user sees Paris. Similarly IP-based
+  geolocation routes through ISP POPs (a Valencia user is detected
+  as Madrid). Both are OS / network limitations, not bugs in our
+  code. The Settings dialog already lets the user override manually;
+  added clearer hint text encouraging verification.
+
+### Changed
+- Version bumped 0.7.3 → 0.7.4 in `pyproject.toml`,
+  `shakevision/__init__.py`, and `packaging/shakevision.spec`.
+- i18n: 8 new keys × 4 locales (settings.reset.cache_size, 6 reset
+  item labels, profile.github.counts) — total 443 keys × 4 locales.
+
+---
+
+## [0.7.3] — 2026-05-19
+
+🌍 **Hotfix: Windows globe textures + country borders missing.**
+
+### Fixed
+- **Windows .exe globe was unusable**: night mode rendered as a plain
+  blue sphere, day mode fell back to the night texture, professional
+  mode had no country borders and no labels. macOS dev runs were fine
+  because the developer had run `download_globe_assets.py` locally
+  long ago — that script's outputs (Blue Marble `earth-day.jpg`,
+  Natural Earth `world.json`) live in `shakevision/web/globe/lib/`
+  which is `.gitignore`d, so CI never had them.
+- `scripts/install_libs.sh` only downloaded ECharts, `earth-night.jpg`
+  and `earth-topology.png`. It missed:
+    * **`earth-day.jpg`** — NASA Blue Marble. Used as the day base
+      texture AND as the night-mode base (with `earth-night.jpg`
+      overlaid as an emission layer, NASA Worldview style).
+    * **`world.json`** — Natural Earth 1:110M GeoJSON. Drives country
+      borders + country labels in the holographic professional mode.
+- `install_libs.sh` now chains into
+  `scripts/download_globe_assets.py` after the JS libs, so CI grabs
+  all three texture/border assets from NASA/Natural Earth mirrors
+  with automatic fallback and size/header validation. If `python3`
+  isn't on PATH (very unlikely in CI), it falls back to the old
+  single-mirror `earth-night.jpg` download so the build doesn't break.
+
+### Changed
+- Version bumped 0.7.2 → 0.7.3 in `pyproject.toml`,
+  `shakevision/__init__.py`, and `packaging/shakevision.spec`.
+
+---
+
 ## [0.7.2] — 2026-05-18
 
 🪟 **Hotfix: Windows .exe crash on launch.**

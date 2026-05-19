@@ -252,9 +252,21 @@ class ProfileView(QFrame):
         self._handle_label.setObjectName("ProfileHandle")
         self._member_label = QLabel("")
         self._member_label.setObjectName("ProfileMember")
+        # v0.7.4: bio + ubicación + counts cuando hay sesión GitHub.
+        # Si no hay login, estos labels quedan vacíos y collapsean.
+        self._bio_label = QLabel("")
+        self._bio_label.setObjectName("ProfileBio")
+        self._bio_label.setWordWrap(True)
+        self._location_label = QLabel("")
+        self._location_label.setObjectName("ProfileLocation")
+        self._counts_label = QLabel("")
+        self._counts_label.setObjectName("ProfileCounts")
         info.addWidget(self._name_label)
         info.addWidget(self._handle_label)
         info.addWidget(self._member_label)
+        info.addWidget(self._bio_label)
+        info.addWidget(self._location_label)
+        info.addWidget(self._counts_label)
         h.addLayout(info, stretch=1)
 
         # Botón principal (Sign in / Logout según estado)
@@ -372,11 +384,35 @@ class ProfileView(QFrame):
             self._auth_button.setText(t("profile.btn.logout"))
             if avatar_url:
                 self._fetch_avatar(avatar_url)
+            # v0.7.4 — extended GitHub info
+            bio = (user.get("bio") or "").strip()
+            self._bio_label.setText(bio)
+            self._bio_label.setVisible(bool(bio))
+            location = (user.get("location") or "").strip()
+            company = (user.get("company") or "").strip()
+            loc_parts = [p for p in (location, company) if p]
+            self._location_label.setText(
+                "📍 " + " · ".join(loc_parts) if loc_parts else "")
+            self._location_label.setVisible(bool(loc_parts))
+            repos = int(user.get("public_repos") or 0)
+            followers = int(user.get("followers") or 0)
+            following = int(user.get("following") or 0)
+            self._counts_label.setText(
+                t("profile.github.counts",
+                  repos=repos, followers=followers, following=following))
+            self._counts_label.setVisible(True)
         else:
             self._name_label.setText(t("profile.guest_name"))
             self._handle_label.setText(t("profile.guest_handle"))
             self._auth_button.setText(t("profile.btn.sign_in"))
             self._render_placeholder_avatar()
+            # Collapsear los extras cuando no hay sesión
+            self._bio_label.setText("")
+            self._bio_label.setVisible(False)
+            self._location_label.setText("")
+            self._location_label.setVisible(False)
+            self._counts_label.setText("")
+            self._counts_label.setVisible(False)
 
         # Member since (independiente del login GitHub)
         stats = UsageTracker.stats()
@@ -591,9 +627,22 @@ class ProfileView(QFrame):
         QLabel#ProfileName,
         QLabel#ProfileHandle,
         QLabel#ProfileMember,
+        QLabel#ProfileBio,
+        QLabel#ProfileLocation,
+        QLabel#ProfileCounts,
         QLabel#ProfileStatValue,
         QLabel#ProfileStatLabel {{
             background: transparent;
+        }}
+        QLabel#ProfileBio {{
+            color: {_t.COLOR_TEXT_PRIMARY};
+            font-size: 12px;
+            padding: 4px 0 2px 0;
+        }}
+        QLabel#ProfileLocation,
+        QLabel#ProfileCounts {{
+            color: {_t.COLOR_TEXT_SECONDARY};
+            font-size: 11px;
         }}
         QLabel#ProfileStatValue,
         QLabel#ProfileSectionTitle,

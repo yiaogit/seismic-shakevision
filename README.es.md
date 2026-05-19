@@ -181,61 +181,420 @@ Arriba derecha 👤 Perfil → tarjeta de identidad + estadísticas + línea de 
 
 ## 🏗 Arquitectura
 
-### Flujo de datos
+### Visión general del sistema
 
+SeismicGuard es una **aplicación de escritorio monolítica** (sin servicio backend) compuesta por cuatro subsistemas claramente estratificados:
+**fuentes externas → capa I/O asíncrona (services + sources) → estado en memoria (processing/buffer) → renderizado UI (PySide6 + WebEngine)**.
+La comunicación entre hilos pasa por signals/slots de Qt; toda la persistencia va por `QSettings` (sin base de datos).
+
+```mermaid
+graph TB
+    subgraph external[" 🌐 Fuentes externas"]
+        USGS[USGS<br/>GeoJSON Feed]
+        FDSN[FDSN Web Services<br/>IRIS · ShakeNet]
+        SL[SeedLink TCP<br/>rtserve.iris.washington.edu:18000]
+        GH[GitHub API<br/>Device Flow OAuth]
+        IP[ip-api.com<br/>geolocalización]
+    end
+
+    subgraph services[" ⚙ services/ — I/O asíncrona"]
+        Worker[Worker QObject<br/>refresco 30 s]
+        Clients[usgs · iris · shakenet · dataselect]
+        Cache[cache.py<br/>caché archivo, TTL 5 min]
+        Auth[github_auth<br/>Device Flow]
+        TZ[timezone_service]
+        Loc[location_service]
+    end
+
+    subgraph sources[" 📡 sources/ — streams en tiempo real"]
+        Base[Base DataSource ABC]
+        Seedlink[SeedLinkSource<br/>QThread + ObsPy]
+        Replay[ReplaySource<br/>reproducción MiniSEED]
+        Mock[MockSource<br/>sintético 100 Hz]
+    end
+
+    subgraph proc[" 🔬 processing/ — DSP puro"]
+        Buffer[RingBuffer<br/>deque thread-safe]
+        Filter[Butterworth bandpass]
+        Detect[detector STA/LTA]
+        Spec[FFT ventana deslizante]
+        Rec[grabador eventos<br/>→ MiniSEED]
+        Son[Sonifier<br/>sísmico → audio]
+        Int[Intensity MMI]
+    end
+
+    subgraph ui[" 🪟 ui/ — PySide6"]
+        Main[MainWindow<br/>hub de señales]
+        Globe[GlobeView<br/>QWebEngineView]
+        Dash[DashboardView<br/>QWebEngineView]
+        Pro[ProWindow<br/>banco flotante]
+        Widgets[Waveform · Spectrogram<br/>Helicorder · ParticleMotion]
+    end
+
+    USGS --> Clients --> Worker
+    FDSN --> Clients
+    Worker --> Cache
+    Worker --> Globe
+    Worker --> Dash
+
+    SL --> Seedlink --> Buffer
+    Mock --> Buffer
+    Replay --> Buffer
+
+    Buffer --> Filter --> Detect --> Rec
+    Buffer --> Spec
+    Buffer --> Son
+    Buffer --> Widgets
+
+    GH --> Auth --> Main
+    IP --> Loc --> Main
+    Globe --> Main --> Pro
+
+    classDef ext fill:#1a3a52,stroke:#4a9eff,color:#fff
+    classDef svc fill:#2d4a2d,stroke:#7fbb7f,color:#fff
+    classDef src fill:#4a3d1a,stroke:#d4a043,color:#fff
+    classDef ds fill:#4a1a3a,stroke:#d44a9e,color:#fff
+    classDef uic fill:#3a1a4a,stroke:#9e4ad4,color:#fff
+    class USGS,FDSN,SL,GH,IP ext
+    class Worker,Clients,Cache,Auth,TZ,Loc svc
+    class Base,Seedlink,Replay,Mock src
+    class Buffer,Filter,Detect,Spec,Rec,Son,Int ds
+    class Main,Globe,Dash,Pro,Widgets uic
 ```
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│ USGS GeoJSON │ ──► │   Worker     │ ──► │  data_models │ ──► │   Globo      │
-│ IRIS FDSN    │     │ (async,      │     │ (Earthquake, │     │ Dashboard    │
-│ ShakeNet     │     │  un hilo)    │     │  Station…)   │     │ (HTML + JS)  │
-└──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
 
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│  SeedLink    │ ──► │  RingBuffer  │ ──► │  Processor   │ ──► │  Ventana Pro │
-│ rtserve.iris │     │ (thread-safe)│     │ Butterworth, │     │  Waveform +  │
-│  → ObsPy     │     │              │     │ STA/LTA, FFT │     │  Spec + Hel  │
-└──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
+### Secuencia end-to-end: del clic en el globo a la onda en vivo
+
+La ruta más común — **clic en una estación USGS del globo → añadir al banco → conectar SeedLink → ver onda en vivo**:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as 👤 Usuario
+    participant JS as Globe (JS)
+    participant Br as GlobeBridge<br/>(QWebChannel)
+    participant MW as MainWindow
+    participant PW as ProWindow
+    participant SL as SeedLinkSource<br/>(QThread)
+    participant RB as RingBuffer
+    participant W as WaveformWidget
+
+    U->>JS: clic en marcador USGS
+    JS->>Br: stationClicked(net, code, lat, lon)
+    Br->>MW: señal station_clicked
+    MW->>U: diálogo "¿Añadir al banco?"
+    U->>MW: ✓ confirmar
+    MW->>PW: add_station(StationPreset)
+    PW->>PW: FIFO enqueue (máx 8)
+    U->>PW: clic en Connect
+    PW->>SL: start(preset)
+    SL->>SL: lookup SEEDLINK_SERVERS[net]
+    SL-->>PW: estado: CONNECTING
+    SL->>SL: ObsPy TCP + SELECT
+    SL-->>PW: estado: STREAMING
+    loop cada paquete SeedLink
+        SL->>RB: append(samples)
+        RB-->>PW: snapshot_ready
+        PW->>W: update(snapshot)
+        W->>U: render 60 FPS
+    end
+    U->>PW: Disconnect
+    PW->>SL: stop()
+    SL-->>PW: estado: IDLE
 ```
 
-### Pila técnica
+### Diagrama de clases — processing/ y sources/
 
-| Capa             | Elección                                            | Razón                                              |
-|------------------|-----------------------------------------------------|----------------------------------------------------|
-| **UI**           | PySide6 ≥ 6.6                                       | LGPL, look nativo multiplataforma, QtWebEngine trae Chromium |
-| **Web**          | QWebEngineView                                      | Embeber ECharts sin importar un navegador de terceros        |
-| **Globo 3D**     | [ECharts-GL](https://github.com/ecomfe/echarts-gl)  | Una sola librería cubre 2D + 3D, bundle más ligero que Three.js |
-| **Charts 2D**    | [Apache ECharts](https://echarts.apache.org/) 5.4   | 7 charts comparten el mismo motor                            |
-| **DSP**          | NumPy + SciPy                                       | Estándar de la industria — filtros Butterworth + FFT         |
-| **Sismología**   | [ObsPy](https://www.obspy.org/) ≥ 1.4               | Cliente SeedLink + lectura/escritura MiniSEED                |
-| **Waveform**     | [pyqtgraph](https://www.pyqtgraph.org/) 0.13        | 60 FPS acelerado por GPU                                     |
+La capa DSP es **Python puro** (sin dependencia Qt), así que toda clase se testea por separado en pytest sin necesidad de QApplication.
+
+```mermaid
+classDiagram
+    class DataSource {
+        <<abstract>>
+        +sample_rate: float
+        +channels: list[str]
+        +start() void
+        +stop() void
+        +samples_ready Signal
+    }
+
+    class SeedLinkSource {
+        +preset: StationPreset
+        -_thread: QThread
+        -_client: EasySeedLinkClient
+        -_state: SourceState
+        +start(preset)
+        +stop()
+        +state_changed Signal
+    }
+
+    class MockSource {
+        +amplitude: float
+        +noise: float
+        -_timer: QTimer
+        +start()
+    }
+
+    class ReplaySource {
+        +mseed_path: Path
+        +speed: float
+        +position_s: float
+        +seek(t)
+    }
+
+    class RingBuffer {
+        +capacity_s: float
+        +sample_rate: float
+        -_data: deque[float]
+        -_lock: RLock
+        +append(samples)
+        +snapshot(seconds) ndarray
+        +clear()
+    }
+
+    class WaveformProcessor {
+        +bandpass: tuple[float, float]
+        +order: int = 4
+        +process(x) ndarray
+    }
+
+    class StaLtaDetector {
+        +sta_window_s: float
+        +lta_window_s: float
+        +trigger_ratio: float
+        +detrigger_ratio: float
+        +feed(x) Trigger?
+    }
+
+    class EventRecorder {
+        +out_dir: Path
+        +pre_event_s: float
+        +post_event_s: float
+        +save(trigger, samples) Path
+    }
+
+    class SpectrumComputer {
+        +nfft: int = 128
+        +window: str = "hann"
+        +compute(x) tuple
+    }
+
+    class Sonifier {
+        +seismic_sr: float
+        +audio_sr: int = 44100
+        +speed: float
+        +sonify(samples) bytes
+    }
+
+    DataSource <|-- SeedLinkSource
+    DataSource <|-- MockSource
+    DataSource <|-- ReplaySource
+    DataSource ..> RingBuffer : append samples
+    RingBuffer ..> WaveformProcessor : snapshot()
+    WaveformProcessor ..> StaLtaDetector : feed()
+    StaLtaDetector ..> EventRecorder : on trigger
+    RingBuffer ..> SpectrumComputer : snapshot()
+    RingBuffer ..> Sonifier : snapshot()
+```
+
+### Máquinas de estado clave
+
+#### Ciclo de vida de SeedLinkSource
+
+El SeedLink público no tiene "desconexión limpia" a nivel de protocolo, así que el objetivo central de esta máquina es **cancelable en cualquier fase**. Antes de v0.6 una fase *CONNECTING* atascada podía congelar la UI; tras esa corrección la máquina final es:
+
+```mermaid
+stateDiagram-v2
+    [*] --> IDLE
+    IDLE --> CONNECTING: start(preset)
+    CONNECTING --> SELECTING: handshake TCP OK
+    CONNECTING --> ERROR: timeout / DNS / refused
+    SELECTING --> STREAMING: SELECT N_S.C aceptado
+    SELECTING --> ERROR: servidor rechaza SELECT
+    STREAMING --> STREAMING: paquete → RingBuffer
+    STREAMING --> STOPPING: usuario Disconnect
+    CONNECTING --> STOPPING: usuario cancela
+    SELECTING --> STOPPING: usuario cancela
+    STOPPING --> IDLE: QThread joined
+    ERROR --> IDLE: usuario cierra
+    ERROR --> CONNECTING: usuario reintenta
+```
+
+#### AudioPlayer (sonificación)
+
+```mermaid
+stateDiagram-v2
+    [*] --> IDLE
+    IDLE --> PREPARING: usuario pulsa Listen
+    PREPARING --> PLAYING: QAudioSink.start()
+    PREPARING --> ERROR: dispositivo/formato falla
+    PLAYING --> PLAYING: chunk → altavoz
+    PLAYING --> STOPPING: usuario pulsa Stop
+    PLAYING --> COMPLETED: buffer agotado
+    STOPPING --> IDLE: QAudioSink.stop()
+    COMPLETED --> IDLE: reset automático
+    ERROR --> IDLE: cerrar error
+```
+
+---
+
+### Pila técnica y registros de decisiones (ADR)
+
+| Capa             | Elección                                            | Decisión clave / razón                                       |
+|------------------|-----------------------------------------------------|--------------------------------------------------------------|
+| **UI**           | PySide6 ≥ 6.6                                       | **LGPL** permite enlace estático sin contaminación GPL (PyQt6 es GPL); apto comercial |
+| **Web**          | QWebEngineView                                      | Chromium embebido sin tercer motor; el flujo OAuth reutiliza el mismo motor |
+| **Globo 3D**     | [ECharts-GL](https://github.com/ecomfe/echarts-gl)  | En v0.5 se cambió desde Globe.gl + Three.js: una librería cubre 2D + 3D, bundle ~600 KB vs ~3 MB |
+| **Charts 2D**    | [Apache ECharts](https://echarts.apache.org/) 5.4   | Los 7 charts del dashboard comparten una API, interacción/tooltip/tema unificados |
+| **DSP**          | NumPy + SciPy                                       | Butterworth estándar de la industria + FFT scipy.signal.spectrogram |
+| **Sismología**   | [ObsPy](https://www.obspy.org/) ≥ 1.4               | Cliente SeedLink + lectura/escritura MiniSEED; estándar académico |
+| **Waveform**     | [pyqtgraph](https://www.pyqtgraph.org/) 0.13        | Acelerado por GPU, 60 FPS estables                           |
 | **Audio**        | QtMultimedia QAudioSink                             | Multiplataforma, cero dependencias extra                     |
-| **Timezone**     | `zoneinfo` (+ `tzdata` pip en Windows)              | Stdlib; auto-detección de `/etc/localtime` en POSIX          |
-| **i18n**         | Dict JSON propio + helper `t()`                     | Python y JS comparten un solo diccionario, sin paso de build |
-| **Empaquetado**  | PyInstaller (onedir) + `create-dmg` + `appimagetool` | Consistente cross-platform; onedir arranca rápido            |
-| **CI / Release** | GitHub Actions                                      | Matriz de 3 plataformas + publicación automática al hacer tag |
+| **Timezone**     | `zoneinfo` + `tzdata` (solo Windows) + `tzlocal`    | El registro de Windows dice "China Standard Time", no IANA; `tzlocal` traduce a nombres canónicos |
+| **i18n**         | Diccionario JSON propio + helper `t()`              | Python y JS **comparten el mismo diccionario** — sin paso de build, cero deps en runtime |
+| **OAuth**        | GitHub Device Flow                                  | **Sin callback URL, sin client secret** — el único flujo OAuth seguro de hornear en binarios open-source |
+| **Empaquetado**  | PyInstaller (onedir) + `create-dmg` + `appimagetool` | onedir arranca rápido y es amigable con antivirus (vs onefile extrayéndose a temp y disparando SmartScreen) |
+| **CI / Release** | GitHub Actions                                      | Matriz 3 plataformas × Py 3.10–3.12; auto-build + publicación al hacer tag |
 
-### Estructura del proyecto
+**Decisiones arquitectónicas notables:**
+
+1. **Ejecutable único vs microservicios** — los usuarios de escritorio esperan "doble clic para ejecutar"; un artifact PyInstaller de ~250 MB es órdenes de magnitud más simple que pedirles configurar Python.
+2. **El SeedLink público de Raspberry Shake no existe** (descubierto en v0.5.1) — solo funcionan dispositivos LAN (`rs.local:18000`) o RTDC de pago. Todos los streams en vivo van por defecto a IRIS `rtserve.iris.washington.edu`.
+3. **Namespace QSettings conservado como `SeismicGuard` / `ShakeVision`** — renombrarlo dejaría huérfanos los datos persistidos de los usuarios actuales; el rebrand es solo cosmético.
+4. **Comentarios del código en español** — convención del proyecto desde los inicios; mantenido por consistencia estilística. Cadenas de cara al usuario siempre van por i18n.
+5. **`DEFAULT_CLIENT_ID` horneado en el binario** (v0.7.5) — los Client IDs de OAuth de GitHub son públicos por diseño y Device Flow no necesita secret; los usuarios reciben sign-in de un clic sin registrar su propia App.
+6. **El bundle id macOS sigue siendo `org.shakevision.app`** — cambiarlo haría que macOS tratara v0.7.5 como app nueva, perdiendo posición del Dock y permisos otorgados; mantenerlo es más amigable.
+
+---
+
+### Características de rendimiento
+
+| Componente                   | Throughput / latencia                 | Notas                                              |
+|------------------------------|---------------------------------------|----------------------------------------------------|
+| `RingBuffer.append`          | O(1), contención de lock < 0.1 ms     | 100 Hz de entrada es trivial                       |
+| `RingBuffer.snapshot(60s)`   | ~0.5 ms                               | copia numpy de 6000 floats                         |
+| `WaveformProcessor.process`  | ~5 ms / 60s @ 100 Hz                  | Butterworth orden 4, fase cero vía filtfilt       |
+| `StaLtaDetector.feed`        | < 1 ms / chunk                        | aproximación streaming de varianza                |
+| `SpectrumComputer.compute`   | ~30 ms / 60s @ 100 Hz                 | NFFT=128 por defecto                              |
+| Render de waveform           | **60 FPS** sostenidos                 | pyqtgraph acelerado por GPU                       |
+| Conexión SeedLink            | 3–8 s típico                          | TCP + SELECT + primer paquete                     |
+| Refresco feed USGS           | intervalo 30 s, < 200 KB              | GeoJSON, caché archivo TTL 5 min                  |
+| Redibujado del Globo         | < 200 ms                              | M1 con 1000 puntos                                |
+| Refresco dashboard (7 charts)| < 100 ms                              | hash de entrada evita redibujados nulos           |
+| Chunk de sonificación        | 22050 samples / 0.5 s audio           | Float32 → int16 PCM                              |
+| Startup hasta Globo interactivo | ~3 s (macOS arm64)                | Splash oculta el warmup de QtWebEngine            |
+| Memoria pico                 | ~450 MB                               | con QtWebEngine + buffer 60s + tres ventanas      |
+| Tamaño del instalador        | Windows 95 MB · macOS 110 MB · Linux 130 MB | onedir descomprime a ~220–260 MB         |
+
+---
+
+### Estructura del proyecto y responsabilidades por archivo
 
 ```
 seismic-shakevision/
-├── shakevision/              # ── paquete principal ──
-│   ├── __main__.py           # entrada (python -m shakevision)
-│   ├── config.py             # registro de servidores SeedLink + estaciones por defecto
-│   ├── sources/              # DataSource abstracto + Mock / SeedLink
-│   ├── processing/           # RingBuffer / Filters / Detector / Spectrum / Recorder / Intensity / Sonifier
-│   ├── services/             # clientes USGS / IRIS / ShakeNet + Worker + Report + Timezone + ActivityLog + Location + ClearCache
-│   ├── ui/                   # ventana principal PySide6 + flotantes + widgets + Settings + Profile + Onboarding
-│   ├── i18n/                 # LocaleService + 4 diccionarios alineados (each 435 keys)
-│   ├── web/{globe,dashboard,report}/   # HTML/JS/CSS embebido
-│   └── assets/{fonts,icons}/ # fuentes (descargadas por script, fuera del repo)
+├── shakevision/                          # ── paquete Python ──
+│   ├── __init__.py                       # constantes __version__ + APP_NAME
+│   ├── __main__.py                       # entrada: splash → ventana principal; maneja PyInstaller --windowed stderr=None
+│   ├── config.py                         # registro SEEDLINK_SERVERS (IU/US/II/IC → rtserve.iris) + DEFAULT_STATIONS
+│   │
+│   ├── sources/                          # ── fuentes en tiempo real (4) ──
+│   │   ├── base.py                       # DataSource abstracto: start/stop + señal samples_ready
+│   │   ├── mock.py                       # Sintético 100 Hz seno + ruido; fuente por defecto
+│   │   ├── seedlink.py                   # ObsPy EasySeedLinkClient en QThread; estados por fase, cancelable
+│   │   └── replay.py                     # Reproducción MiniSEED a velocidad ajustable (1× – 60×)
+│   │
+│   ├── processing/                       # ── DSP puro (sin dep Qt) (7) ──
+│   │   ├── buffer.py                     # RingBuffer: deque thread-safe + RLock
+│   │   ├── filters.py                    # WaveformProcessor: detrend + Butterworth bandpass (filtfilt)
+│   │   ├── detector.py                   # Detector STA/LTA + máquina de estado
+│   │   ├── spectrum.py                   # FFT ventana deslizante (scipy.signal.spectrogram)
+│   │   ├── recorder.py                   # Grabador de eventos, guarda a MiniSEED
+│   │   ├── sonifier.py                   # Forma de onda sísmica → audio PCM acelerado
+│   │   └── intensity.py                  # PGA → intensidad MMI (Wood-Anderson revisado)
+│   │
+│   ├── services/                         # ── capa I/O asíncrona (17) ──
+│   │   ├── data_models.py                # @dataclass: Earthquake · Station · Trigger · StationPreset
+│   │   ├── cache.py                      # Caché de archivo, TTL 5 min, corrección de reloj NTFS en Windows
+│   │   ├── worker.py                     # QObject de refresco periódico (30 s) + dual-period slot
+│   │   ├── usgs.py                       # Cliente feed USGS GeoJSON de sismos en tiempo real
+│   │   ├── iris.py                       # Cliente FDSN station de IRIS (redes IU/US/II)
+│   │   ├── shakenet.py                   # Cliente FDSN de Raspberry Shake
+│   │   ├── dataselect.py                 # FDSN dataselect de IRIS (descarga MiniSEED)
+│   │   ├── report.py                     # Generador de reporte HTML (con timeline SVG)
+│   │   ├── timezone_service.py           # Detección de zona horaria del sistema + override; fallback tzlocal
+│   │   ├── location_service.py           # Geolocalización IP vía ip-api.com
+│   │   ├── activity_log.py               # Log de actividad local (últimos 50 eventos, JSONL)
+│   │   ├── usage_tracker.py              # Contador de estadísticas de uso (lanzamientos, segundos escuchados, etc.)
+│   │   ├── shake_presets.py              # Persistencia de presets de Shake en LAN
+│   │   ├── favorites_store.py            # Sismos / estaciones favoritas
+│   │   ├── clear_cache.py                # Borrar todo el estado local en un clic
+│   │   ├── github_auth.py                # OAuth GitHub Device Flow; DEFAULT_CLIENT_ID horneado
+│   │   └── settings_backup.py            # Export/import JSON de ajustes (solo tests tras v0.7-C)
+│   │
+│   ├── ui/                               # ── PySide6 (32) ──
+│   │   ├── main_window.py                # QMainWindow raíz + hub global de señales + menús
+│   │   ├── app_header.py                 # Barra superior (tabs + toggles tema/capa + botones Settings/Profile/Workbench)
+│   │   ├── sidebar_nav.py                # Sidebar izquierda de navegación (oculta en layout por defecto)
+│   │   ├── globe_view.py                 # GlobeView: QWebEngineView envolviendo web/globe/
+│   │   ├── dashboard_view.py             # DashboardView: QWebEngineView envolviendo web/dashboard/
+│   │   ├── pro_window.py                 # Ventana flotante independiente del banco (antes "Pro")
+│   │   ├── control_panel.py              # Selector de estación + filtro + controles Listen (FIFO 8 estaciones dinámicas)
+│   │   ├── waveform_widget.py            # Plot pyqtgraph de 3 canales con scroll
+│   │   ├── spectrogram_widget.py         # Espectrograma pyqtgraph ImageItem
+│   │   ├── helicorder_widget.py          # Vista de tambor de 24 h
+│   │   ├── particle_motion_widget.py     # Movimiento de partícula plano N-E
+│   │   ├── intensity_card.py             # Tarjeta de traducción MMI (lenguaje amigable)
+│   │   ├── replay_panel.py               # UI de reproducción histórica (datetime + slider velocidad)
+│   │   ├── audio_player.py               # Wrapper QAudioSink + máquina de estado
+│   │   ├── settings_dialog.py            # Ajustes (General · My Shakes · Reset)
+│   │   ├── profile_dialog.py             # Contenedor del diálogo Profile
+│   │   ├── profile_view.py               # Contenido Profile (tarjeta GitHub + timeline de actividad)
+│   │   ├── github_login_dialog.py        # UI GitHub Device Flow (Intro / Waiting / Success)
+│   │   ├── onboarding_wizard.py          # Asistente de primer uso (idioma → zona → tema → fin)
+│   │   ├── localizame_view.py            # Escena de detección de ubicación (animación de halo)
+│   │   ├── add_shake_dialog.py           # Diálogo Add LAN Shake (con auto-descubrimiento mDNS)
+│   │   ├── loading_overlay.py            # Overlay de carga/error
+│   │   ├── splash.py                     # Splash de inicio (logo sci-fi + texto de progreso)
+│   │   ├── theme.py                      # Paleta + plantillas QSS (incluye QLabel#DialogError etc.)
+│   │   ├── theme_manager.py              # Cambio de tema en runtime (light/dark) + señal
+│   │   ├── layer_mode_manager.py         # Modo de capa del Globo (day/night/holographic)
+│   │   ├── pg_theming.py                 # Suscriptor de paleta pyqtgraph (ejes/grid siguen tema)
+│   │   ├── animations.py                 # Funciones factory de respiración/fade/pulso
+│   │   ├── elevation.py                  # Helpers de sombra Material/macOS (niveles 0–3)
+│   │   ├── icons.py                      # Cargador de iconos empaquetados (svg/png + tema-aware)
+│   │   ├── macos_native.py               # Barra de título transparente macOS + vista contenido completo (pyobjc)
+│   │   └── pdf_exporter.py               # Wrapper QWebEnginePage.printToPdf
+│   │
+│   ├── i18n/                             # ── Internacionalización ──
+│   │   ├── service.py                    # LocaleService + t() + language_changed_signal
+│   │   └── locales/{en,zh,es,fr}.json    # 4 diccionarios alineados, **444 keys cada uno**
+│   │
+│   ├── web/                              # ── Vistas web embebidas (cargadas por QWebEngineView) ──
+│   │   ├── globe/                        # Globo 3D ECharts-GL (index.html + globe.js + styles.css + lib/)
+│   │   ├── dashboard/                    # 7 charts ECharts del dashboard (index.html + dashboard.js + ...)
+│   │   └── report/                       # Plantilla de reporte HTML
+│   │
+│   ├── assets/                           # ── Recursos ──
+│   │   ├── fonts/{Inter.ttc, JetBrainsMono*.ttf}    # Fuentes (descargadas por script, no en repo)
+│   │   ├── icons/                        # Iconos PNG de navegación
+│   │   └── branding/{app_icon*.png, logo_for_*.png} # Logo SeismicGuard
+│   │
+│   └── utils/
+│       └── logging.py                    # setup_logging con fallback PyInstaller --windowed
 │
-├── tests/                    # pytest unitarios + integración (40+ módulos)
-├── packaging/                # ⭐ PyInstaller spec + build.py multiplataforma
-├── scripts/                  # install_libs.sh / install_fonts.sh / download_globe_assets.py
-├── .github/workflows/        # ci.yml (cada push) + release.yml (disparado por tag)
-├── CHANGELOG.md
-├── pyproject.toml
-└── README.md                 # éste (más README.en.md / README.es.md / README.fr.md)
+├── tests/                                # 45+ módulos pytest (clientes ObsPy mock, unit tests widgets PySide6)
+├── packaging/                            # ── Empaquetado ──
+│   ├── shakevision.spec                  # Spec de PyInstaller (BUNDLE macOS + VS_VERSIONINFO Win)
+│   ├── build.py                          # Driver multiplataforma (post-procesado dmg/AppImage)
+│   ├── windows/version_info.txt          # Recurso .exe Windows (CompanyName/FileVersion/etc.)
+│   ├── macos/                            # Recursos bundle macOS
+│   ├── linux/                            # Recursos AppImage
+│   └── README.md                         # Doc profunda de empaquetado
+├── scripts/                              # install_libs.sh · install_fonts.sh · download_globe_assets.py
+├── .github/workflows/                    # ci.yml (push/PR) + release.yml (disparado por tag)
+├── CHANGELOG.md                          # Formato Keep-a-Changelog
+├── pyproject.toml                        # Metadatos del paquete + dependencias
+├── LICENSE                               # MIT
+└── README.{md,en.md,es.md,fr.md}         # README 4 idiomas
 ```
 
 ---

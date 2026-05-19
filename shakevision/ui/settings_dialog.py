@@ -119,6 +119,13 @@ class SettingsDialog(QDialog):
         reset = self._build_reset_tab()
         self._tabs.addTab(reset, t("settings.tab.reset"))
 
+        # v0.7.4 fix #3: _retranslate_shakes_tab también pinta los
+        # textos del tab Reset, pero la primera vez se llamó dentro
+        # de _build_my_shakes_tab — ANTES de que _build_reset_tab
+        # existiera. Re-disparamos para que ahora sí encuentre los
+        # widgets _reset_* y les ponga el texto i18n.
+        self._retranslate_shakes_tab()
+
         root.addWidget(self._tabs, stretch=1)
 
         # ─── Botones inferiores ───
@@ -296,6 +303,12 @@ class SettingsDialog(QDialog):
             self._reset_heading.setText(t("settings.reset.heading"))
             self._reset_help.setText(t("settings.reset.help"))
             self._reset_button.setText(t("settings.reset.button"))
+        # v0.7.4: items list translations
+        if hasattr(self, "_reset_items"):
+            for key, label_widget in self._reset_items:
+                label_widget.setText(t(key))
+        if hasattr(self, "_reset_cache_size"):
+            self._update_cache_size_label()
 
     @Slot()
     def _reload_shakes_list(self) -> None:
@@ -399,52 +412,156 @@ class SettingsDialog(QDialog):
     # Reset tab (v0.7-C — clear cache + restart como nueva instalación)
     # ------------------------------------------------------------------
     def _build_reset_tab(self) -> QWidget:
-        """Tab con un botón rojo "Limpiar caché" + confirmación dura.
+        """Tab con una **tarjeta de advertencia** + lista de qué se
+        borrará + tamaño actual del caché + botón destructivo (v0.7.4).
 
-        Reemplaza al antiguo tab "Backup" cuyo flujo export/import JSON
-        resultaba opaco. La nueva acción es directa y predecible: borra
-        TODO el estado persistente (QSettings + cache de disco) y cierra
-        la app — al volver a abrirla, el usuario verá splash + Localízame
-        + Onboarding wizard otra vez, igual que el primer arranque.
+        v0.7.3 era solo un botón sólo → ningún usuario sabía qué
+        pasaba al pulsarlo. v0.7.4 lo convierte en una tarjeta de
+        advertencia visual con icono ⚠ y un listado de los items que
+        se borran, más el tamaño actual del caché en disco para que
+        el usuario sepa cuánto va a recuperar.
         """
 
-        from PySide6.QtWidgets import QWidget as _W
+        from PySide6.QtWidgets import (
+            QWidget as _W, QFrame as _F, QGridLayout, QSizePolicy as _SP,
+        )
+        from shakevision.ui import theme as _t
+
         tab = _W()
         layout = QVBoxLayout(tab)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(14)
 
-        # Texto de cabecera + descripción detallada de qué se borra
+        # ── Tarjeta de advertencia (icono + título + cuerpo + lista) ──
+        warn_card = _F()
+        warn_card.setObjectName("ResetWarningCard")
+        wc = QVBoxLayout(warn_card)
+        wc.setContentsMargins(18, 16, 18, 16)
+        wc.setSpacing(10)
+
+        # Cabecera: icono ⚠ + título
+        header_row = QHBoxLayout()
+        header_row.setSpacing(10)
+        warn_icon = QLabel("⚠")
+        warn_icon.setObjectName("ResetWarningIcon")
+        warn_icon.setSizePolicy(_SP.Fixed, _SP.Fixed)
         self._reset_heading = QLabel()
         self._reset_heading.setObjectName("SettingsSectionTitle")
-        layout.addWidget(self._reset_heading)
+        self._reset_heading.setWordWrap(True)
+        header_row.addWidget(warn_icon)
+        header_row.addWidget(self._reset_heading, 1)
+        wc.addLayout(header_row)
+
         self._reset_help = QLabel()
         self._reset_help.setWordWrap(True)
         self._reset_help.setObjectName("DialogHint")
-        layout.addWidget(self._reset_help)
+        wc.addWidget(self._reset_help)
 
-        # Botón destructivo — etiqueta y color de "danger" (objectName
-        # DangerButton para que el QSS global lo pinte rojo si lo hay;
-        # si no, queda con color por defecto pero la confirmación
-        # protege al usuario igualmente).
+        # Lista (grid) de items que serán borrados — 6 categorías con
+        # un icono unicode discreto al inicio. Las etiquetas se
+        # traducen en _retranslate.
+        self._reset_items_grid = QGridLayout()
+        self._reset_items_grid.setHorizontalSpacing(14)
+        self._reset_items_grid.setVerticalSpacing(6)
+        # Crear 6 pares (icono, label) — labels guardadas para i18n
+        self._reset_items: list[tuple[str, QLabel]] = []
+        ITEMS = [
+            ("🎨", "settings.reset.item.preferences"),
+            ("⭐", "settings.reset.item.favorites"),
+            ("📡", "settings.reset.item.lan_shakes"),
+            ("📊", "settings.reset.item.usage"),
+            ("📜", "settings.reset.item.activity"),
+            ("💾", "settings.reset.item.cache"),
+        ]
+        for row, (emoji, key) in enumerate(ITEMS):
+            ico = QLabel(emoji)
+            ico.setObjectName("ResetItemIcon")
+            txt = QLabel()
+            txt.setObjectName("ResetItemLabel")
+            txt.setWordWrap(True)
+            self._reset_items_grid.addWidget(ico, row // 2, (row % 2) * 2)
+            self._reset_items_grid.addWidget(
+                txt, row // 2, (row % 2) * 2 + 1)
+            self._reset_items.append((key, txt))
+        wc.addLayout(self._reset_items_grid)
+
+        # Footer dentro de la tarjeta: tamaño actual del caché en disco
+        self._reset_cache_size = QLabel()
+        self._reset_cache_size.setObjectName("DialogHint")
+        self._reset_cache_size.setWordWrap(True)
+        wc.addWidget(self._reset_cache_size)
+
+        layout.addWidget(warn_card)
+
+        # Botón destructivo — fuera de la tarjeta, deliberadamente
+        # separado para forzar un segundo "vistazo".
         btns = QHBoxLayout()
         btns.setSpacing(8)
         self._reset_button = QPushButton()
         self._reset_button.setObjectName("DangerButton")
         self._reset_button.setProperty("danger", True)
         self._reset_button.clicked.connect(self._on_clear_cache_clicked)
-        btns.addWidget(self._reset_button)
         btns.addStretch(1)
+        btns.addWidget(self._reset_button)
         layout.addLayout(btns)
 
-        # Status visible de la última operación (poco usado — tras
-        # clear la app se cierra inmediatamente).
+        # Status visible (oculto en la mayoría de casos)
         self._reset_status = QLabel("")
         self._reset_status.setWordWrap(True)
         self._reset_status.setObjectName("DialogHint")
         layout.addWidget(self._reset_status)
         layout.addStretch(1)
+
+        # QSS local para la tarjeta — usa COLOR_ALERT como acento
+        warn_card.setStyleSheet(f"""
+        QFrame#ResetWarningCard {{
+            background-color: {_t.COLOR_PANEL_ELEVATED};
+            border: 1px solid {_t.COLOR_ALERT};
+            border-radius: 12px;
+        }}
+        QLabel#ResetWarningIcon {{
+            color: {_t.COLOR_ALERT};
+            font-size: 28px;
+            font-weight: 700;
+            background: transparent;
+        }}
+        QLabel#ResetItemIcon {{
+            font-size: 16px;
+            background: transparent;
+        }}
+        QLabel#ResetItemLabel {{
+            color: {_t.COLOR_TEXT_PRIMARY};
+            background: transparent;
+            font-size: 12px;
+        }}
+        """)
+
+        # Calcular tamaño actual del caché (lazy — solo aquí, no en
+        # cada repaint).
+        self._update_cache_size_label()
         return tab
+
+    def _update_cache_size_label(self) -> None:
+        """Calcula y muestra el tamaño actual de ~/.cache/shakevision/."""
+
+        try:
+            from pathlib import Path
+            cache_dir = Path.home() / ".cache" / "shakevision"
+            total = 0
+            if cache_dir.is_dir():
+                for p in cache_dir.rglob("*"):
+                    if p.is_file():
+                        try:
+                            total += p.stat().st_size
+                        except OSError:
+                            continue
+            mb = total / (1024 * 1024)
+            self._reset_cache_size.setText(
+                t("settings.reset.cache_size",
+                  size=f"{mb:.1f}" if mb >= 0.1 else "<0.1"))
+        except Exception:  # noqa: BLE001
+            self._reset_cache_size.setText(
+                t("settings.reset.cache_size", size="?"))
 
     def _on_clear_cache_clicked(self) -> None:
         """Confirma con un diálogo destructivo, ejecuta clear_all() y

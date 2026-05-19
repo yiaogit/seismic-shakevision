@@ -276,7 +276,28 @@ def _build_qss(p: dict[str, str]) -> str:
         color: {p["text_muted"]};
         background-color: {p["panel"]};
     }}
-    QComboBox::drop-down {{ border: 0; width: 22px; }}
+    /* v0.7.4 patch #4 — explicit drop-down + arrow para que Windows
+       no esconda silenciosamente la zona clickable del combo. La
+       triangulación con borders evita depender de imágenes del
+       sistema (Windows Qt a veces no encuentra el indicador svg
+       cuando hay QSS heavy-styled). */
+    QComboBox::drop-down {{
+        subcontrol-origin: padding;
+        subcontrol-position: top right;
+        width: 22px;
+        border: 0;
+        background: transparent;
+    }}
+    QComboBox::down-arrow {{
+        image: none;
+        width: 0;
+        height: 0;
+        border-left: 5px solid transparent;
+        border-right: 5px solid transparent;
+        border-top: 6px solid {p["text_secondary"]};
+        margin-right: 8px;
+        margin-top: 14px;
+    }}
     QComboBox QAbstractItemView {{
         background-color: {p["panel_elevated"]};
         color: {p["text_primary"]};
@@ -495,6 +516,15 @@ def _build_qss(p: dict[str, str]) -> str:
     QLabel#DialogHint {{
         color: {p["text_muted"]};
         font-size: {FONT_SIZE_LABEL}px;
+    }}
+    /* v0.7.4 patch — etiqueta de error inline en diálogos (rojo
+       sutil, no agresivo). Usada por GitHubLoginDialog y por
+       cualquier diálogo que necesite mostrar errores inline sin
+       abrir otro modal. */
+    QLabel#DialogError {{
+        color: {p["alert"]};
+        font-size: {FONT_SIZE_LABEL}px;
+        padding: 4px 0 0 0;
     }}
     QLabel#DialogEmpty {{
         color: {p["text_muted"]};

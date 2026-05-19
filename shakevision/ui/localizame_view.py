@@ -108,14 +108,30 @@ def _reset_for_tests() -> None:
 # ============================================================
 # Constantes visuales
 # ============================================================
-SCREEN_WIDTH: int = 560
-SCREEN_HEIGHT: int = 400
+# v0.7.4 patch #2: bump canvas from 560×400 → 600×480 y reduce
+# HALO_MAX_RADIUS para que el bloque de texto debajo de los halos
+# (heading + detected) NO se corte en Windows con DPI ≥ 125%.
+#
+# Cálculo viejo (400px alto):
+#   cy = 400/2 - 14 = 186
+#   halo bottom = cy + 180 = 366
+#   heading start = 366 + 18 = 384
+#   heading height ~20 → 404  ← ya pasa borde
+#   detected line starts ~410 → 436 ← totalmente cortado
+#
+# Cálculo nuevo (480px alto, halo 150):
+#   cy = 480/2 - 14 = 226
+#   halo bottom = cy + 150 = 376
+#   heading start = 376 + 18 = 394 → 414
+#   detected line = 420 → 446 → 26px de margen al borde 480 ✓
+SCREEN_WIDTH: int = 600
+SCREEN_HEIGHT: int = 480
 
 LOGO_WIDTH_PX: int = 260
 
 # Halo: cuántos anillos simultáneos, radio máximo y periodo.
 HALO_RING_COUNT: int = 5
-HALO_MAX_RADIUS_PX: float = 180.0
+HALO_MAX_RADIUS_PX: float = 150.0
 HALO_PERIOD_S: float = 3.0
 HALO_START_RADIUS_PX: float = 6.0
 

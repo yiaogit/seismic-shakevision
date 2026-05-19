@@ -1,7 +1,6 @@
 {
   "_meta.language_name": "简体中文",
   "_meta.language_code": "zh",
-
   "settings.title": "设置",
   "settings.section.locale": "地区与时间",
   "settings.section.language": "语言",
@@ -27,13 +26,12 @@
   "settings.status.applied": "设置已应用。",
   "settings.status.timezone_changed": "时区已切换为 {tz}。",
   "settings.status.language_changed": "语言已切换为 {lang}。",
-
   "header.action.pro": "工作台",
-  "header.action.pro_tooltip": "打开专业工作台(示波器、频谱图、记录鼓、质点轨迹…)",
+  "header.action.pro_tooltip": "打开工作台（示波器、频谱图、记录鼓、质点轨迹…）",
   "header.action.settings_tooltip": "设置",
-  "header.theme.tooltip_auto":  "主题：自动（跟随本地时间）。点击切换为浅色。",
+  "header.theme.tooltip_auto": "主题：自动（跟随本地时间）。点击切换为浅色。",
   "header.theme.tooltip_light": "主题：浅色。点击切换为深色。",
-  "header.theme.tooltip_dark":  "主题：深色。点击切回自动。",
+  "header.theme.tooltip_dark": "主题：深色。点击切回自动。",
   "header.mode.standard": "标准",
   "header.mode.professional": "专业",
   "header.mode.tooltip_standard": "标准模式。地球和软件配色跟随当前主题（浅/深/自动）。",
@@ -42,16 +40,14 @@
   "header.status.connecting": "连接中…",
   "header.status.connected": "已连接",
   "header.status.error": "错误",
-
   "menu.file": "文件(&F)",
   "menu.file.export_html": "导出 HTML 报告(&E)…",
   "menu.file.export_pdf": "导出 PDF 报告(&P)…",
   "menu.file.exit": "退出(&X)",
   "menu.view": "视图(&V)",
-  "menu.view.show_pro": "显示 Pro 窗口(&P)",
+  "menu.view.show_pro": "显示工作台(&W)",
   "menu.help": "帮助(&H)",
   "menu.help.about": "关于(&A)",
-
   "controls.section.station": "台站",
   "controls.section.filter": "带通滤波器",
   "controls.section.trigger": "STA/LTA 检测器",
@@ -70,13 +66,11 @@
   "controls.sound.speed": "速度",
   "controls.sound.audio_duration_seconds": "≈ {value:.1f} 秒音频",
   "controls.sound.audio_duration_ms": "≈ {value:.0f} 毫秒音频",
-
   "pro.window_title": "SeismicGuard · 工作台",
   "pro.subtab.live": "📡 实时",
   "pro.subtab.helicorder": "📜 24 小时记录",
   "pro.subtab.particle": "🌀 质点轨迹",
   "pro.subtab.replay": "⏯ 历史回放",
-
   "replay.field.network": "网络",
   "replay.field.station": "台站",
   "replay.field.location": "位置",
@@ -95,7 +89,6 @@
   "replay.error.no_traces": "IRIS 返回空数据流。",
   "replay.error.network": "无法连接 IRIS dataselect：{detail}",
   "replay.error.unexpected": "未知错误：{detail}",
-
   "controls.station.add_lan_shake": "➕ 添加局域网 Shake…",
   "dialog.add_shake.title": "添加局域网 Raspberry Shake",
   "dialog.add_shake.label": "名称",
@@ -108,17 +101,15 @@
   "dialog.add_shake.tcp_timeout": "✗ TCP 超时 (5 秒) → {host}:{port}。可能是防火墙或 IP 错误。",
   "dialog.add_shake.tcp_unreachable": "✗ {host}:{port} 不可达：{detail}",
   "dialog.add_shake.dns_fail": "✗ DNS 解析失败 {host}：{detail}",
-
   "settings.tab.general": "通用",
   "settings.tab.my_shakes": "我的 Shake",
-  "settings.my_shakes.help": "管理你局域网内的 Raspberry Shake 设备。每一项会出现在 Pro 模式的台站下拉里。",
+  "settings.my_shakes.help": "管理你局域网内的 Raspberry Shake 设备。每一项会出现在工作台的台站下拉里。",
   "settings.my_shakes.empty": "还没有保存的 LAN Shake。点击「添加…」注册一个。",
   "settings.my_shakes.add": "添加…",
   "settings.my_shakes.rename": "重命名",
   "settings.my_shakes.delete": "删除",
   "settings.my_shakes.rename_prompt": "新名称：",
   "settings.my_shakes.delete_confirm": "删除「{label}」({host})？此操作无法撤销。",
-
   "settings.tab.reset": "重置",
   "settings.reset.heading": "清空缓存并重置 SeismicGuard",
   "settings.reset.help": "删除您所有的偏好设置、收藏、LAN Shakes、使用统计以及任何本地缓存数据。应用将关闭，下次打开时会看到欢迎流程，就像刚刚安装一样。磁盘上的地震记录不会被触碰。",
@@ -128,7 +119,6 @@
   "settings.reset.ok": "✓ 缓存已清空。正在关闭应用…",
   "settings.reset.partial": "缓存已清空，但有警告：{errors}。正在关闭应用…",
   "settings.reset.error": "✗ 清空缓存失败：{error}",
-
   "replay.field.duration_preset": "快速预设：",
   "replay.tooltip.network": "FDSN 网络代码。IU=全球台网，US=美国国家台网，AM=Raspberry Shake。",
   "replay.tooltip.station": "网络公布的台站代码（如 ANMO、MAJO、R0E05）。",
@@ -141,14 +131,12 @@
   "replay.status.resumed": "▶ 已恢复",
   "replay.status.speed_changed": "⚡ 速度 ×{speed:.1f}",
   "replay.status.completed": "✓ 播放完成。",
-
   "controls.sound.stop_playing": "⏹ 停止播放",
   "status.playback_finished": "音频片段已播完。",
   "audio.error.no_samples": "没有可播放的音频。",
   "audio.error.no_device": "未检测到音频输出设备。",
   "audio.error.format_unsupported": "音频设备不支持此格式。",
   "audio.error.buffer_open": "无法打开内部音频缓冲。",
-
   "waveform.station_label": "台站：{label}",
   "waveform.axis_time": "时间 (秒)",
   "spectrogram.title": "频谱图 (EHZ)",
@@ -160,16 +148,13 @@
   "particle.title": "质点轨迹 · N-E 平面 · 窗口 {seconds:.1f} 秒",
   "particle.axis_east": "东向 (EHE)",
   "particle.axis_north": "北向 (EHN)",
-
   "globe.tab_title": "地球",
   "globe.loading_title": "正在初始化 3D 地球",
   "globe.loading_subtitle": "加载资源并连接 USGS…",
   "globe.error_title": "无法加载数据",
-
   "localizame.heading": "正在定位您",
   "localizame.detected_prefix": "时区：",
   "localizame.detected_unknown": "未知 — 使用 UTC",
-
   "onboarding.counter": "第 {current}/{total} 步",
   "onboarding.btn.back": "上一步",
   "onboarding.btn.skip": "跳过",
@@ -198,7 +183,6 @@
   "onboarding.layer.professional": "专业（全息）",
   "onboarding.done.heading": "全部就绪",
   "onboarding.done.body": "SeismicGuard 已准备好。点击「开始使用」进入应用。您可以随时从「帮助 → 重新运行引导」打开本向导。",
-
   "github.login.intro_heading": "使用 GitHub 登录",
   "github.login.intro_body": "关联您的 GitHub 账户以在 SeismicGuard 中用用户名和头像个性化您的资料。我们仅请求对您公开资料的只读访问权限 — 绝不涉及您的仓库或组织。",
   "github.login.wait_heading": "授权 SeismicGuard",
@@ -217,7 +201,6 @@
   "github.login.error_expired": "代码在您授权前已过期。请重试。",
   "github.login.error_cancelled": "登录已取消。",
   "github.login.error_unknown": "意外错误：{error}",
-
   "header.action.profile_tooltip": "打开个人页",
   "profile.tab_title": "个人",
   "profile.dialog_title": "个人中心",
@@ -251,12 +234,10 @@
   "activity.location_detected": "检测到位置：{place}",
   "activity.github_login": "登录了 GitHub",
   "activity.github_logout": "退出了 GitHub",
-
   "dashboard.tab_title": "数据",
   "dashboard.loading_title": "正在初始化数据分析",
   "dashboard.loading_subtitle": "处理 USGS 地震目录…",
   "dashboard.error_title": "无法加载数据",
-
   "intensity.title": "实时震感强度",
   "intensity.level.1": "无感",
   "intensity.level.2": "微感",
@@ -286,7 +267,6 @@
   "intensity.metric_empty": "PGV — cm/s   ·   MMI —",
   "intensity.label.pgv": "峰值速度",
   "intensity.label.mmi": "MMI 烈度",
-
   "status.ready": "就绪。请选择台站并点击「连接」。",
   "status.station_selected": "已选择台站:{station}",
   "status.filter_enabled": "滤波器 {low:.2f}–{high:.2f} Hz (阶数 {order})",
@@ -329,21 +309,18 @@
   "status.pager_region": "PAGER:区域 = {region}",
   "status.retrying_usgs": "重新下载 USGS…",
   "status.station_not_found": "台站 {network}.{code} 尚未在目录中(可能还在加载)。请几秒后重试。",
-  "status.station_added": "✅ {network}.{code} 已添加到 Pro ({n}/{cap})。打开 Pro 窗口并点击「连接」开始。",
+  "status.station_added": "✅ {network}.{code} 已添加到工作台 ({n}/{cap})。打开工作台并点击「连接」开始。",
   "status.station_already_there": "{network}.{code} 已在列表中,已选中。",
-
   "period.last_hour": "最近一小时",
   "period.last_6h": "最近 6 小时",
   "period.last_day": "最近一天",
   "period.last_week": "最近一周",
   "period.last_month": "最近一个月",
   "region.everywhere": "全球",
-
   "dialog.shake.title": "Raspberry Shake — 仅供查看",
   "dialog.shake.body": "<b>{network}.{code}</b><br><br><b>{site}</b><br>纬度:{lat:.3f}°<br>经度:{lon:.3f}°<br>海拔:{elev:.0f} 米<br><br><i>远程 Raspberry Shake 台站没有公开的 SeedLink 服务器;只能连接到你本地网络上的设备 (rs.local)。LAN 连接支持将在后续版本中添加。</i>",
   "dialog.usgs.title": "连接 {network}.{code}",
-  "dialog.usgs.body": "<b>{network}.{code}</b><br><b>{site}</b><br><br>纬度:{lat:.3f}°<br>经度:{lon:.3f}°<br>海拔:{elev:.0f} 米<br><br>SeedLink 服务器:<code>{host}:{port}</code><br>通道:<code>{channels}</code><br>槽位:{slot}/{cap}<br><br>是否将该台站添加到 Pro 工作台列表?",
-
+  "dialog.usgs.body": "<b>{network}.{code}</b><br><b>{site}</b><br><br>纬度:{lat:.3f}°<br>经度:{lon:.3f}°<br>海拔:{elev:.0f} 米<br><br>SeedLink 服务器:<code>{host}:{port}</code><br>通道:<code>{channels}</code><br>槽位:{slot}/{cap}<br><br>是否将该台站添加到工作台列表?",
   "web.dashboard.kpi.count": "地震 / {period}",
   "web.dashboard.kpi.max_mag": "最大震级",
   "web.dashboard.kpi.latest": "最近一次",
@@ -380,7 +357,6 @@
   "web.dashboard.tooltip.events_max_mag": "{count} 次事件 · 最大 M {max:.1f}",
   "web.dashboard.tooltip.mean_mag": "平均 M {mean:.2f}",
   "web.dashboard.tooltip.depth_km": "深度 {depth:.1f} 公里",
-
   "web.globe.mag_bucket.micro": "< 3.0  微震",
   "web.globe.mag_bucket.light": "3 – 4.5  轻度",
   "web.globe.mag_bucket.moderate": "4.5 – 6  中等",
@@ -396,7 +372,6 @@
   "web.globe.tooltip.alt": "海拔",
   "web.globe.tooltip.depth": "深度:{km:.1f} 公里",
   "web.globe.tooltip.pager": "PAGER:",
-
   "web.globe.legend.title": "震级",
   "web.globe.legend.devices_title": "台站",
   "web.globe.legend.both_title": "震级 · 台站",
@@ -422,7 +397,6 @@
   "web.globe.loading": "加载中…",
   "web.globe.error.title": "无法加载地球",
   "web.globe.error.deps_missing": "ECharts 未能下载。<br>请运行:<span class='mono'>bash scripts/install_libs.sh</span>",
-
   "report.kpi.count_24h": "地震 / 24 小时",
   "report.kpi.max_mag": "最大震级",
   "report.kpi.latest": "最近一次",
@@ -454,11 +428,19 @@
   "report.html.section.timeline": "最近 24 小时时间线",
   "report.html.section.events": "重要事件 (24 小时, M ≥ 3.0)",
   "report.html.footer.sources": "数据来源:<strong>USGS Earthquake Hazards</strong> · <strong>Raspberry Shake / FDSN</strong>",
-
   "common.ok": "确定",
   "common.cancel": "取消",
   "common.yes": "是",
   "common.no": "否",
   "common.close": "关闭",
-  "common.error": "错误"
+  "common.error": "错误",
+  "settings.reset.cache_size": "磁盘缓存当前占用 {size} MB。",
+  "settings.reset.item.preferences": "所有应用偏好（语言、时区、主题、显示层级）",
+  "settings.reset.item.favorites": "收藏的地震和台站",
+  "settings.reset.item.lan_shakes": "LAN Raspberry Shake 预设",
+  "settings.reset.item.usage": "使用统计（启动次数、时长、计数）",
+  "settings.reset.item.activity": "最近活动日志",
+  "settings.reset.item.cache": "磁盘缓存（USGS/IRIS 响应、已生成的报告）",
+  "profile.github.counts": "📦 {repos} 仓库 · 👥 {followers} 粉丝 · → 关注 {following}",
+  "github.login.client_id_help": "还没有 client ID？<a href=\"https://github.com/settings/applications/new\">在 GitHub 上免费注册一个 OAuth App</a> — 30 秒搞定，只需填个名字。"
 }

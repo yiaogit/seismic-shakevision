@@ -110,6 +110,24 @@ def main() -> int:
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(__version__)
 
+    # v0.7.4 fix #6: aplicar el app icon a la QApplication entera.
+    # Sin esto, las QDialog / QWindow secundarias (Settings, Profile,
+    # Workbench, etc.) muestran el icono genérico "Python" / cuadrado
+    # blanco en la barra de tareas de Windows. macOS y la mayoría de
+    # WMs Linux usan el bundle icon directamente y no se ven afectados,
+    # pero la llamada es no-op ahí — más simple que platform-guard.
+    try:
+        from pathlib import Path as _P
+        from PySide6.QtGui import QIcon
+        _icon_path = (
+            _P(__file__).resolve().parent
+            / "assets" / "branding" / "app_icon.png"
+        )
+        if _icon_path.is_file():
+            app.setWindowIcon(QIcon(str(_icon_path)))
+    except Exception as exc:  # noqa: BLE001
+        _log.debug("setWindowIcon falló (%s)", exc)
+
     # Inicializar el manager de temas (v0.4+). Decide entre claro /
     # oscuro / auto según las preferencias guardadas y aplica QSS +
     # QPalette + fuentes empaquetadas en una sola llamada. Tras este

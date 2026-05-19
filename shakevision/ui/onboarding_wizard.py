@@ -195,6 +195,16 @@ class OnboardingWizard(QDialog):
         except Exception:  # noqa: BLE001
             pass
 
+        # v0.7.4: el wizard puede cambiar el tema en vivo desde su
+        # propia página "Tema" — al hacerlo, re-aplicamos QSS para
+        # que el propio wizard adopte la nueva paleta inmediatamente.
+        try:
+            from shakevision.ui.theme_manager import ThemeManager
+            ThemeManager.changed_signal().connect(
+                lambda _t: self.setStyleSheet(self._build_qss()))
+        except Exception:  # noqa: BLE001
+            pass
+
         self._update_buttons_for_index(0)
 
         self._center_on_screen()
@@ -317,7 +327,11 @@ class OnboardingWizard(QDialog):
 
         self._theme_group = QButtonGroup(self)
         self._theme_buttons: dict[str, QRadioButton] = {}
-        for mode in ("auto", "light", "dark"):
+        # v0.7.4 fix: removido el modo "auto" — la lógica de auto-detect
+        # del tema del sistema no estaba implementada (ThemeManager solo
+        # honra light/dark) y el usuario lo elegía sin efecto. Ahora
+        # solo light / dark, ambos funcionan.
+        for mode in ("light", "dark"):
             btn = QRadioButton()
             btn.setObjectName("WizardRadio")
             btn.setProperty("theme_mode", mode)
@@ -325,14 +339,15 @@ class OnboardingWizard(QDialog):
             self._theme_group.addButton(btn)
             layout.addWidget(btn)
             self._theme_buttons[mode] = btn
-        # Pre-seleccionar el modo actual
+        # Pre-seleccionar el modo actual (fallback a dark si era auto)
         try:
             from shakevision.ui.theme_manager import ThemeManager
             cur = ThemeManager.mode()
-            if cur in self._theme_buttons:
-                self._theme_buttons[cur].setChecked(True)
+            if cur not in self._theme_buttons:
+                cur = "dark"
+            self._theme_buttons[cur].setChecked(True)
         except Exception:  # noqa: BLE001
-            self._theme_buttons["auto"].setChecked(True)
+            self._theme_buttons["dark"].setChecked(True)
         layout.addStretch(1)
         return page
 
@@ -513,7 +528,7 @@ class OnboardingWizard(QDialog):
         if hasattr(self, "_theme_heading"):
             self._theme_heading.setText(t("onboarding.theme.heading"))
             self._theme_help.setText(t("onboarding.theme.help"))
-            self._theme_buttons["auto"].setText(t("onboarding.theme.auto"))
+            # v0.7.4: "auto" eliminado del wizard
             self._theme_buttons["light"].setText(t("onboarding.theme.light"))
             self._theme_buttons["dark"].setText(t("onboarding.theme.dark"))
         # Layer
@@ -546,24 +561,14 @@ class OnboardingWizard(QDialog):
             t("onboarding.counter", current=idx + 1, total=len(STEP_KEYS))
         )
 
-        # v0.6 Phase 14 — UX: al entrar en la página de zona horaria
-        # (índice 2), enfocar el combo y desplegar su popup automático
-        # para que el usuario vea inmediatamente la lista de zonas en
-        # lugar de tener que adivinar que es clickable. En macOS los
-        # QComboBox editables pueden requerir doble click para abrir;
-        # esto elimina esa fricción. Hacemos el popup tras un singleShot
-        # mínimo para que la animación de transición termine antes.
+        # v0.7.4: removida la auto-popup del QComboBox de timezone que
+        # se añadió en v0.6 Phase 14. Causaba un bug en macOS donde el
+        # popup salía solo al entrar a la página y luego el QComboBox
+        # quedaba en un estado donde clicks posteriores NO volvían a
+        # abrirlo. El usuario ya ve el placeholder con la zona detectada
+        # y un focus visible es suficiente affordance.
         if idx == 2 and hasattr(self, "_tz_combo"):
-            def _auto_popup() -> None:
-                try:
-                    if self._stack.currentIndex() != 2:
-                        return  # usuario ya navegó fuera, no abrir
-                    self._tz_combo.setFocus()
-                    self._tz_combo.showPopup()
-                except Exception as exc:  # noqa: BLE001
-                    logger.debug(
-                        "Onboarding: auto-popup tz combo falló (%s)", exc)
-            QTimer.singleShot(150, _auto_popup)
+            self._tz_combo.setFocus()
 
     # ------------------------------------------------------------------
     # Internos
@@ -578,61 +583,105 @@ class OnboardingWizard(QDialog):
         y = geom.y() + (geom.height() - self.height()) // 2
         self.move(x, y)
 
-    @staticmethod
-    def _build_qss() -> str:
-        # Estilos locales — el wizard tiene su propia paleta cohesiva
-        # con el splash, sin depender del tema global del usuario.
-        return """
-        QDialog#OnboardingWizard {
-            background-color: #0d1226;
-            border: 1px solid #1a2b4a;
+    def _build_qss(self) -> str:
+        """v0.7.4: QSS dinámico que respeta el tema activo (light/dark).
+
+        La versión anterior hardcoded paleta dark (`#0d1226`, `#fafafa`)
+        — al cambiar a tema claro, el fondo seguía siendo navy oscuro
+        pero los labels se renderizaban en colores que daban contraste
+        nulo (texto blanco sobre fondo blanco después de algunos
+        repaints). Ahora leemos COLOR_* del módulo theme en cada
+        invocación, igual que SettingsDialog y ProfileDialog.
+        """
+
+        from shakevision.ui import theme as _t
+        # Borde sutil: igual que macOS sheet — 1 px del color de border
+        # del panel actual (oscuro en dark, gris claro en light).
+        return f"""
+        QDialog#OnboardingWizard {{
+            background-color: {_t.COLOR_BACKGROUND};
+            border: 1px solid {_t.COLOR_PANEL_BORDER};
             border-radius: 16px;
-        }
-        QLabel#WizardStepLabel {
-            color: #fafafa;
+        }}
+        QFrame, QWidget#OnboardingWizard QStackedWidget {{
+            background-color: transparent;
+        }}
+        QLabel#WizardStepLabel {{
+            color: {_t.COLOR_TEXT_PRIMARY};
             font-family: 'Inter Variable', sans-serif;
             font-size: 16px;
             font-weight: 600;
-        }
-        QLabel#WizardCounter {
-            color: #71717a;
+        }}
+        QLabel#WizardCounter {{
+            color: {_t.COLOR_TEXT_MUTED};
             font-family: 'JetBrains Mono', monospace;
             font-size: 11px;
-        }
-        QLabel#WizardSectionTitle {
-            color: #fafafa;
+        }}
+        QLabel#WizardSectionTitle {{
+            color: {_t.COLOR_TEXT_PRIMARY};
             font-family: 'Inter Variable', sans-serif;
             font-size: 18px;
             font-weight: 600;
-        }
-        QLabel#WizardBody {
-            color: #a1a1aa;
+        }}
+        QLabel#WizardBody {{
+            color: {_t.COLOR_TEXT_SECONDARY};
             font-family: 'Inter Variable', sans-serif;
             font-size: 13px;
             line-height: 1.4;
-        }
-        QLabel#WizardCaption {
-            color: #71717a;
+        }}
+        QLabel#WizardCaption {{
+            color: {_t.COLOR_TEXT_MUTED};
             font-family: 'Inter Variable', sans-serif;
             font-size: 11px;
-        }
-        QRadioButton#WizardRadio {
-            color: #fafafa;
+        }}
+        QRadioButton#WizardRadio {{
+            color: {_t.COLOR_TEXT_PRIMARY};
+            background: transparent;
             font-family: 'Inter Variable', sans-serif;
             font-size: 13px;
             padding: 6px 4px;
             spacing: 10px;
-        }
-        QComboBox#WizardCombo {
-            background: #1a2b4a;
-            border: 1px solid #2a3b5a;
-            color: #fafafa;
-            padding: 6px 10px;
+        }}
+        QComboBox#WizardCombo {{
+            background: {_t.COLOR_PANEL};
+            border: 1px solid {_t.COLOR_PANEL_BORDER};
+            color: {_t.COLOR_TEXT_PRIMARY};
+            padding: 6px 26px 6px 10px;   /* right padding for arrow */
             border-radius: 6px;
             min-height: 28px;
-        }
-        QPushButton#WizardPrimaryButton {
-            background: #3b82f6;
+        }}
+        /* v0.7.4 patch #4: explicit drop-down + arrow region so
+           Windows doesn't silently hide the click target when the
+           wizard's local QSS overrides the global combo styling.
+           subcontrol-origin: padding + position: right keeps the
+           arrow inside the right padding zone we reserved above. */
+        QComboBox#WizardCombo::drop-down {{
+            subcontrol-origin: padding;
+            subcontrol-position: top right;
+            width: 22px;
+            border: 0;
+            background: transparent;
+        }}
+        QComboBox#WizardCombo::down-arrow {{
+            image: none;       /* drop the (possibly missing) PNG */
+            width: 0;
+            height: 0;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 6px solid {_t.COLOR_TEXT_SECONDARY};
+            margin-right: 8px;
+            margin-top: 14px;
+        }}
+        QComboBox#WizardCombo QAbstractItemView {{
+            background: {_t.COLOR_PANEL};
+            color: {_t.COLOR_TEXT_PRIMARY};
+            border: 1px solid {_t.COLOR_PANEL_BORDER};
+            selection-background-color: {_t.COLOR_ACCENT};
+            selection-color: white;
+            outline: 0;
+        }}
+        QPushButton#WizardPrimaryButton {{
+            background: {_t.COLOR_ACCENT};
             color: white;
             border: none;
             border-radius: 8px;
@@ -641,30 +690,29 @@ class OnboardingWizard(QDialog):
             font-family: 'Inter Variable', sans-serif;
             font-size: 13px;
             min-width: 100px;
-        }
-        QPushButton#WizardPrimaryButton:hover { background: #60a5fa; }
-        QPushButton#WizardPrimaryButton:pressed { background: #2563eb; }
-        QPushButton#WizardSecondaryButton {
+        }}
+        QPushButton#WizardPrimaryButton:hover {{ background: {_t.COLOR_ACCENT_HOVER}; }}
+        QPushButton#WizardSecondaryButton {{
             background: transparent;
-            color: #a1a1aa;
-            border: 1px solid #2a3b5a;
+            color: {_t.COLOR_TEXT_SECONDARY};
+            border: 1px solid {_t.COLOR_PANEL_BORDER};
             border-radius: 8px;
             padding: 8px 14px;
             font-family: 'Inter Variable', sans-serif;
             font-size: 12px;
             min-width: 80px;
-        }
-        QPushButton#WizardSecondaryButton:hover {
-            color: #fafafa;
-            border-color: #3b82f6;
-        }
-        QPushButton#WizardSecondaryButton:disabled {
-            color: #3a3f4a;
-            border-color: #1a2b4a;
-        }
-        QLabel#WizardDoneCheck {
-            color: #22c55e;
+        }}
+        QPushButton#WizardSecondaryButton:hover {{
+            color: {_t.COLOR_TEXT_PRIMARY};
+            border-color: {_t.COLOR_ACCENT};
+        }}
+        QPushButton#WizardSecondaryButton:disabled {{
+            color: {_t.COLOR_TEXT_MUTED};
+            border-color: {_t.COLOR_PANEL_DIVIDER};
+        }}
+        QLabel#WizardDoneCheck {{
+            color: {_t.COLOR_OK};
             font-size: 64px;
             font-weight: 600;
-        }
+        }}
         """

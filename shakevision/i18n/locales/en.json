@@ -1,7 +1,6 @@
 {
   "_meta.language_name": "English",
   "_meta.language_code": "en",
-
   "settings.title": "Settings",
   "settings.section.locale": "Region & Time",
   "settings.section.language": "Language",
@@ -27,13 +26,12 @@
   "settings.status.applied": "Settings applied.",
   "settings.status.timezone_changed": "Timezone changed to {tz}.",
   "settings.status.language_changed": "Language changed to {lang}.",
-
   "header.action.pro": "Workbench",
-  "header.action.pro_tooltip": "Open the professional workbench (oscilloscope, spectrogram, helicorder, hodogram…)",
+  "header.action.pro_tooltip": "Open the Workbench (oscillator, spectrogram, helicorder, particle motion…)",
   "header.action.settings_tooltip": "Settings",
-  "header.theme.tooltip_auto":  "Theme: Auto (follows local time of day). Click to switch to Light.",
+  "header.theme.tooltip_auto": "Theme: Auto (follows local time of day). Click to switch to Light.",
   "header.theme.tooltip_light": "Theme: Light. Click to switch to Dark.",
-  "header.theme.tooltip_dark":  "Theme: Dark. Click to switch back to Auto.",
+  "header.theme.tooltip_dark": "Theme: Dark. Click to switch back to Auto.",
   "header.mode.standard": "STD",
   "header.mode.professional": "PRO",
   "header.mode.tooltip_standard": "Standard mode. The globe and palette follow the current theme (light/dark/auto).",
@@ -42,16 +40,14 @@
   "header.status.connecting": "Connecting…",
   "header.status.connected": "Connected",
   "header.status.error": "Error",
-
   "menu.file": "&File",
   "menu.file.export_html": "&Export HTML report…",
   "menu.file.export_pdf": "Export &PDF report…",
   "menu.file.exit": "E&xit",
   "menu.view": "&View",
-  "menu.view.show_pro": "Show &Pro",
+  "menu.view.show_pro": "Show &Workbench",
   "menu.help": "&Help",
   "menu.help.about": "&About",
-
   "controls.section.station": "Station",
   "controls.section.filter": "Bandpass filter",
   "controls.section.trigger": "STA/LTA detector",
@@ -70,13 +66,11 @@
   "controls.sound.speed": "Speed",
   "controls.sound.audio_duration_seconds": "≈ {value:.1f} s of audio",
   "controls.sound.audio_duration_ms": "≈ {value:.0f} ms of audio",
-
   "pro.window_title": "SeismicGuard · Workbench",
   "pro.subtab.live": "📡 Live",
   "pro.subtab.helicorder": "📜 24h Diary",
   "pro.subtab.particle": "🌀 Hodogram",
   "pro.subtab.replay": "⏯ Replay",
-
   "replay.field.network": "Net",
   "replay.field.station": "Station",
   "replay.field.location": "Loc",
@@ -95,7 +89,6 @@
   "replay.error.no_traces": "IRIS returned an empty stream.",
   "replay.error.network": "Could not reach IRIS dataselect: {detail}",
   "replay.error.unexpected": "Unexpected error: {detail}",
-
   "controls.station.add_lan_shake": "➕ Add LAN Shake…",
   "dialog.add_shake.title": "Add LAN Raspberry Shake",
   "dialog.add_shake.label": "Label",
@@ -108,17 +101,15 @@
   "dialog.add_shake.tcp_timeout": "✗ TCP timeout (5 s) to {host}:{port}. Firewall or wrong IP?",
   "dialog.add_shake.tcp_unreachable": "✗ {host}:{port} unreachable: {detail}",
   "dialog.add_shake.dns_fail": "✗ DNS failed for {host}: {detail}",
-
   "settings.tab.general": "General",
   "settings.tab.my_shakes": "My Shakes",
-  "settings.my_shakes.help": "Manage your own Raspberry Shake devices on the local network. Each entry can be picked from the Station dropdown in Pro mode.",
+  "settings.my_shakes.help": "Manage your own Raspberry Shake devices on the local network. Each entry can be picked from the Station dropdown in the Workbench.",
   "settings.my_shakes.empty": "No LAN Shakes saved yet. Click \"Add…\" to register one.",
   "settings.my_shakes.add": "Add…",
   "settings.my_shakes.rename": "Rename",
   "settings.my_shakes.delete": "Delete",
   "settings.my_shakes.rename_prompt": "New label:",
   "settings.my_shakes.delete_confirm": "Delete \"{label}\" ({host})? This cannot be undone.",
-
   "settings.tab.reset": "Reset",
   "settings.reset.heading": "Clear cache and reset SeismicGuard",
   "settings.reset.help": "Delete all your preferences, favourites, LAN Shakes, usage statistics and any locally cached data. The app will close, and the next time you open it you'll see the welcome flow as if you'd just installed it. Your seismic recordings on disk are not touched.",
@@ -128,7 +119,6 @@
   "settings.reset.ok": "✓ Cache cleared. Closing app…",
   "settings.reset.partial": "Cache cleared with some warnings: {errors}. Closing app…",
   "settings.reset.error": "✗ Clear cache failed: {error}",
-
   "replay.field.duration_preset": "Quick presets:",
   "replay.tooltip.network": "FDSN network code. IU=Global Seismograph Network, US=USNSN, AM=Raspberry Shake.",
   "replay.tooltip.station": "Station code as published by the network (e.g. ANMO, MAJO, R0E05).",
@@ -141,14 +131,12 @@
   "replay.status.resumed": "▶ Resumed",
   "replay.status.speed_changed": "⚡ Speed ×{speed:.1f}",
   "replay.status.completed": "✓ Playback complete.",
-
   "controls.sound.stop_playing": "⏹ Stop playback",
   "status.playback_finished": "Audio clip finished.",
   "audio.error.no_samples": "No audio to play.",
   "audio.error.no_device": "No audio output device detected.",
   "audio.error.format_unsupported": "Audio device does not support this format.",
   "audio.error.buffer_open": "Could not open internal audio buffer.",
-
   "waveform.station_label": "Station: {label}",
   "waveform.axis_time": "Time (s)",
   "spectrogram.title": "Spectrogram (EHZ)",
@@ -160,16 +148,13 @@
   "particle.title": "Particle motion · N-E plane · {seconds:.1f} s window",
   "particle.axis_east": "East (EHE)",
   "particle.axis_north": "North (EHN)",
-
   "globe.tab_title": "Globe",
   "globe.loading_title": "Initializing 3D globe",
   "globe.loading_subtitle": "Loading resources and connecting to USGS…",
   "globe.error_title": "Could not load data",
-
   "localizame.heading": "Locating you",
   "localizame.detected_prefix": "Time zone: ",
   "localizame.detected_unknown": "Unknown — using UTC",
-
   "onboarding.counter": "Step {current}/{total}",
   "onboarding.btn.back": "Back",
   "onboarding.btn.skip": "Skip",
@@ -198,7 +183,6 @@
   "onboarding.layer.professional": "Professional (holographic)",
   "onboarding.done.heading": "You're all set",
   "onboarding.done.body": "SeismicGuard is ready. Click Get started to enter the app. You can always reopen this guide from Help → Run onboarding again.",
-
   "github.login.intro_heading": "Sign in with GitHub",
   "github.login.intro_body": "Link your GitHub account to personalise your profile in SeismicGuard with your username and avatar. We only request read-only access to your public profile — never to your repositories or organisations.",
   "github.login.wait_heading": "Authorise SeismicGuard",
@@ -217,7 +201,6 @@
   "github.login.error_expired": "The code expired before you authorised. Please try again.",
   "github.login.error_cancelled": "Login cancelled.",
   "github.login.error_unknown": "Unexpected error: {error}",
-
   "header.action.profile_tooltip": "Open your profile",
   "profile.tab_title": "Profile",
   "profile.dialog_title": "Profile",
@@ -251,12 +234,10 @@
   "activity.location_detected": "Detected location: {place}",
   "activity.github_login": "Signed in to GitHub",
   "activity.github_logout": "Signed out of GitHub",
-
   "dashboard.tab_title": "Data",
   "dashboard.loading_title": "Initializing data analysis",
   "dashboard.loading_subtitle": "Processing USGS earthquake catalog…",
   "dashboard.error_title": "Could not load data",
-
   "intensity.title": "Live intensity",
   "intensity.level.1": "Imperceptible",
   "intensity.level.2": "Very weak",
@@ -286,7 +267,6 @@
   "intensity.metric_empty": "PGV — cm/s   ·   MMI —",
   "intensity.label.pgv": "Peak velocity",
   "intensity.label.mmi": "MMI",
-
   "status.ready": "Ready. Select a station and click «Connect».",
   "status.station_selected": "Selected station: {station}",
   "status.filter_enabled": "Filter {low:.2f}–{high:.2f} Hz (order {order})",
@@ -329,21 +309,18 @@
   "status.pager_region": "PAGER: region = {region}",
   "status.retrying_usgs": "Retrying USGS download…",
   "status.station_not_found": "Station {network}.{code} not found in catalog yet. Try again in a few seconds.",
-  "status.station_added": "✅ {network}.{code} added to Pro ({n}/{cap}). Open the Pro window and click «Connect» to start.",
+  "status.station_added": "✅ {network}.{code} added to Workbench ({n}/{cap}). Open the Workbench and click «Connect» to start.",
   "status.station_already_there": "{network}.{code} was already in the list; selected.",
-
   "period.last_hour": "last hour",
   "period.last_6h": "last 6 hours",
   "period.last_day": "last day",
   "period.last_week": "last week",
   "period.last_month": "last month",
   "region.everywhere": "everywhere",
-
   "dialog.shake.title": "Raspberry Shake — info only",
   "dialog.shake.body": "<b>{network}.{code}</b><br><br><b>{site}</b><br>Latitude: {lat:.3f}°<br>Longitude: {lon:.3f}°<br>Elevation: {elev:.0f} m<br><br><i>Remote Raspberry Shake stations do not expose a public SeedLink server; you can only connect to your own device on the local network (rs.local). LAN-connection support will arrive in a future iteration.</i>",
   "dialog.usgs.title": "Connect to {network}.{code}",
-  "dialog.usgs.body": "<b>{network}.{code}</b><br><b>{site}</b><br><br>Latitude: {lat:.3f}°<br>Longitude: {lon:.3f}°<br>Elevation: {elev:.0f} m<br><br>SeedLink server: <code>{host}:{port}</code><br>Channels: <code>{channels}</code><br>Slot: {slot}/{cap}<br><br>Add this station to the Pro workbench list?",
-
+  "dialog.usgs.body": "<b>{network}.{code}</b><br><b>{site}</b><br><br>Latitude: {lat:.3f}°<br>Longitude: {lon:.3f}°<br>Elevation: {elev:.0f} m<br><br>SeedLink server: <code>{host}:{port}</code><br>Channels: <code>{channels}</code><br>Slot: {slot}/{cap}<br><br>Add this station to the Workbench list?",
   "web.dashboard.kpi.count": "Earthquakes / {period}",
   "web.dashboard.kpi.max_mag": "Max magnitude",
   "web.dashboard.kpi.latest": "Most recent",
@@ -380,7 +357,6 @@
   "web.dashboard.tooltip.events_max_mag": "{count} events · M max {max:.1f}",
   "web.dashboard.tooltip.mean_mag": "M mean {mean:.2f}",
   "web.dashboard.tooltip.depth_km": "Depth {depth:.1f} km",
-
   "web.globe.mag_bucket.micro": "< 3.0  Micro",
   "web.globe.mag_bucket.light": "3 – 4.5  Light",
   "web.globe.mag_bucket.moderate": "4.5 – 6  Moderate",
@@ -396,7 +372,6 @@
   "web.globe.tooltip.alt": "Alt",
   "web.globe.tooltip.depth": "Depth: {km:.1f} km",
   "web.globe.tooltip.pager": "PAGER:",
-
   "web.globe.legend.title": "Magnitude",
   "web.globe.legend.devices_title": "Stations",
   "web.globe.legend.both_title": "Magnitude · Stations",
@@ -422,7 +397,6 @@
   "web.globe.loading": "Loading…",
   "web.globe.error.title": "Could not load the globe",
   "web.globe.error.deps_missing": "ECharts did not load. Run: <span class='mono'>bash scripts/install_libs.sh</span>",
-
   "report.kpi.count_24h": "Earthquakes / 24 h",
   "report.kpi.max_mag": "Max magnitude",
   "report.kpi.latest": "Most recent",
@@ -454,11 +428,19 @@
   "report.html.section.timeline": "Timeline — last 24 h",
   "report.html.section.events": "Significant events (24 h, M ≥ 3.0)",
   "report.html.footer.sources": "Sources: <strong>USGS Earthquake Hazards</strong> · <strong>Raspberry Shake / FDSN</strong>",
-
   "common.ok": "OK",
   "common.cancel": "Cancel",
   "common.yes": "Yes",
   "common.no": "No",
   "common.close": "Close",
-  "common.error": "Error"
+  "common.error": "Error",
+  "settings.reset.cache_size": "Disk cache currently uses {size} MB.",
+  "settings.reset.item.preferences": "All app preferences (language, timezone, theme, layer mode)",
+  "settings.reset.item.favorites": "Favorite earthquakes and stations",
+  "settings.reset.item.lan_shakes": "LAN Raspberry Shake presets",
+  "settings.reset.item.usage": "Usage statistics (launches, time, counts)",
+  "settings.reset.item.activity": "Recent activity log",
+  "settings.reset.item.cache": "Disk cache (USGS/IRIS responses, generated reports)",
+  "profile.github.counts": "📦 {repos} repos · 👥 {followers} followers · → {following} following",
+  "github.login.client_id_help": "Don't have a client ID? <a href=\"https://github.com/settings/applications/new\">Register a free OAuth App on GitHub</a> — it takes 30 seconds and only needs a name."
 }

@@ -91,6 +91,20 @@ USER_API_URL: str = "https://api.github.com/user"
 
 DEFAULT_SCOPE: str = "read:user user:email"
 
+# v0.7.4 patch — client_id por defecto baked-in.
+#
+# Este es el Client ID PÚBLICO de la OAuth App "SeismicGuard-shakevision"
+# registrada por el maintainer (yiaogit) con Device Flow habilitado.
+# NO es un secreto — los Client IDs OAuth son públicos por diseño;
+# lo que NO se puede compartir es el Client Secret (que Device Flow
+# no usa, justamente por esto).
+#
+# Si más adelante el maintainer cambia/regenera la OAuth App, solo
+# hay que actualizar esta constante y recompilar — los usuarios pueden
+# además sobrescribirla con la env var SEISMICGUARD_GITHUB_CLIENT_ID
+# o desde Ajustes (QSettings "github/client_id").
+DEFAULT_CLIENT_ID: str = "Ov23liBIJOgeeGVfFW9B"
+
 # Polling: respetamos el ``interval`` que devuelva GitHub. Si no llega,
 # usamos 5 s por defecto. ``slow_down`` añade 5 s al actual.
 DEFAULT_POLL_INTERVAL_S: int = 5
@@ -270,11 +284,16 @@ class _GitHubAuth:
 
     # ── Configuración ────────────────────────────────────────
     def client_id(self) -> str:
-        # Prioridad: env var > QSettings > "" (no configurado).
+        # Prioridad: env var > QSettings > DEFAULT_CLIENT_ID baked-in > "".
+        # v0.7.4 patch: añadido fallback al DEFAULT_CLIENT_ID para que la
+        # app funcione out-of-the-box si el maintainer lo configura.
         env = os.environ.get("SEISMICGUARD_GITHUB_CLIENT_ID", "").strip()
         if env:
             return env
-        return _get_str(KEY_CLIENT_ID, "")
+        stored = _get_str(KEY_CLIENT_ID, "")
+        if stored:
+            return stored
+        return DEFAULT_CLIENT_ID.strip()
 
     def set_client_id(self, client_id: str) -> None:
         _set_str(KEY_CLIENT_ID, client_id.strip())
@@ -358,21 +377,42 @@ class _GitHubAuth:
                 f"Error de GitHub: {err or resp}")
 
     def fetch_user_profile(self, token: str) -> dict:
-        """GET /user → dict con login/avatar_url/name/email.
+        """GET /user → dict con campos públicos extendidos.
 
-        Filtramos solo los campos que SeismicGuard usa: no queremos
-        cachear todo el JSON de GitHub (puede pesar varios KB y
-        cambiar entre versiones de la API).
+        v0.7.4: ampliado para incluir bio + ubicación + counts (repos,
+        followers, following) + url + created_at, que la Profile dialog
+        muestra como una "tarjeta GitHub" enriquecida. Todos los
+        campos vienen del endpoint público /user — read:user scope ya
+        los cubre, no requiere permisos extra.
         """
 
         resp = self._http_get(USER_API_URL,
                               {"Authorization": f"Bearer {token}"})
+        # ``resp.get`` puede devolver None — normalizamos siempre a str/int.
+        def _s(key: str) -> str:
+            return str(resp.get(key) or "")
+        def _i(key: str) -> int:
+            try:
+                return int(resp.get(key) or 0)
+            except (TypeError, ValueError):
+                return 0
         return {
-            "login": str(resp.get("login", "")),
-            "name": str(resp.get("name") or ""),
-            "avatar_url": str(resp.get("avatar_url", "")),
-            "email": str(resp.get("email") or ""),
-            "html_url": str(resp.get("html_url", "")),
+            # Identidad básica
+            "login":       _s("login"),
+            "name":        _s("name"),
+            "avatar_url":  _s("avatar_url"),
+            "email":       _s("email"),
+            "html_url":    _s("html_url"),
+            # v0.7.4 — info extendida
+            "bio":         _s("bio"),
+            "company":     _s("company"),
+            "blog":        _s("blog"),
+            "location":    _s("location"),
+            "created_at":  _s("created_at"),
+            "public_repos":  _i("public_repos"),
+            "followers":     _i("followers"),
+            "following":     _i("following"),
+            "public_gists":  _i("public_gists"),
         }
 
     # ── Persistencia / sesión ───────────────────────────────

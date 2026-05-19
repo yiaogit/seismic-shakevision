@@ -167,64 +167,420 @@ python -m shakevision
 
 ## 🏗 架构
 
-### 数据流
+### 系统总览
 
+SeismicGuard 是一个**单体桌面应用**（无后端服务），由 4 个清晰分层的子系统组成：
+**外部数据源 → 异步 I/O 层（services + sources）→ 内存状态（processing/buffer）→ UI 渲染（PySide6 + WebEngine）**。
+所有跨线程通信走 Qt signal/slot，所有持久化状态走 `QSettings`（无数据库）。
+
+```mermaid
+graph TB
+    subgraph external[" 🌐 外部数据源"]
+        USGS[USGS<br/>GeoJSON Feed]
+        FDSN[FDSN Web Services<br/>IRIS · ShakeNet]
+        SL[SeedLink TCP<br/>rtserve.iris.washington.edu:18000]
+        GH[GitHub API<br/>Device Flow OAuth]
+        IP[ip-api.com<br/>geolocation]
+    end
+
+    subgraph services[" ⚙ services/ — 异步 I/O 层"]
+        Worker[Worker QObject<br/>30 s 周期刷新]
+        Clients[usgs · iris · shakenet · dataselect]
+        Cache[cache.py<br/>文件缓存 5 min TTL]
+        Auth[github_auth<br/>Device Flow]
+        TZ[timezone_service]
+        Loc[location_service]
+    end
+
+    subgraph sources[" 📡 sources/ — 实时数据流"]
+        Base[Base DataSource ABC]
+        Seedlink[SeedLinkSource<br/>QThread + ObsPy]
+        Replay[ReplaySource<br/>MiniSEED 回放]
+        Mock[MockSource<br/>合成 100 Hz]
+    end
+
+    subgraph proc[" 🔬 processing/ — 纯 DSP"]
+        Buffer[RingBuffer<br/>线程安全 deque]
+        Filter[Butterworth 带通]
+        Detect[STA/LTA 检测器]
+        Spec[滑窗 FFT]
+        Rec[事件录波<br/>→ MiniSEED]
+        Son[Sonifier<br/>地震波 → 音频]
+        Int[Intensity MMI]
+    end
+
+    subgraph ui[" 🪟 ui/ — PySide6"]
+        Main[MainWindow<br/>signal hub]
+        Globe[GlobeView<br/>QWebEngineView]
+        Dash[DashboardView<br/>QWebEngineView]
+        Pro[ProWindow<br/>独立浮窗]
+        Widgets[Waveform · Spectrogram<br/>Helicorder · ParticleMotion]
+    end
+
+    USGS --> Clients --> Worker
+    FDSN --> Clients
+    Worker --> Cache
+    Worker --> Globe
+    Worker --> Dash
+
+    SL --> Seedlink --> Buffer
+    Mock --> Buffer
+    Replay --> Buffer
+
+    Buffer --> Filter --> Detect --> Rec
+    Buffer --> Spec
+    Buffer --> Son
+    Buffer --> Widgets
+
+    GH --> Auth --> Main
+    IP --> Loc --> Main
+    Globe --> Main --> Pro
+
+    classDef ext fill:#1a3a52,stroke:#4a9eff,color:#fff
+    classDef svc fill:#2d4a2d,stroke:#7fbb7f,color:#fff
+    classDef src fill:#4a3d1a,stroke:#d4a043,color:#fff
+    classDef ds fill:#4a1a3a,stroke:#d44a9e,color:#fff
+    classDef uic fill:#3a1a4a,stroke:#9e4ad4,color:#fff
+    class USGS,FDSN,SL,GH,IP ext
+    class Worker,Clients,Cache,Auth,TZ,Loc svc
+    class Base,Seedlink,Replay,Mock src
+    class Buffer,Filter,Detect,Spec,Rec,Son,Int ds
+    class Main,Globe,Dash,Pro,Widgets uic
 ```
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│ USGS GeoJSON │ ──► │   Worker     │ ──► │  data_models │ ──► │   Globe      │
-│ IRIS FDSN    │     │ (单线程异步) │     │ (Earthquake, │     │ Dashboard    │
-│ ShakeNet     │     │              │     │  Station…)   │     │ (HTML + JS)  │
-└──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
 
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│  SeedLink    │ ──► │  RingBuffer  │ ──► │  Processor   │ ──► │  Pro 浮窗    │
-│ rtserve.iris │     │ (线程安全)   │     │ Butterworth, │     │  Waveform +  │
-│  → ObsPy     │     │              │     │ STA/LTA, FFT │     │  Spec + Hel  │
-└──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
+### 端到端时序：从点击地球到看到波形
+
+下图覆盖最常见的用户路径 —— **在地球上点 USGS 台站 → 加入工作台 → 连接 SeedLink → 看到实时波形**。
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as 👤 用户
+    participant JS as Globe (JS)
+    participant Br as GlobeBridge<br/>(QWebChannel)
+    participant MW as MainWindow
+    participant PW as ProWindow
+    participant SL as SeedLinkSource<br/>(QThread)
+    participant RB as RingBuffer
+    participant W as WaveformWidget
+
+    U->>JS: 点击 USGS 光点
+    JS->>Br: stationClicked(net, code, lat, lon)
+    Br->>MW: station_clicked signal
+    MW->>U: 弹窗 "加入工作台?"
+    U->>MW: ✓ 确认
+    MW->>PW: add_station(StationPreset)
+    PW->>PW: FIFO 入队 (max 8)
+    U->>PW: 点击 Connect
+    PW->>SL: start(preset)
+    SL->>SL: 查 SEEDLINK_SERVERS[net]
+    SL-->>PW: state: CONNECTING
+    SL->>SL: ObsPy 建 TCP + SELECT
+    SL-->>PW: state: STREAMING
+    loop 每个 SeedLink 包
+        SL->>RB: append(samples)
+        RB-->>PW: snapshot_ready
+        PW->>W: update(snapshot)
+        W->>U: 60 FPS 渲染
+    end
+    U->>PW: Disconnect
+    PW->>SL: stop()
+    SL-->>PW: state: IDLE
 ```
 
-### 技术栈
+### 核心类图 — processing/ 与 sources/
 
-| 层               | 选型                                                | 理由                                              |
-|------------------|-----------------------------------------------------|---------------------------------------------------|
-| **UI 框架**      | PySide6 ≥ 6.6                                       | LGPL，跨平台原生外观，QtWebEngine 自带 Chromium    |
-| **Web 渲染**     | QWebEngineView                                      | 嵌入 ECharts，不引第三方浏览器引擎                 |
-| **3D 地球**      | [ECharts-GL](https://github.com/ecomfe/echarts-gl)  | 单一图表库覆盖 2D + 3D，bundle 比 Three.js 小      |
-| **2D 图表**      | [Apache ECharts](https://echarts.apache.org/) 5.4   | 7 种图表全用同一引擎                              |
-| **DSP**          | NumPy + SciPy                                       | 工业标准 Butterworth 滤波 / FFT 谱图              |
-| **地震学**       | [ObsPy](https://www.obspy.org/) ≥ 1.4               | SeedLink 客户端 + MiniSEED 读写                   |
-| **波形绘制**     | [pyqtgraph](https://www.pyqtgraph.org/) 0.13        | 60 FPS GPU 加速                                   |
-| **音频**         | QtMultimedia QAudioSink                             | 跨平台，零额外依赖                                |
-| **时区**         | `zoneinfo`（Win 上 + `tzdata` pip 包）              | 标准库；POSIX `/etc/localtime` symlink 自动检测   |
-| **i18n**         | 自研 JSON dict + `t()` 函数                          | Python 与 JS 共享同一份字典，无构建步骤          |
-| **打包**         | PyInstaller (onedir) + `create-dmg` + `appimagetool` | 跨平台一致；onedir 启动快，杀软友好               |
-| **CI / Release** | GitHub Actions                                      | 3 平台矩阵 + tag 触发自动发布                     |
+DSP 层是**纯 Python**（无 Qt 依赖），所有类可在 pytest 里独立测试，不需要 QApplication。
 
-### 项目结构
+```mermaid
+classDiagram
+    class DataSource {
+        <<abstract>>
+        +sample_rate: float
+        +channels: list[str]
+        +start() void
+        +stop() void
+        +samples_ready Signal
+    }
+
+    class SeedLinkSource {
+        +preset: StationPreset
+        -_thread: QThread
+        -_client: EasySeedLinkClient
+        -_state: SourceState
+        +start(preset)
+        +stop()
+        +state_changed Signal
+    }
+
+    class MockSource {
+        +amplitude: float
+        +noise: float
+        -_timer: QTimer
+        +start()
+    }
+
+    class ReplaySource {
+        +mseed_path: Path
+        +speed: float
+        +position_s: float
+        +seek(t)
+    }
+
+    class RingBuffer {
+        +capacity_s: float
+        +sample_rate: float
+        -_data: deque[float]
+        -_lock: RLock
+        +append(samples)
+        +snapshot(seconds) ndarray
+        +clear()
+    }
+
+    class WaveformProcessor {
+        +bandpass: tuple[float, float]
+        +order: int = 4
+        +process(x) ndarray
+    }
+
+    class StaLtaDetector {
+        +sta_window_s: float
+        +lta_window_s: float
+        +trigger_ratio: float
+        +detrigger_ratio: float
+        +feed(x) Trigger?
+    }
+
+    class EventRecorder {
+        +out_dir: Path
+        +pre_event_s: float
+        +post_event_s: float
+        +save(trigger, samples) Path
+    }
+
+    class SpectrumComputer {
+        +nfft: int = 128
+        +window: str = "hann"
+        +compute(x) tuple
+    }
+
+    class Sonifier {
+        +seismic_sr: float
+        +audio_sr: int = 44100
+        +speed: float
+        +sonify(samples) bytes
+    }
+
+    DataSource <|-- SeedLinkSource
+    DataSource <|-- MockSource
+    DataSource <|-- ReplaySource
+    DataSource ..> RingBuffer : append samples
+    RingBuffer ..> WaveformProcessor : snapshot()
+    WaveformProcessor ..> StaLtaDetector : feed()
+    StaLtaDetector ..> EventRecorder : on trigger
+    RingBuffer ..> SpectrumComputer : snapshot()
+    RingBuffer ..> Sonifier : snapshot()
+```
+
+### 关键状态机
+
+#### SeedLinkSource 生命周期
+
+公开 SeedLink 没有官方"协议优雅断开"的概念，所以这套状态机的核心目标是**任何阶段都能取消** —— v0.6 之前曾有 *CONNECTING* 永远阻塞导致 UI 假死的崩溃，那次修复后的最终状态机如下：
+
+```mermaid
+stateDiagram-v2
+    [*] --> IDLE
+    IDLE --> CONNECTING: start(preset)
+    CONNECTING --> SELECTING: TCP 握手 OK
+    CONNECTING --> ERROR: timeout / DNS / refused
+    SELECTING --> STREAMING: SELECT N_S.C 接受
+    SELECTING --> ERROR: 服务器拒绝 SELECT
+    STREAMING --> STREAMING: 包到达 → RingBuffer
+    STREAMING --> STOPPING: 用户 Disconnect
+    CONNECTING --> STOPPING: 用户取消
+    SELECTING --> STOPPING: 用户取消
+    STOPPING --> IDLE: QThread join
+    ERROR --> IDLE: 用户关闭错误
+    ERROR --> CONNECTING: 用户重试
+```
+
+#### AudioPlayer（地震波声学化）
+
+```mermaid
+stateDiagram-v2
+    [*] --> IDLE
+    IDLE --> PREPARING: 用户点 Listen
+    PREPARING --> PLAYING: QAudioSink.start()
+    PREPARING --> ERROR: 设备/格式失败
+    PLAYING --> PLAYING: chunk → 扬声器
+    PLAYING --> STOPPING: 用户点 Stop
+    PLAYING --> COMPLETED: 缓冲耗尽
+    STOPPING --> IDLE: QAudioSink.stop()
+    COMPLETED --> IDLE: 自动复位
+    ERROR --> IDLE: 关闭错误
+```
+
+---
+
+### 技术栈与决策记录（ADR）
+
+| 层               | 选型                                                | 关键决策 / 理由                                              |
+|------------------|-----------------------------------------------------|--------------------------------------------------------------|
+| **UI 框架**      | PySide6 ≥ 6.6                                       | **LGPL** 允许静态链接而无 GPL 污染（PyQt6 是 GPL）；商业友好 |
+| **Web 渲染**     | QWebEngineView                                      | 嵌入 Chromium，无需额外浏览器引擎；OAuth 流程也复用同一引擎  |
+| **3D 地球**      | [ECharts-GL](https://github.com/ecomfe/echarts-gl)  | v0.5 从 Globe.gl + Three.js 切换：一个库覆盖 2D + 3D，bundle ~600 KB vs 原来 ~3 MB |
+| **2D 图表**      | [Apache ECharts](https://echarts.apache.org/) 5.4   | 7 张图全用同一 API，统一交互 / tooltip / 主题                |
+| **DSP**          | NumPy + SciPy                                       | 工业标准 Butterworth + scipy.signal.spectrogram FFT          |
+| **地震学**       | [ObsPy](https://www.obspy.org/) ≥ 1.4               | SeedLink 客户端 + MiniSEED 读写；学术标准                    |
+| **波形绘制**     | [pyqtgraph](https://www.pyqtgraph.org/) 0.13        | GPU 加速，60 FPS 稳定                                        |
+| **音频**         | QtMultimedia QAudioSink                             | 跨平台，零额外依赖                                           |
+| **时区**         | `zoneinfo` + `tzdata`（仅 Windows） + `tzlocal`     | Windows 注册表是 "China Standard Time" 不是 IANA 名，`tzlocal` 兜底翻译 |
+| **i18n**         | 自研 JSON 字典 + `t()` 函数                          | Python 与 JS **共享同一份字典**，无构建步骤；零运行时依赖    |
+| **OAuth**        | GitHub Device Flow                                  | **无 callback URL，无 client secret** —— 唯一可以安全烘焙进开源二进制的 OAuth 流程 |
+| **打包**         | PyInstaller (onedir) + `create-dmg` + `appimagetool` | onedir 启动快，杀软友好（vs onefile 解压到 temp 触发 SmartScreen） |
+| **CI / Release** | GitHub Actions                                      | 3 平台 × Py 3.10–3.12 矩阵；tag 触发自动构建 + 发布          |
+
+**重要决策记录：**
+
+1. **单一可执行包 vs 微服务** — 桌面用户期待"双击即用"，shipping 一个 ~250 MB 的 PyInstaller artifact 比让用户配 Python 简单几个数量级。
+2. **公开 Raspberry Shake SeedLink 不存在**（v0.5.1 发现） — 只能连 LAN 内自己的设备 (`rs.local:18000`) 或付费 RTDC。所有实时流默认路由到 IRIS `rtserve.iris.washington.edu`。
+3. **QSettings 命名空间保留 `SeismicGuard` / `ShakeVision`** — 改名会孤立现有用户的所有持久化数据；rebrand 仅限可见层面。
+4. **代码注释使用西班牙语** — 项目早期开发约定，保持风格一致；用户面对的字符串始终走 i18n。
+5. **`DEFAULT_CLIENT_ID` 烘焙进二进制**（v0.7.5） — GitHub OAuth Client ID 设计上即公开，Device Flow 不需要 secret；用户开箱即用，无需注册自己的 App。
+6. **macOS bundle id 仍是 `org.shakevision.app`** — 改 bundle id 会让 macOS 把 v0.7.5 视为全新 App，丢失收藏夹位置/权限授权；保留更友好。
+
+---
+
+### 性能特征
+
+| 组件                         | 吞吐 / 时延                          | 说明                                              |
+|------------------------------|---------------------------------------|---------------------------------------------------|
+| `RingBuffer.append`          | O(1)，锁竞争 < 0.1 ms                | 100 Hz 流入毫无压力                              |
+| `RingBuffer.snapshot(60s)`   | ~0.5 ms                              | numpy 拷贝 6000 个 float                          |
+| `WaveformProcessor.process`  | ~5 ms / 60s @ 100 Hz                 | Butterworth order 4，zero-phase via filtfilt     |
+| `StaLtaDetector.feed`        | < 1 ms / chunk                       | 流式方差近似                                      |
+| `SpectrumComputer.compute`   | ~30 ms / 60s @ 100 Hz                | NFFT=128 default                                  |
+| 波形渲染                     | **60 FPS** 稳定                      | pyqtgraph GPU 加速                                |
+| SeedLink 连接耗时            | 3–8 s 典型                           | TCP + SELECT + 第一个包                           |
+| USGS feed 刷新               | 30 s 周期，< 200 KB                   | GeoJSON，文件缓存 5 min TTL                       |
+| Globe 数据集变更后重绘       | < 200 ms                              | M1 上 1000 个点                                   |
+| Dashboard 7 图刷新           | < 100 ms                              | hash 比对避免无意义重绘                           |
+| Sonification chunk           | 22050 samples / 0.5 s 音频           | Float32 → int16 PCM                              |
+| 启动到 Globe 可交互          | ~3 s（macOS arm64）                  | Splash 期间预初始化 QtWebEngine                  |
+| 应用内存峰值                 | ~450 MB                              | 含 QtWebEngine + 60s 缓冲 + 三窗口                |
+| 安装包大小                   | Windows 95 MB · macOS 110 MB · Linux 130 MB | onedir 解压后约 220–260 MB                  |
+
+---
+
+### 项目结构与文件功能解析
 
 ```
 seismic-shakevision/
-├── shakevision/              # ── 主包 ──
-│   ├── __main__.py           # 入口（python -m shakevision）
-│   ├── config.py             # SeedLink 服务器注册表 + 默认台站
-│   ├── sources/              # DataSource 抽象 + Mock / SeedLink
-│   ├── processing/           # RingBuffer / Filters / Detector / Spectrum / Recorder / Intensity / Sonifier
-│   ├── services/             # USGS / IRIS / ShakeNet 客户端 + Worker + Report + Timezone + ActivityLog + Location + ClearCache
-│   ├── ui/                   # PySide6 主窗口 + 浮窗 + 各 widget + Settings + Profile + Onboarding
-│   ├── i18n/                 # LocaleService + 4 份对齐字典（each 435 keys）
-│   ├── web/{globe,dashboard,report}/   # 嵌入式 HTML/JS/CSS
-│   └── assets/{fonts,icons}/ # 字体（脚本下载，不入仓）
+├── shakevision/                          # ── 主 Python 包 ──
+│   ├── __init__.py                       # __version__ + APP_NAME 常量
+│   ├── __main__.py                       # 入口：splash → 主窗口；处理 PyInstaller --windowed stderr=None
+│   ├── config.py                         # SEEDLINK_SERVERS 注册表（IU/US/II/IC → rtserve.iris）+ DEFAULT_STATIONS
+│   │
+│   ├── sources/                          # ── 实时数据源 (4) ──
+│   │   ├── base.py                       # 抽象 DataSource：start/stop + samples_ready signal
+│   │   ├── mock.py                       # 合成 100 Hz 正弦+噪声；默认源
+│   │   ├── seedlink.py                   # ObsPy EasySeedLinkClient 包 QThread；分阶段状态机，可随时取消
+│   │   └── replay.py                     # MiniSEED 回放，可调速度（1× – 60×）
+│   │
+│   ├── processing/                       # ── 纯 DSP（无 Qt 依赖） (7) ──
+│   │   ├── buffer.py                     # RingBuffer：线程安全 deque + RLock
+│   │   ├── filters.py                    # WaveformProcessor：去趋势 + Butterworth bandpass (filtfilt)
+│   │   ├── detector.py                   # STA/LTA 触发检测器 + 状态机
+│   │   ├── spectrum.py                   # 滑窗 FFT（基于 scipy.signal.spectrogram）
+│   │   ├── recorder.py                   # 事件录波器，保存为 MiniSEED
+│   │   ├── sonifier.py                   # 地震波形 → 加速 PCM 音频
+│   │   └── intensity.py                  # PGA → MMI 烈度（修订 Wood-Anderson）
+│   │
+│   ├── services/                         # ── 异步 I/O 层 (17) ──
+│   │   ├── data_models.py                # @dataclass: Earthquake · Station · Trigger · StationPreset
+│   │   ├── cache.py                      # 文件响应缓存，5 min TTL，Windows NTFS 时钟纠正
+│   │   ├── worker.py                     # QObject 包装的周期刷新（30 s）+ 双 period slot
+│   │   ├── usgs.py                       # USGS GeoJSON 实时地震 feed 客户端
+│   │   ├── iris.py                       # IRIS FDSN station 客户端（IU/US/II 网络）
+│   │   ├── shakenet.py                   # Raspberry Shake FDSN 客户端
+│   │   ├── dataselect.py                 # IRIS FDSN dataselect（MiniSEED 下载）
+│   │   ├── report.py                     # HTML 报告生成器（含 SVG 时间线）
+│   │   ├── timezone_service.py           # 系统时区检测 + 用户覆盖；tzlocal 兜底
+│   │   ├── location_service.py           # ip-api.com IP 地理定位
+│   │   ├── activity_log.py               # 本地活动日志（最近 50 条，JSONL）
+│   │   ├── usage_tracker.py              # 使用统计计数（启动次数、监听秒数等）
+│   │   ├── shake_presets.py              # LAN Shake 预设持久化
+│   │   ├── favorites_store.py            # 收藏地震/台站
+│   │   ├── clear_cache.py                # 一键清空所有本地状态
+│   │   ├── github_auth.py                # GitHub Device Flow OAuth；烘焙 DEFAULT_CLIENT_ID
+│   │   └── settings_backup.py            # 设置 JSON 导出/导入（v0.7-C 后仅测试使用）
+│   │
+│   ├── ui/                               # ── PySide6 (32) ──
+│   │   ├── main_window.py                # 根 QMainWindow + 全局 signal hub + 菜单
+│   │   ├── app_header.py                 # 顶部应用栏（tabs + 主题/层切换 + Settings/Profile/Workbench 按钮）
+│   │   ├── sidebar_nav.py                # 左侧导航栏（默认隐藏）
+│   │   ├── globe_view.py                 # GlobeView：QWebEngineView 包 web/globe/
+│   │   ├── dashboard_view.py             # DashboardView：QWebEngineView 包 web/dashboard/
+│   │   ├── pro_window.py                 # 独立的工作台浮窗（前身为 "Pro"）
+│   │   ├── control_panel.py              # 台站选择 + 滤波 + Listen 控件（FIFO 8 个动态台站）
+│   │   ├── waveform_widget.py            # 三通道 pyqtgraph 滚动波形
+│   │   ├── spectrogram_widget.py         # pyqtgraph ImageItem 频谱图
+│   │   ├── helicorder_widget.py          # 24h 鼓式记录视图
+│   │   ├── particle_motion_widget.py     # N-E 平面质点轨迹
+│   │   ├── intensity_card.py             # MMI 烈度翻译卡（用户友好语言）
+│   │   ├── replay_panel.py               # 历史回放 UI（datetime 选 + 速度滑块）
+│   │   ├── audio_player.py               # QAudioSink 包装 + 状态机
+│   │   ├── settings_dialog.py            # 设置（General · My Shakes · Reset）
+│   │   ├── profile_dialog.py             # Profile 对话框容器
+│   │   ├── profile_view.py               # Profile 内容（GitHub 卡片 + 活动时间线）
+│   │   ├── github_login_dialog.py        # GitHub Device Flow UI（Intro / Waiting / Success 三页）
+│   │   ├── onboarding_wizard.py          # 首次启动引导（语言 → 时区 → 主题 → 完成）
+│   │   ├── localizame_view.py            # 位置检测过场（光晕扩散动画）
+│   │   ├── add_shake_dialog.py           # 加 LAN Shake 对话框（带 mDNS 自动发现）
+│   │   ├── loading_overlay.py            # 加载/错误覆盖层
+│   │   ├── splash.py                     # 启动 splash（科幻地震波 logo + 进度文字）
+│   │   ├── theme.py                      # 调色板 + QSS 模板（含 QLabel#DialogError 等）
+│   │   ├── theme_manager.py              # 运行时主题切换（light/dark）+ 信号
+│   │   ├── layer_mode_manager.py         # Globe 层模式（day/night/holographic）
+│   │   ├── pg_theming.py                 # pyqtgraph 主题订阅器（轴/网格颜色跟主题）
+│   │   ├── animations.py                 # 呼吸/淡入/脉冲三个工厂函数
+│   │   ├── elevation.py                  # Material/macOS 阴影 helper（0–3 级）
+│   │   ├── icons.py                      # 资源图标加载（svg/png + 主题感知）
+│   │   ├── macos_native.py               # macOS 透明标题栏 + 全屏内容视图（pyobjc）
+│   │   └── pdf_exporter.py               # QWebEnginePage.printToPdf 包装
+│   │
+│   ├── i18n/                             # ── 国际化 ──
+│   │   ├── service.py                    # LocaleService + t() + language_changed_signal
+│   │   └── locales/{en,zh,es,fr}.json    # 4 语言对齐字典，**each 444 keys**
+│   │
+│   ├── web/                              # ── 嵌入式 Web 视图（被 QWebEngineView 加载）──
+│   │   ├── globe/                        # ECharts-GL 3D 地球（index.html + globe.js + styles.css + lib/）
+│   │   ├── dashboard/                    # 7 张 ECharts 看板（index.html + dashboard.js + ...）
+│   │   └── report/                       # HTML 报告模板
+│   │
+│   ├── assets/                           # ── 资源 ──
+│   │   ├── fonts/{Inter.ttc, JetBrainsMono*.ttf}    # 字体（脚本下载，不入仓）
+│   │   ├── icons/                        # 导航 PNG 图标
+│   │   └── branding/{app_icon*.png, logo_for_*.png} # SeismicGuard logo
+│   │
+│   └── utils/
+│       └── logging.py                    # setup_logging + PyInstaller --windowed 兜底
 │
-├── tests/                    # pytest 单元 + 集成（40+ 模块）
-├── packaging/                # ⭐ PyInstaller spec + 跨平台 build.py + 平台资源
-│   ├── shakevision.spec
-│   ├── build.py
-│   └── README.md             # 打包深度说明
-├── scripts/                  # install_libs.sh / install_fonts.sh / download_globe_assets.py
-├── .github/workflows/        # ci.yml（每次 push） + release.yml（tag 触发）
-├── CHANGELOG.md
-├── pyproject.toml
-└── README.md                 # 本文件（外加 README.en.md / README.es.md / README.fr.md）
+├── tests/                                # 45+ pytest 模块（含 mock ObsPy 客户端、PySide6 widget 单测）
+├── packaging/                            # ── 打包 ──
+│   ├── shakevision.spec                  # PyInstaller spec（macOS BUNDLE + Win VS_VERSIONINFO）
+│   ├── build.py                          # 跨平台打包驱动（含 dmg/AppImage 后处理）
+│   ├── windows/version_info.txt          # Windows .exe 资源（CompanyName/FileVersion 等）
+│   ├── macos/                            # macOS bundle 资源
+│   ├── linux/                            # AppImage 资源
+│   └── README.md                         # 打包深度文档
+├── scripts/                              # install_libs.sh · install_fonts.sh · download_globe_assets.py
+├── .github/workflows/                    # ci.yml（push/PR） + release.yml（tag 触发）
+├── CHANGELOG.md                          # Keep-a-Changelog 格式
+├── pyproject.toml                        # 包元数据 + 依赖
+├── LICENSE                               # MIT
+└── README.{md,en.md,es.md,fr.md}         # 4 语言 README
 ```
 
 ---

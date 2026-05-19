@@ -169,7 +169,10 @@ class GitHubLoginDialog(QDialog):
         self._intro_body.setWordWrap(True)
         layout.addWidget(self._intro_body)
 
-        # Si no hay client_id configurado: campo para introducirlo
+        # v0.7.4 patch — siempre mostrar el campo client_id (el usuario
+        # puede actualizarlo en cualquier momento). Antes solo se
+        # mostraba si NO había uno configurado, lo cual ocultaba el
+        # control para el caso de "client_id obsoleto / quiero cambiar".
         self._client_id_field = QLineEdit()
         # v0.5 阶段 O — el placeholder ahora está en los 4 locales.
         self._client_id_field.setPlaceholderText(
@@ -178,8 +181,28 @@ class GitHubLoginDialog(QDialog):
         if cur:
             self._client_id_field.setText(cur)
         layout.addWidget(self._client_id_field)
-        # Solo mostrar el campo si no está ya configurado
-        self._client_id_field.setVisible(not GitHubAuthService.is_configured())
+
+        # v0.7.4 patch — link "How do I get a client ID?" que abre la
+        # página de registro de OAuth Apps en GitHub. Crucial para que
+        # los usuarios no se queden atascados en "el botón no hace nada".
+        self._intro_hint = QLabel()
+        self._intro_hint.setObjectName("DialogHint")
+        self._intro_hint.setWordWrap(True)
+        self._intro_hint.setOpenExternalLinks(True)
+        self._intro_hint.setTextInteractionFlags(
+            Qt.TextBrowserInteraction)
+        layout.addWidget(self._intro_hint)
+
+        # v0.7.4 patch — etiqueta de estado/error visible en la página
+        # INTRO. Antes, los errores de _on_connect_clicked se mandaban
+        # a _wait_status (que vive en PAGE_WAITING y NO está visible
+        # cuando estamos en PAGE_INTRO) → el botón "Connect" parecía
+        # muerto: se hacía clic y no se veía nada.
+        self._intro_status = QLabel()
+        self._intro_status.setObjectName("DialogError")
+        self._intro_status.setWordWrap(True)
+        self._intro_status.setVisible(False)
+        layout.addWidget(self._intro_status)
 
         btn_row = QHBoxLayout()
         btn_row.addStretch(1)
@@ -271,7 +294,19 @@ class GitHubLoginDialog(QDialog):
     # Acciones
     # ------------------------------------------------------------------
     def _on_connect_clicked(self) -> None:
-        """Inicia el Device Flow. Maneja NotConfigured y errores de red."""
+        """Inicia el Device Flow. Maneja NotConfigured y errores de red.
+
+        v0.7.4 patch — los errores ahora van a ``_intro_status``
+        (visible en la página INTRO) en lugar de ``_wait_status`` (que
+        está en una página oculta). Y tras un start_device_flow OK,
+        abrimos el navegador automáticamente en ``verification_uri``
+        — el usuario espera "1 clic → se abre GitHub", no tener que
+        pulsar "Connect" + esperar + pulsar "Open GitHub".
+        """
+
+        # Limpiar cualquier error previo de un intento anterior.
+        self._intro_status.setVisible(False)
+        self._intro_status.setText("")
 
         # Si el usuario tipeó un client_id ad-hoc, persistirlo antes.
         cid = self._client_id_field.text().strip()
@@ -281,12 +316,14 @@ class GitHubLoginDialog(QDialog):
         try:
             info = GitHubAuthService.start_device_flow()
         except NotConfiguredError:
-            self._wait_status.setText(
+            self._intro_status.setText(
                 t("github.login.not_configured"))
+            self._intro_status.setVisible(True)
             return
         except GitHubAuthError as exc:
-            self._wait_status.setText(
+            self._intro_status.setText(
                 t("github.login.network_error", error=str(exc)))
+            self._intro_status.setVisible(True)
             return
 
         self._device_info = info
@@ -294,6 +331,14 @@ class GitHubLoginDialog(QDialog):
         self._wait_status.setText(t("github.login.waiting"))
         self._stack.setCurrentIndex(self.PAGE_WAITING)
         self._retranslate()    # actualiza botones de la nueva página
+
+        # v0.7.4 patch — auto-open browser. Si openUrl falla
+        # (entorno sin escritorio), el usuario aún puede pulsar
+        # "Open GitHub" en la página WAITING como fallback.
+        try:
+            QDesktopServices.openUrl(QUrl(info.verification_uri))
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("GitHubLoginDialog: openUrl falló (%s)", exc)
 
         self._start_polling_thread(info)
 
@@ -373,6 +418,10 @@ class GitHubLoginDialog(QDialog):
         if hasattr(self, "_client_id_field"):
             self._client_id_field.setPlaceholderText(
                 t("github.login.client_id_placeholder"))
+
+        # v0.7.4 patch — hint con link a registrar OAuth App.
+        if hasattr(self, "_intro_hint"):
+            self._intro_hint.setText(t("github.login.client_id_help"))
 
     # ------------------------------------------------------------------
     # Cerrar limpiamente
