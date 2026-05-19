@@ -6,6 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ---
 
+## [0.7.2] — 2026-05-18
+
+🪟 **Hotfix: Windows .exe crash on launch.**
+
+### Fixed
+- **PyInstaller `--windowed` startup crash on Windows** (regression
+  reported in v0.7.1):
+  ```
+  Traceback (most recent call last):
+    File "__main__.py", line 27, in <module>
+  RuntimeError: sys.stderr is None
+  ```
+  When PyInstaller builds a GUI app without a console window
+  (`--windowed` / `--noconsole`), Python's `sys.stdout` and
+  `sys.stderr` are both `None`. Two places relied on them and crashed
+  before the splash could appear:
+    * `__main__.py` — `faulthandler.enable()` (no args) tries to dump
+      to `sys.stderr`.
+    * `utils/logging.py:setup_logging()` — `StreamHandler(stream=
+      sys.stdout)` raises on the first log line.
+- Fix in `__main__.py`: if `sys.stderr is None`, route faulthandler
+  output to `%TEMP%/seismicguard_faulthandler.log` instead. File
+  handle kept alive on `sys` to survive GC.
+- Fix in `utils/logging.py`: new `_make_stream_handler()` chooses
+  `sys.stdout` → `sys.stderr` → `FileHandler(%TEMP%/seismicguard.log)`
+  → `NullHandler` as a robust cascade. The log file path is consistent
+  across runs so users can find it for bug reports.
+
+### Changed
+- Version bumped 0.7.1 → 0.7.2 in `pyproject.toml`,
+  `shakevision/__init__.py`, and `packaging/shakevision.spec`.
+
+---
+
 ## [0.7.1] — 2026-05-18
 
 🎨 **New app icon** — cracked-earth SeismicGuard mark on deep navy.

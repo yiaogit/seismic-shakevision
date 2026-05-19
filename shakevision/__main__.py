@@ -19,12 +19,37 @@ from __future__ import annotations
 
 import faulthandler
 import logging
+import os
 import sys
+import tempfile
 import traceback
 
-# v0.5.2: capturar segfaults C++ (común con Qt + WebEngine) en stderr
-# para que el usuario vea POR QUÉ se cuelga, en vez de "splash → nada".
-faulthandler.enable()
+# v0.5.2: capturar segfaults C++ (común con Qt + WebEngine).
+#
+# v0.7.2 fix: PyInstaller-Windows-noconsole gotcha — cuando empaqueta
+# el .exe sin console (windowed=True), ``sys.stderr`` y ``sys.stdout``
+# son ``None``. ``faulthandler.enable()`` sin argumentos intenta
+# escribir a sys.stderr y revienta con
+#   "RuntimeError: sys.stderr is None"
+# en la PRIMERA línea ejecutada, antes incluso de mostrar el splash.
+#
+# Solución: si stderr no existe, redirigimos faulthandler a un fichero
+# en %TEMP%/seismicguard_faulthandler.log. Nunca borrado por la app —
+# si el usuario reporta un crash futuro, ahí está el stack C++.
+try:
+    if sys.stderr is not None:
+        faulthandler.enable()
+    else:
+        _fh_path = os.path.join(
+            tempfile.gettempdir(), "seismicguard_faulthandler.log")
+        _fh_file = open(_fh_path, "a", encoding="utf-8", buffering=1)
+        faulthandler.enable(file=_fh_file)
+        # Mantener una referencia viva para que el GC no cierre el file
+        sys._sg_fh_file = _fh_file  # type: ignore[attr-defined]
+except Exception:  # noqa: BLE001
+    # Si por algún motivo no logramos activarlo (FS read-only, etc.)
+    # seguimos: faulthandler es bonito-tener, no crítico.
+    pass
 
 # NOTA: los siguientes imports ocurren intencionalmente DESPUÉS de
 # faulthandler.enable() y sys.excepthook = _excepthook para garantizar
