@@ -37,6 +37,11 @@ def _isolated(tmp_path, monkeypatch):
     monkeypatch.delenv("SEISMICGUARD_GITHUB_CLIENT_ID", raising=False)
 
     from shakevision.services import github_auth as ga
+    # v0.7.5 — la app ahora trae un DEFAULT_CLIENT_ID horneado. Para
+    # los tests de "configuración" (env / QSettings / NotConfigured)
+    # lo blanqueamos: queremos verificar el COMPORTAMIENTO de la
+    # cascada, no que el binario actual venga con uno por defecto.
+    monkeypatch.setattr(ga, "DEFAULT_CLIENT_ID", "")
     ga._reset_for_tests()
     yield
     ga._reset_for_tests()
@@ -76,6 +81,30 @@ def test_start_device_flow_raises_when_not_configured() -> None:
 
     with pytest.raises(NotConfiguredError):
         GitHubAuthService.start_device_flow()
+
+
+def test_baked_in_default_client_id_is_used_when_no_override(monkeypatch) -> None:
+    """v0.7.5 — el DEFAULT_CLIENT_ID horneado debe servir de fallback
+    cuando no hay env ni QSettings. El fixture _isolated lo blanquea
+    para los otros tests; aquí lo restauramos a un valor de prueba
+    para verificar la cascada de prioridad: env > QSettings > DEFAULT.
+    """
+
+    from shakevision.services import github_auth as ga
+    from shakevision.services.github_auth import GitHubAuthService
+
+    monkeypatch.setattr(ga, "DEFAULT_CLIENT_ID", "Ov23liBAKEDTEST")
+    ga._reset_for_tests()
+    assert GitHubAuthService.client_id() == "Ov23liBAKEDTEST"
+    assert GitHubAuthService.is_configured() is True
+
+    # QSettings sobrescribe el DEFAULT
+    GitHubAuthService.set_client_id("from-settings")
+    assert GitHubAuthService.client_id() == "from-settings"
+
+    # Env var gana sobre todo
+    monkeypatch.setenv("SEISMICGUARD_GITHUB_CLIENT_ID", "from-env")
+    assert GitHubAuthService.client_id() == "from-env"
 
 
 # ============================================================

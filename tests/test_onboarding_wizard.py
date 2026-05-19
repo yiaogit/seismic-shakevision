@@ -186,12 +186,12 @@ def test_wizard_theme_radio_applies_immediately(qapp_factory) -> None:
         with patch(
             "shakevision.ui.theme_manager.ThemeManager.set_mode"
         ) as mock_set:
-            # Seleccionar dark (puede que ya esté checked si es el
-            # tema actual; en ese caso forzamos toggle vía auto→dark)
-            wiz._theme_buttons["auto"].setChecked(True)
+            # v0.7.4 — quitamos la opción "auto" (era no-op porque
+            # ThemeManager solo soporta light/dark). Forzamos toggle
+            # light → dark para verificar que el radio dispara
+            # ThemeManager.set_mode("dark").
+            wiz._theme_buttons["light"].setChecked(True)
             wiz._theme_buttons["dark"].setChecked(True)
-            # Tras el último toggle, ThemeManager.set_mode("dark") debió
-            # invocarse al menos una vez.
             calls_dark = [
                 c for c in mock_set.call_args_list
                 if c.args and c.args[0] == "dark"
