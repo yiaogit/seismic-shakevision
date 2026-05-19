@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ---
 
+## [0.7.1] — 2026-05-18
+
+🎨 **New app icon** — cracked-earth SeismicGuard mark on deep navy.
+
+### Added
+- New app icon (`packaging/macos/icon.icns`, `packaging/windows/icon.ico`,
+  `packaging/linux/icon.png`) with deep-navy rounded-square background,
+  yellow cracked-earth glyph, and "SeismicGuard" wordmark below.
+- `shakevision/assets/branding/app_icon.png` + `app_icon_512.png` bundled
+  for in-app use (About dialog, splash fallback, etc.).
+- ICO is multi-resolution (16/32/48/64/128/256); ICNS contains the
+  standard macOS variant set; Linux PNG is 1024×1024 for AppImage and
+  `.desktop` entries.
+
+### Changed
+- `packaging/shakevision.spec` BUNDLE bumped from `0.3.0` → `0.7.1`
+  (CFBundleShortVersionString + CFBundleVersion also updated from the
+  stale `0.1.1` placeholder).
+- Version bumped 0.7.0 → 0.7.1 in `pyproject.toml` and
+  `shakevision/__init__.py`.
+
+---
+
 ## [0.7.0] — 2026-05-18
 
 🎨 **Major redesign release** — rebrand, theming, internationalisation,

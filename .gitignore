@@ -98,3 +98,6 @@ shakevision/web/globe/lib/*.js
 shakevision/web/globe/lib/*.jpg
 shakevision/web/globe/lib/*.png
 shakevision/web/dashboard/lib/*.js
+
+# v0.7.1: original logo upload (master copy lives in shakevision/assets/branding/)
+/seismicguard_logo.png
