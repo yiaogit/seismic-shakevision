@@ -117,10 +117,38 @@ class LoadingOverlay(QFrame):
         # usuario cambia el idioma en Ajustes. Sin esto, un overlay
         # construido en español queda con "Reintentar" para siempre
         # aunque el usuario cambie a 中文 / English / Français.
+        #
+        # v0.7.6.1: usar bound method (no lambda) para poder hacer
+        # disconnect cuando el widget muere — sino LocaleService
+        # mantiene la lambda viva indefinidamente y al disparar
+        # language_changed después de deleteLater() crashea con
+        # "Internal C++ object already deleted" (visto en pytest
+        # teardowns en CI). Doble defensa: try/except en el slot por
+        # si el disconnect llegara tarde.
         try:
             LocaleService.language_changed_signal().connect(
-                lambda _lang: self._retranslate())
+                self._on_language_changed)
+            self.destroyed.connect(self._disconnect_locale_signal)
         except Exception:  # noqa: BLE001
+            pass
+
+    def _on_language_changed(self, _lang) -> None:
+        """Slot del cambio de idioma — defiende contra widget muerto."""
+        try:
+            self._retranslate()
+        except RuntimeError:
+            # El objeto C++ del widget ya fue borrado (típico en
+            # teardowns de pytest-qt). Silenciar — el disconnect
+            # debería hacerlo, pero por si llega tarde.
+            pass
+
+    def _disconnect_locale_signal(self, *_args) -> None:
+        """Desuscribir del signal global cuando el widget muere."""
+        try:
+            LocaleService.language_changed_signal().disconnect(
+                self._on_language_changed)
+        except (TypeError, RuntimeError):
+            # Ya desconectado o signal ya destruido — fine.
             pass
 
     def _retranslate(self) -> None:

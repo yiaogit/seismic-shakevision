@@ -140,7 +140,9 @@ def test_500_raises_dataselect_error(client: DataselectClient) -> None:
                                       {}, None)
 
     with patch("urllib.request.urlopen", side_effect=fake_open):
-        with pytest.raises(DataselectError, match="contactar"):
+        # v0.7.6: error message goes through i18n (t("error.dataselect.contact"));
+        # match on "dataselect" which is stable across all 4 locales (EN/ES/FR/ZH).
+        with pytest.raises(DataselectError, match="dataselect"):
             client.fetch_miniseed(
                 "IU", "ANMO", "00", "BHZ",
                 _utc(2024, 1, 1), _utc(2024, 1, 1, 0, 5),
