@@ -6,12 +6,76 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ---
 
+## [0.7.6.1] — 2026-05-21
+
+🩹 **Patch release** wrapping up the post-v0.7.6 fixes — loading overlay
+i18n cleanup across the four data-source clients, onboarding wizard
+initial-theme synchronization, the removal of the legacy `auto` theme
+mode, and the CI hotfix for the dataselect test regex + LoadingOverlay
+dead-widget guard.
+
+### Removed
+- **`auto` theme mode** — see v0.7.6 entry below. No user-visible
+  regression: existing `auto` preferences migrate to `dark` on first
+  launch under v0.7.6.1.
+
+### Fixed
+- **Onboarding wizard initial theme out of sync with MainWindow** —
+  see v0.7.6 entry below for details.
+- **Mixed-language error dialog (USGS / IRIS / ShakeNet / dataselect)**
+  — see v0.7.6 entry below for details.
+
+### Changed
+- Version bumped 0.7.6 → 0.7.6.1 across `pyproject.toml`,
+  `shakevision/__init__.py`, `packaging/shakevision.spec`,
+  `packaging/windows/version_info.txt`.
+
+### Internal
+- `tests/test_dataselect.py::test_500_raises_dataselect_error` regex
+  switched from Spanish literal `'contactar'` to language-agnostic
+  `'dataselect'` so the i18n error message matches under any locale.
+- `LoadingOverlay`: bound-method slot + `destroyed`-signal disconnect
+  + defensive `try/except RuntimeError`, eliminating the
+  "Internal C++ object already deleted" cascade that broke 12
+  `test_report` tests in CI after v0.7.6.
+
+---
+
 ## [0.7.6] — 2026-05-20
 
 🍎 **Hotfix: macOS .dmg SSL CERTIFICATE_VERIFY_FAILED + loading overlay
-i18n cleanup.**
+i18n cleanup + ThemeManager simplification.**
+
+### Removed
+- **`auto` theme mode** — the `ThemeManager` previously had three modes
+  (`auto`, `light`, `dark`), where `auto` flipped between light and
+  dark based on the system clock (6:00–18:00 = light, otherwise dark).
+  Removed in v0.7.6 because (a) it ignored the OS color-scheme
+  preference (so it could disagree with macOS dark mode); (b) it was
+  the root cause of the "MainWindow dark, onboarding wizard light"
+  inconsistency reported on first-launch flows; (c) it added a global
+  QTimer just to poll the hour. Users with `mode="auto"` saved in
+  QSettings auto-migrate to `dark` on next launch (see
+  `_load_persisted_mode`). The header theme button now cycles
+  light↔dark only.
 
 ### Fixed
+- **Onboarding wizard initial theme out of sync with MainWindow** —
+  opening the app during daytime hours (auto+morning) would render
+  MainWindow light, then the wizard would briefly appear light, then
+  the theme page's "auto→dark" fallback would re-emit `theme_changed`,
+  the app stylesheet would re-apply as dark, but the wizard's local
+  stylesheet listener was connected *after* page construction and
+  missed the first emit — leaving MainWindow dark while wizard stayed
+  light. Three-layer fix in `onboarding_wizard.py`:
+    * Pre-select the radio using `ThemeManager.current_theme()` (always
+      `light`/`dark`) instead of `mode()` (could be `auto`).
+    * `blockSignals(True)` around the init-time `setChecked` so the
+      `toggled`-driven `set_mode` side effect never runs during
+      construction.
+    * Move `ThemeManager.changed_signal().connect()` to BEFORE page
+      construction, plus a final defensive `setStyleSheet()` at the
+      end of `__init__`.
 - **Mixed-language error dialog** — when a network call to USGS / IRIS
   / ShakeNet / IRIS dataselect failed, the loading overlay rendered a
   Frankenstein of three languages on a single screen: an English

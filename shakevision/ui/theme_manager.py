@@ -1,21 +1,24 @@
 """
 ``ThemeManager`` — singleton de selección de tema (v0.4.0+).
 
-Tres modos:
-  * ``"dark"``  — tema oscuro permanente
-  * ``"light"`` — tema claro permanente
-  * ``"auto"`` — el manager elige según la hora local del usuario
-    (6:00–18:00 = light, fuera de ese rango = dark)
+Dos modos:
+  * ``"dark"``  — tema oscuro (default)
+  * ``"light"`` — tema claro
 
-Cuando el modo es ``auto`` el manager mantiene un QTimer cada 60 s
-que comprueba si la franja horaria cambió y emite ``theme_changed``
-con el nuevo nombre efectivo (no el modo).
+Historial: hasta v0.7.6 existía un tercer modo ``"auto"`` que alternaba
+light/dark según la hora local (6:00-18:00 = light, resto = dark).
+Se eliminó en v0.7.6 porque (a) no respetaba el modo del SO, lo que
+generaba inconsistencias visuales (MainWindow oscuro + onboarding
+claro cuando el wizard re-disparaba el efectivo durante init); (b)
+añadía complejidad con un QTimer global solo para auto-tick. Los
+usuarios con ``mode="auto"`` persistido migran automáticamente a
+``"dark"`` en el próximo arranque (ver ``_load_persisted_mode``).
 
 Persistencia
 ------------
 QSettings ``"SeismicGuard"/"Theme"/"theme/mode"`` guarda el modo
 elegido por el usuario. ``current_theme()`` siempre devuelve el
-efectivo (``"dark"`` o ``"light"``), nunca ``"auto"``.
+modo actual (``"dark"`` o ``"light"``).
 
 Uso típico
 ----------
@@ -23,7 +26,7 @@ Uso típico
     from shakevision.ui.theme import apply_theme
 
     # En __main__ tras crear QApplication:
-    ThemeManager.init(app)            # detecta modo guardado + aplica
+    ThemeManager.init(app)            # carga modo guardado + aplica
     apply_theme(app, ThemeManager.current_theme())
 
     # En widgets que quieran reaccionar:
@@ -32,18 +35,20 @@ Uso típico
 
 from __future__ import annotations
 
-import datetime as _dt
 import logging
 import threading
 from typing import Literal, Optional
 
-from PySide6.QtCore import QObject, QTimer, Signal
+from PySide6.QtCore import QObject, Signal
 
 
 logger = logging.getLogger(__name__)
 
 
-ThemeMode = Literal["dark", "light", "auto"]
+# v0.7.6: ``"auto"`` eliminado del Literal. El tipo "compat" sigue
+# aceptando "auto" como entrada para retro-compat con QSettings
+# previas, pero internamente todo se normaliza a dark/light.
+ThemeMode = Literal["dark", "light"]
 EffectiveTheme = Literal["dark", "light"]
 
 
@@ -51,15 +56,7 @@ _QSETTINGS_ORG: str = "SeismicGuard"
 _QSETTINGS_APP: str = "Theme"
 _QSETTINGS_KEY_MODE: str = "theme/mode"
 
-DEFAULT_MODE: ThemeMode = "auto"
-
-# Rango horario "diurno". Inclusivo al inicio, exclusivo al final.
-# Fuera de [DAY_START, DAY_END) usamos dark.
-DAY_START_HOUR: int = 6
-DAY_END_HOUR:   int = 18
-
-# Frecuencia con que el modo auto re-comprueba la hora (ms).
-_AUTO_CHECK_INTERVAL_MS: int = 60_000
+DEFAULT_MODE: ThemeMode = "dark"
 
 
 # ============================================================
@@ -68,17 +65,15 @@ _AUTO_CHECK_INTERVAL_MS: int = 60_000
 class _Singleton(QObject):
     """Implementación concreta del manager."""
 
-    # Emitido con el tema EFECTIVO (``"dark"`` o ``"light"``), no el modo.
+    # Emitido con el tema EFECTIVO (``"dark"`` o ``"light"``).
     theme_changed = Signal(str)
 
     def __init__(self) -> None:
         super().__init__()
         self._lock = threading.RLock()
         self._mode: ThemeMode = self._load_persisted_mode()
-        self._effective: EffectiveTheme = self._compute_effective(self._mode)
-
-        # Timer del modo auto (se inicia solo si _mode == "auto")
-        self._timer: Optional[QTimer] = None
+        # En el nuevo modelo mode == effective siempre.
+        self._effective: EffectiveTheme = self._mode
 
     # ------------------------------------------------------------------
     # Lectura
@@ -92,77 +87,48 @@ class _Singleton(QObject):
     # ------------------------------------------------------------------
     # Mutaciones
     # ------------------------------------------------------------------
-    def set_mode(self, mode: ThemeMode) -> None:
-        """Cambia el modo; emite ``theme_changed`` si el efectivo cambia."""
+    def set_mode(self, mode: str) -> None:
+        """Cambia el modo; emite ``theme_changed`` si cambió.
 
-        if mode not in ("dark", "light", "auto"):
+        Acepta str (no ThemeMode estricto) para que callers viejos
+        que aún pasen ``"auto"`` no rompan — lo normalizamos a "dark".
+        """
+
+        # v0.7.6: normalización de compat — "auto" → "dark".
+        if mode == "auto":
+            logger.info("ThemeManager: modo 'auto' eliminado en v0.7.6 — "
+                        "normalizando a 'dark'.")
+            mode = "dark"
+        if mode not in ("dark", "light"):
             logger.warning("Modo de tema desconocido %r, ignorado", mode)
             return
         with self._lock:
             if mode == self._mode:
                 return
-            self._mode = mode
-            self._persist_mode(mode)
-            new_eff = self._compute_effective(mode)
-            changed = new_eff != self._effective
-            self._effective = new_eff
-            # Gestionar el timer del modo auto
-            self._configure_auto_timer()
+            self._mode = mode  # type: ignore[assignment]
+            self._persist_mode(mode)  # type: ignore[arg-type]
+            self._effective = mode  # type: ignore[assignment]
 
-        if changed:
-            self.theme_changed.emit(self._effective)
-
-    # ------------------------------------------------------------------
-    # Inicialización del timer auto (público para tests; en producción
-    # se llama desde init())
-    # ------------------------------------------------------------------
-    def _configure_auto_timer(self) -> None:
-        if self._mode == "auto":
-            if self._timer is None:
-                self._timer = QTimer(self)
-                self._timer.setInterval(_AUTO_CHECK_INTERVAL_MS)
-                self._timer.timeout.connect(self._on_auto_tick)
-            if not self._timer.isActive():
-                self._timer.start()
-        else:
-            if self._timer is not None and self._timer.isActive():
-                self._timer.stop()
-
-    def _on_auto_tick(self) -> None:
-        """Comprueba si la franja horaria cambió y emite si toca."""
-
-        with self._lock:
-            if self._mode != "auto":
-                return
-            new_eff = self._compute_effective("auto")
-            if new_eff != self._effective:
-                self._effective = new_eff
-                changed = True
-            else:
-                changed = False
-        if changed:
-            self.theme_changed.emit(self._effective)
+        self.theme_changed.emit(self._effective)
 
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
     @staticmethod
-    def _compute_effective(mode: ThemeMode) -> EffectiveTheme:
-        if mode == "dark":
-            return "dark"
-        if mode == "light":
-            return "light"
-        # auto
-        hour = _dt.datetime.now().hour
-        return "light" if DAY_START_HOUR <= hour < DAY_END_HOUR else "dark"
-
-    @staticmethod
     def _load_persisted_mode() -> ThemeMode:
+        """Lee el modo persistido + migra 'auto' (legacy) a 'dark'."""
+
         try:
             from PySide6.QtCore import QSettings
             settings = QSettings(_QSETTINGS_ORG, _QSETTINGS_APP)
             val = settings.value(_QSETTINGS_KEY_MODE, DEFAULT_MODE, type=str)
-            if val in ("dark", "light", "auto"):
+            # v0.7.6 migration: usuarios con auto guardado → dark.
+            if val == "auto":
+                logger.info("ThemeManager: migrando QSettings 'auto' → 'dark' "
+                            "(modo auto eliminado en v0.7.6).")
+                settings.setValue(_QSETTINGS_KEY_MODE, "dark")
+                return "dark"
+            if val in ("dark", "light"):
                 return val   # type: ignore[return-value]
         except Exception as exc:  # noqa: BLE001
             logger.debug("ThemeManager: no se pudo leer QSettings (%s)", exc)
@@ -202,14 +168,13 @@ class ThemeManager:
         """Arranca el manager y conecta el tema actual a la QApplication.
 
         Debe llamarse UNA vez en ``__main__`` justo después de crear
-        ``QApplication``. Se encarga de aplicar el tema persistido +
-        arrancar el timer del modo auto si corresponde.
+        ``QApplication``. Se encarga de aplicar el tema persistido
+        sobre la QApplication.
         """
 
         from shakevision.ui.theme import apply_theme
 
         inst = _get_instance()
-        inst._configure_auto_timer()
         apply_theme(app, inst.current_theme())
 
         # Reaplicar el QSS cada vez que el manager cambie de tema.
@@ -224,7 +189,7 @@ class ThemeManager:
         return _get_instance().current_theme()
 
     @staticmethod
-    def set_mode(mode: ThemeMode) -> None:
+    def set_mode(mode: str) -> None:
         _get_instance().set_mode(mode)
 
     @staticmethod

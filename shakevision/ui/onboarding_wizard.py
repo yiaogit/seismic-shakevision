@@ -159,6 +159,21 @@ class OnboardingWizard(QDialog):
         self._stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         root.addWidget(self._stack, 1)
 
+        # v0.7.6 fix (defensivo): suscribirse al ``theme_changed`` ANTES
+        # de construir las páginas. Si alguna página dispara
+        # accidentalmente un set_mode durante init (p.ej. al hacer
+        # setChecked en un radio button enganchado a toggled), el wizard
+        # captura la señal y reaplica su propio QSS. Antes del fix esta
+        # conexión vivía DESPUÉS de las páginas y se perdía la primera
+        # emisión, dejando el wizard con QSS de un tema y MainWindow
+        # con QSS del otro.
+        try:
+            from shakevision.ui.theme_manager import ThemeManager
+            ThemeManager.changed_signal().connect(
+                lambda _t: self.setStyleSheet(self._build_qss()))
+        except Exception:  # noqa: BLE001
+            pass
+
         # ── Construcción de las 6 páginas ──
         self._stack.addWidget(self._build_welcome_page())
         self._stack.addWidget(self._build_language_page())
@@ -195,13 +210,15 @@ class OnboardingWizard(QDialog):
         except Exception:  # noqa: BLE001
             pass
 
-        # v0.7.4: el wizard puede cambiar el tema en vivo desde su
-        # propia página "Tema" — al hacerlo, re-aplicamos QSS para
-        # que el propio wizard adopte la nueva paleta inmediatamente.
+        # v0.7.6 fix: reaplicar QSS al final del __init__ por si la
+        # construcción de las páginas disparó algún cambio de tema que
+        # quedó pendiente — así garantizamos que el wizard refleja la
+        # paleta ACTUAL antes de mostrarse al usuario, incluso si entre
+        # setStyleSheet inicial (línea ~136) y este punto algo movió
+        # los globals COLOR_*. (La suscripción a ``theme_changed`` ya
+        # se hizo más arriba, antes de construir las páginas.)
         try:
-            from shakevision.ui.theme_manager import ThemeManager
-            ThemeManager.changed_signal().connect(
-                lambda _t: self.setStyleSheet(self._build_qss()))
+            self.setStyleSheet(self._build_qss())
         except Exception:  # noqa: BLE001
             pass
 
@@ -327,10 +344,9 @@ class OnboardingWizard(QDialog):
 
         self._theme_group = QButtonGroup(self)
         self._theme_buttons: dict[str, QRadioButton] = {}
-        # v0.7.4 fix: removido el modo "auto" — la lógica de auto-detect
-        # del tema del sistema no estaba implementada (ThemeManager solo
-        # honra light/dark) y el usuario lo elegía sin efecto. Ahora
-        # solo light / dark, ambos funcionan.
+        # v0.7.4: solo light / dark (auto eliminado del wizard).
+        # v0.7.6: auto también eliminado de ThemeManager — mode() y
+        # current_theme() ya devuelven siempre uno de los dos.
         for mode in ("light", "dark"):
             btn = QRadioButton()
             btn.setObjectName("WizardRadio")
@@ -339,15 +355,43 @@ class OnboardingWizard(QDialog):
             self._theme_group.addButton(btn)
             layout.addWidget(btn)
             self._theme_buttons[mode] = btn
-        # Pre-seleccionar el modo actual (fallback a dark si era auto)
+        # Pre-seleccionar el TEMA EFECTIVO actual.
+        #
+        # v0.7.6 fix: dos bugs antiguos arreglados aquí:
+        #
+        # 1) Antes leíamos ``ThemeManager.mode()`` que devuelve
+        #    "auto"/"light"/"dark". Como "auto" no existe como botón
+        #    (lo quitamos en v0.7.4), caía al fallback "dark".
+        #    Resultado: si el usuario abría la app en franja diurna
+        #    con mode=auto y efectivo=light, este código forzaba un
+        #    cambio a "dark" — pero el listener de re-paint del
+        #    wizard se conectaba DESPUÉS de construir las páginas, así
+        #    que el wizard se quedaba con el QSS light original
+        #    mientras MainWindow se reaplicaba a dark. Resultado
+        #    visible: ventana principal oscura + wizard claro.
+        #    Solución: leer ``current_theme()`` (que siempre devuelve
+        #    "light" o "dark", nunca "auto") y marcar ese radio.
+        #
+        # 2) ``setChecked(True)`` emite ``toggled`` → dispara
+        #    ``_on_theme_chosen`` → llama ``ThemeManager.set_mode(...)``.
+        #    Aunque el modo no cambie de valor, en casos límite puede
+        #    re-disparar repaints. Usamos ``blockSignals`` para que el
+        #    estado inicial NO se considere "el usuario eligió tema" —
+        #    es solo reflejar el estado actual del singleton.
         try:
             from shakevision.ui.theme_manager import ThemeManager
-            cur = ThemeManager.mode()
+            cur = ThemeManager.current_theme()
             if cur not in self._theme_buttons:
                 cur = "dark"
-            self._theme_buttons[cur].setChecked(True)
+            btn = self._theme_buttons[cur]
+            btn.blockSignals(True)
+            btn.setChecked(True)
+            btn.blockSignals(False)
         except Exception:  # noqa: BLE001
-            self._theme_buttons["dark"].setChecked(True)
+            btn = self._theme_buttons["dark"]
+            btn.blockSignals(True)
+            btn.setChecked(True)
+            btn.blockSignals(False)
         layout.addStretch(1)
         return page
 
@@ -528,7 +572,8 @@ class OnboardingWizard(QDialog):
         if hasattr(self, "_theme_heading"):
             self._theme_heading.setText(t("onboarding.theme.heading"))
             self._theme_help.setText(t("onboarding.theme.help"))
-            # v0.7.4: "auto" eliminado del wizard
+            # v0.7.4: "auto" eliminado del wizard.
+            # v0.7.6: "auto" también eliminado del ThemeManager entero.
             self._theme_buttons["light"].setText(t("onboarding.theme.light"))
             self._theme_buttons["dark"].setText(t("onboarding.theme.dark"))
         # Layer

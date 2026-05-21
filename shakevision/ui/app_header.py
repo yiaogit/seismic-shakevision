@@ -58,16 +58,17 @@ from shakevision.ui.theme_manager import ThemeManager
 
 
 # Orden cíclico del botón de tema. Cada click avanza al siguiente.
-_THEME_MODE_CYCLE: tuple[str, ...] = ("auto", "light", "dark")
+# v0.7.6: ``"auto"`` eliminado del ciclo — el modo auto se quitó del
+# ThemeManager por ambigüedad (chocaba con la preferencia de OS y
+# generaba flips espurios al abrir el wizard durante el día).
+_THEME_MODE_CYCLE: tuple[str, ...] = ("light", "dark")
 
 # Emoji + clave i18n del tooltip por modo de tema.
 _THEME_MODE_GLYPH: dict[str, str] = {
-    "auto": "🌓",
     "light": "☀",
     "dark":  "🌙",
 }
 _THEME_MODE_TOOLTIP_KEY: dict[str, str] = {
-    "auto":  "header.theme.tooltip_auto",
     "light": "header.theme.tooltip_light",
     "dark":  "header.theme.tooltip_dark",
 }
@@ -495,7 +496,7 @@ class AppHeader(QFrame):
     # Slots de los nuevos botones (theme cycle + mode toggle)
     # ------------------------------------------------------------------
     def _on_theme_button_clicked(self) -> None:
-        """Avanza al siguiente modo del cycle auto→light→dark."""
+        """Avanza al siguiente modo del cycle (v0.7.6: solo light↔dark)."""
 
         current = ThemeManager.mode()
         try:
@@ -547,10 +548,12 @@ class AppHeader(QFrame):
         """Re-pinta emoji + tooltip del botón de tema."""
 
         mode = ThemeManager.mode()
-        glyph = _THEME_MODE_GLYPH.get(mode, "🌓")
+        # v0.7.6: fallback al emoji/tooltip de "dark" (era "🌓"/"auto"
+        # antes de quitar el modo auto).
+        glyph = _THEME_MODE_GLYPH.get(mode, "🌙")
         self._theme_button.setText(glyph)
         self._theme_button.setToolTip(
-            t(_THEME_MODE_TOOLTIP_KEY.get(mode, "header.theme.tooltip_auto"))
+            t(_THEME_MODE_TOOLTIP_KEY.get(mode, "header.theme.tooltip_dark"))
         )
 
     def _refresh_mode_button_text(self) -> None:
