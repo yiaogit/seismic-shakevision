@@ -2,7 +2,7 @@
 Pruebas del OnboardingWizard (v0.5 阶段 H).
 
 Cubrimos:
-  * Presencia de las 28 claves i18n en los 4 idiomas.
+  * Presencia de las 27 claves i18n en los 4 idiomas.
   * Persistencia de la bandera "wizard completado".
   * Construcción del wizard sin crash en QT_QPA_PLATFORM=offscreen.
   * Navegación: next / back / skip / counter actualizan correctamente.
@@ -45,7 +45,8 @@ REQUIRED_KEYS = (
     "onboarding.timezone.help",
     "onboarding.theme.heading",
     "onboarding.theme.help",
-    "onboarding.theme.auto",
+    # v0.7.6.1: "onboarding.theme.auto" eliminado — el modo auto fue
+    # quitado del ThemeManager (ver CHANGELOG).
     "onboarding.theme.light",
     "onboarding.theme.dark",
     "onboarding.layer.heading",
@@ -62,7 +63,7 @@ REQUIRED_KEYS = (
 # ============================================================
 @pytest.mark.parametrize("locale", ["en", "es", "zh", "fr"])
 def test_onboarding_i18n_keys_present(locale: str) -> None:
-    """Cada uno de los 4 idiomas debe declarar las 28 claves."""
+    """Cada uno de los 4 idiomas debe declarar las 27 claves."""
 
     data = json.loads((LOCALES_DIR / f"{locale}.json").read_text("utf-8"))
     missing = [k for k in REQUIRED_KEYS if k not in data]
