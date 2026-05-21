@@ -33,6 +33,7 @@ import urllib.request
 from datetime import datetime, timezone
 from typing import Final, Optional, Union
 
+from shakevision.i18n import t
 from shakevision.services.cache import FileCache
 
 logger = logging.getLogger(__name__)
@@ -172,7 +173,7 @@ class DataselectClient:
                 logger.warning("IRIS dataselect inalcanzable (%s); usando caché obsoleta.", exc)
                 return stale
             raise DataselectError(
-                f"no se pudo contactar IRIS dataselect: {exc}"
+                t("error.dataselect.contact", error=str(exc))
             ) from exc
 
         self._cache.set(cache_key, blob)

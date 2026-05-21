@@ -442,5 +442,13 @@
   "settings.reset.item.activity": "最近活动日志",
   "settings.reset.item.cache": "磁盘缓存（USGS/IRIS 响应、已生成的报告）",
   "profile.github.counts": "📦 {repos} 仓库 · 👥 {followers} 粉丝 · → 关注 {following}",
-  "github.login.client_id_help": "还没有 client ID？<a href=\"https://github.com/settings/applications/new\">在 GitHub 上免费注册一个 OAuth App</a> — 30 秒搞定，只需填个名字。"
+  "github.login.client_id_help": "还没有 client ID？<a href=\"https://github.com/settings/applications/new\">在 GitHub 上免费注册一个 OAuth App</a> — 30 秒搞定，只需填个名字。",
+  "overlay.loading": "加载中…",
+  "overlay.btn_retry": "重试",
+  "overlay.retrying": "重新尝试中",
+  "overlay.retrying_subtitle": "正在连接 USGS…",
+  "error.iris.contact": "IRIS：无法连接：{error}",
+  "error.usgs.contact": "USGS：无法连接：{error}",
+  "error.shakenet.contact": "ShakeNet：无法连接：{error}",
+  "error.dataselect.contact": "IRIS dataselect：无法连接：{error}"
 }

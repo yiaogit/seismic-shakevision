@@ -27,6 +27,7 @@ from typing import Final, Optional
 
 from dataclasses import replace
 
+from shakevision.i18n import t
 from shakevision.services.cache import FileCache
 from shakevision.services.data_models import ShakeStation
 from shakevision.services.shakenet import parse_fdsn_text, ShakeNetError
@@ -100,7 +101,7 @@ class IRISClient:
                     "IRIS inalcanzable (%s); devolviendo caché obsoleta.", exc
                 )
                 return self._tag_as_usgs(parse_fdsn_text(stale))
-            raise IRISError(f"no se pudo contactar a IRIS: {exc}") from exc
+            raise IRISError(t("error.iris.contact", error=str(exc))) from exc
 
         self._cache.set(cache_key, payload)
         stations = self._tag_as_usgs(parse_fdsn_text(payload))

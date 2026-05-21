@@ -6,6 +6,70 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ---
 
+## [0.7.6] — 2026-05-20
+
+🍎 **Hotfix: macOS .dmg SSL CERTIFICATE_VERIFY_FAILED + loading overlay
+i18n cleanup.**
+
+### Fixed
+- **Mixed-language error dialog** — when a network call to USGS / IRIS
+  / ShakeNet / IRIS dataselect failed, the loading overlay rendered a
+  Frankenstein of three languages on a single screen: an English
+  title from the caller's i18n key, the Spanish button text
+  `"Reintentar"` (hardcoded in `LoadingOverlay`), and the Spanish
+  exception message `"no se pudo contactar a ..."` (hardcoded in the
+  four service clients) — regardless of the user's selected language.
+  Two root causes:
+    * `shakevision/ui/loading_overlay.py` had three Spanish
+      hardcodings (`"Cargando…"` x2 + `"Reintentar"` button) that
+      bypassed the i18n layer entirely. Replaced with `t(...)` calls
+      and wired the widget to `LocaleService.language_changed_signal`
+      so live language switches in Ajustes refresh the button text.
+    * `shakevision/services/{usgs,iris,shakenet,dataselect}.py` each
+      raised their `*Error` exceptions with f-string Spanish literals.
+      Replaced all four with `t("error.<service>.contact", error=...)`
+      keys.
+  Added eight new i18n keys (`overlay.loading`, `overlay.btn_retry`,
+  `overlay.retrying`, `overlay.retrying_subtitle`,
+  `error.{iris,usgs,shakenet,dataselect}.contact`) translated across
+  all four locales (EN / ES / FR / ZH).
+- **All HTTPS calls failed in macOS .dmg builds** — USGS feed, IRIS
+  stations, ShakeNet, GitHub OAuth, IP geolocation, FDSN dataselect
+  ALL died on launch with:
+  ```
+  ssl.SSLCertVerificationError:
+  [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed:
+  self-signed certificate in certificate chain (_ssl.c:1006)
+  ```
+  Root cause: stock macOS Python doesn't read the system keychain for
+  HTTPS CA validation (unlike Linux which has `/etc/ssl/certs/` and
+  Windows which falls back to wincrypt). PyInstaller `--windowed`
+  bundles ship without any CA chain, so every `urlopen()` to https://
+  hit the empty trust store and rejected legitimate certs as
+  "self-signed". Windows .exe + Linux AppImage builds were unaffected
+  for the platform reasons above.
+- Three-part fix:
+    * `shakevision/__main__.py` — at startup (immediately after
+      `faulthandler` setup, before any service imports), point
+      Python's default HTTPS context at `certifi.where()` and set
+      `$SSL_CERT_FILE` / `$REQUESTS_CA_BUNDLE` env vars. Runtime
+      patch covers stdlib `urllib`, `requests`, `urllib3`, `httpx`.
+    * `pyproject.toml` — added explicit `certifi>=2023.7.22`
+      dependency. Previously transitive via obspy/requests, now
+      explicit so the PyInstaller spec can rely on it being present.
+    * `packaging/shakevision.spec` — added
+      `datas += collect_data_files("certifi")` so the CA bundle PEM
+      file actually ships inside the .app bundle. Also added
+      `"certifi"` to `hiddenimports` so PyInstaller's static analysis
+      doesn't miss it (we import it from `__main__.py` at runtime).
+
+### Changed
+- Version bumped 0.7.5 → 0.7.6 across `pyproject.toml`,
+  `shakevision/__init__.py`, `packaging/shakevision.spec`,
+  `packaging/windows/version_info.txt`.
+
+---
+
 ## [0.7.5] — 2026-05-19
 
 🔌 **One-click GitHub sign-in + Workbench rename polish + Onboarding /

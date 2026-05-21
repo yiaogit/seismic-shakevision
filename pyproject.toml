@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shakevision"
-version = "0.7.5"
+version = "0.7.6"
 description = "SeismicGuard (formerly ShakeVision) — desktop seismic monitoring workbench powered by open data from USGS, IRIS and Raspberry Shake."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -41,6 +41,13 @@ dependencies = [
     # Time", no "Asia/Shanghai"); en macOS/Linux también funciona y
     # nos sirve de fallback uniforme cuando /etc/localtime es opaco.
     "tzlocal>=5.0",
+    # v0.7.6: explícito en deps para que el .dmg de macOS tenga CA
+    # bundle (sin esto, urlopen() → CERTIFICATE_VERIFY_FAILED). En
+    # Linux/Windows ya viene como dep transitiva de obspy/requests,
+    # pero lo dejamos explícito para que el spec de PyInstaller
+    # pueda llamar a collect_data_files("certifi") sin depender de
+    # qué resolución venga del lockfile.
+    "certifi>=2023.7.22",
 ]
 
 [project.optional-dependencies]

@@ -1280,7 +1280,11 @@ class MainWindow(QMainWindow):
         for panel in (self.globe_panel, self.dashboard_panel):
             overlay = getattr(panel, "_overlay", None)
             if overlay is not None:
-                overlay.show_loading("Reintentando", "Conectando con USGS…")
+                # v0.7.6: i18n (antes hardcoded "Reintentando"/"Conectando")
+                overlay.show_loading(
+                    t("overlay.retrying"),
+                    t("overlay.retrying_subtitle"),
+                )
         self._data_worker.refresh_now()
 
     def _on_export_report(self) -> None:

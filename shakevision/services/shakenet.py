@@ -23,6 +23,7 @@ import urllib.error
 import urllib.request
 from typing import Final, Optional
 
+from shakevision.i18n import t
 from shakevision.services.cache import FileCache
 from shakevision.services.data_models import ShakeStation
 
@@ -109,7 +110,7 @@ class ShakeNetClient:
                     "ShakeNet inalcanzable (%s); devolviendo caché obsoleta.", exc
                 )
                 return parse_fdsn_text(stale)
-            raise ShakeNetError(f"no se pudo contactar a ShakeNet: {exc}") from exc
+            raise ShakeNetError(t("error.shakenet.contact", error=str(exc))) from exc
 
         self._cache.set(cache_key, payload)
         return parse_fdsn_text(payload)

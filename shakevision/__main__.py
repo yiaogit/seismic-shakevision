@@ -51,6 +51,49 @@ except Exception:  # noqa: BLE001
     # seguimos: faulthandler es bonito-tener, no crítico.
     pass
 
+
+# ============================================================
+# v0.7.6 fix — macOS .dmg SSL CERTIFICATE_VERIFY_FAILED
+# ============================================================
+# Problema: el Python stock de macOS NO lee el system keychain para
+# validar certificados HTTPS, y los bundles de PyInstaller NO traen
+# CA bundle por defecto. Resultado: TODO urlopen() a https:// falla
+# con:
+#     ssl.SSLCertVerificationError:
+#     [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed:
+#     self-signed certificate in certificate chain (_ssl.c:1006)
+#
+# Esto afecta a USGS, IRIS, ShakeNet, GitHub OAuth, IP-geolocation y
+# FDSN dataselect — TODAS las cargas remotas mueren con el mismo
+# error visible en pantalla.
+#
+# Windows no se ve afectado porque su Python stock cae al wincrypt
+# store. Linux tampoco porque /etc/ssl/certs/ está poblado.
+#
+# Solución: apuntamos el contexto HTTPS por defecto al bundle de
+# certifi, que SÍ garantizamos que viene con la app (añadido a
+# pyproject.toml + collect_data_files en shakevision.spec).
+#
+# Esto DEBE ejecutarse ANTES de que cualquier código nuestro importe
+# urllib.request — de ahí su posición tan arriba en este fichero.
+try:
+    import ssl as _ssl
+    import certifi as _certifi
+    _ca_path = _certifi.where()
+    # Setear env vars primero (las leen urllib3, requests, httpx, etc.)
+    os.environ.setdefault("SSL_CERT_FILE", _ca_path)
+    os.environ.setdefault("REQUESTS_CA_BUNDLE", _ca_path)
+    # Parchear el contexto HTTPS por defecto del stdlib urllib
+    _ssl._create_default_https_context = (
+        lambda: _ssl.create_default_context(cafile=_ca_path)
+    )
+except Exception:  # noqa: BLE001
+    # Si certifi falta (entorno dev sin instalar deps), seguimos sin
+    # patchar — la mayoría de máquinas dev tienen un Python con CA
+    # bundle del sistema, así que probablemente funcione igual.
+    pass
+
+
 # NOTA: los siguientes imports ocurren intencionalmente DESPUÉS de
 # faulthandler.enable() y sys.excepthook = _excepthook para garantizar
 # que cualquier crash al importar Qt o nuestras propias módulos

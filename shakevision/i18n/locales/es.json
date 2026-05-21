@@ -442,5 +442,13 @@
   "settings.reset.item.activity": "Registro de actividad reciente",
   "settings.reset.item.cache": "Caché en disco (respuestas USGS/IRIS, reportes generados)",
   "profile.github.counts": "📦 {repos} repos · 👥 {followers} seguidores · → siguiendo {following}",
-  "github.login.client_id_help": "¿No tienes client ID? <a href=\"https://github.com/settings/applications/new\">Registra una OAuth App gratis en GitHub</a> — tarda 30 s y solo pide un nombre."
+  "github.login.client_id_help": "¿No tienes client ID? <a href=\"https://github.com/settings/applications/new\">Registra una OAuth App gratis en GitHub</a> — tarda 30 s y solo pide un nombre.",
+  "overlay.loading": "Cargando…",
+  "overlay.btn_retry": "Reintentar",
+  "overlay.retrying": "Reintentando",
+  "overlay.retrying_subtitle": "Conectando con USGS…",
+  "error.iris.contact": "IRIS: no se pudo contactar: {error}",
+  "error.usgs.contact": "USGS: no se pudo contactar: {error}",
+  "error.shakenet.contact": "ShakeNet: no se pudo contactar: {error}",
+  "error.dataselect.contact": "IRIS dataselect: no se pudo contactar: {error}"
 }

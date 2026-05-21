@@ -442,5 +442,13 @@
   "settings.reset.item.activity": "Journal d'activité récente",
   "settings.reset.item.cache": "Cache disque (réponses USGS/IRIS, rapports générés)",
   "profile.github.counts": "📦 {repos} repos · 👥 {followers} abonnés · → {following} suivis",
-  "github.login.client_id_help": "Pas de client ID ? <a href=\"https://github.com/settings/applications/new\">Enregistre une OAuth App gratuite sur GitHub</a> — 30 s, il suffit d'un nom."
+  "github.login.client_id_help": "Pas de client ID ? <a href=\"https://github.com/settings/applications/new\">Enregistre une OAuth App gratuite sur GitHub</a> — 30 s, il suffit d'un nom.",
+  "overlay.loading": "Chargement…",
+  "overlay.btn_retry": "Réessayer",
+  "overlay.retrying": "Nouvelle tentative",
+  "overlay.retrying_subtitle": "Connexion à USGS…",
+  "error.iris.contact": "IRIS : impossible de contacter : {error}",
+  "error.usgs.contact": "USGS : impossible de contacter : {error}",
+  "error.shakenet.contact": "ShakeNet : impossible de contacter : {error}",
+  "error.dataselect.contact": "IRIS dataselect : impossible de contacter : {error}"
 }

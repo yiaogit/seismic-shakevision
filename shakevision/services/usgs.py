@@ -25,6 +25,7 @@ import urllib.error
 import urllib.request
 from typing import Final, Optional
 
+from shakevision.i18n import t
 from shakevision.services.cache import FileCache
 from shakevision.services.data_models import Earthquake, PagerLevel
 
@@ -119,7 +120,7 @@ class USGSClient:
                     "USGS inalcanzable (%s); devolviendo caché obsoleta.", exc
                 )
                 return parse_usgs_geojson(stale)
-            raise USGSError(f"no se pudo contactar a USGS: {exc}") from exc
+            raise USGSError(t("error.usgs.contact", error=str(exc))) from exc
 
         # Guardar en caché y devolver parseado
         self._cache.set(cache_key, payload)

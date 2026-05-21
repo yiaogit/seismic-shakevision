@@ -25,6 +25,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from PyInstaller.utils.hooks import collect_data_files  # noqa: F401
+
 # El spec se ejecuta desde la raíz del repo cuando se llama vía
 # `pyinstaller packaging/shakevision.spec`. Calculamos rutas absolutas
 # para que no dependa del cwd.
@@ -50,11 +52,21 @@ datas = [
     (str(APP_PKG / "web" / "report"), "shakevision/web/report"),
 ]
 
+# v0.7.6 fix — incluir el CA bundle de certifi para que el .dmg de
+# macOS pueda validar certificados HTTPS. Sin esto, el bundle no
+# trae ningún CA chain y TODO urlopen() a https:// falla con
+# CERTIFICATE_VERIFY_FAILED (problema específico de macOS, ver
+# shakevision/__main__.py para el contexto completo).
+datas += collect_data_files("certifi")
+
 # ------------------------------------------------------------
 # Hidden imports — módulos que PyInstaller no descubre por análisis
 # estático porque se importan dinámicamente (importlib, plugins, etc.).
 # ------------------------------------------------------------
 hiddenimports = [
+    # v0.7.6 — certifi explícito (lo importa __main__.py al arrancar
+    # para fijar el CA bundle del SSL context en macOS).
+    "certifi",
     # ObsPy carga plugins por entry_points en runtime
     "obspy.io.mseed",
     "obspy.io.xseed",
@@ -186,12 +198,12 @@ if sys.platform == "darwin":
         name="ShakeVision.app",
         icon=ICON_PATH,
         bundle_identifier="org.shakevision.app",
-        version="0.7.5",
+        version="0.7.6",
         info_plist={
             "CFBundleName": "ShakeVision",
             "CFBundleDisplayName": "ShakeVision",
-            "CFBundleShortVersionString": "0.7.5",
-            "CFBundleVersion": "0.7.5",
+            "CFBundleShortVersionString": "0.7.6",
+            "CFBundleVersion": "0.7.6",
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "11.0",
             "NSHumanReadableCopyright": "© 2025 ShakeVision contributors — MIT License",

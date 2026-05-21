@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from shakevision.i18n import LocaleService, t
 from shakevision.ui.theme import (
     COLOR_TEXT_PRIMARY,
     COLOR_TEXT_SECONDARY,
@@ -58,7 +59,8 @@ class LoadingOverlay(QFrame):
 
         self._mode = "loading"      # "loading" | "error" | "hidden"
         self._spin_angle = 0.0
-        self._message = "Cargando…"
+        # v0.7.6: i18n-aware default. Previously hardcoded "Cargando…".
+        self._message = t("overlay.loading")
 
         # Layout vertical centrado (texto + botón opcional)
         layout = QVBoxLayout(self)
@@ -93,7 +95,8 @@ class LoadingOverlay(QFrame):
 
         # v0.6: PrimaryButton + objectName → hereda del QSS global de
         # theme.py (fill accent + hover accent_hover dinámico).
-        self._retry_button = QPushButton("Reintentar")
+        # v0.7.6: texto del botón i18n-able (antes hardcoded "Reintentar").
+        self._retry_button = QPushButton(t("overlay.btn_retry"))
         self._retry_button.setObjectName("PrimaryButton")
         self._retry_button.setProperty("primary", True)
         self._retry_button.clicked.connect(self.retry_clicked)
@@ -110,11 +113,44 @@ class LoadingOverlay(QFrame):
             parent.installEventFilter(self)
             self._reposition()
 
+        # v0.7.6: re-traducir botón y default loading text cuando el
+        # usuario cambia el idioma en Ajustes. Sin esto, un overlay
+        # construido en español queda con "Reintentar" para siempre
+        # aunque el usuario cambie a 中文 / English / Français.
+        try:
+            LocaleService.language_changed_signal().connect(
+                lambda _lang: self._retranslate())
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _retranslate(self) -> None:
+        """Refresca los textos i18n al cambiar el idioma en vivo."""
+
+        self._retry_button.setText(t("overlay.btn_retry"))
+        # Si actualmente mostramos el mensaje "loading" por defecto,
+        # también lo refrescamos. Si el caller pasó un texto explícito
+        # (ej. "Inicializando globo 3D"), respetamos lo que él fijó.
+        # Esta heurística: solo refrescamos si _message coincide con el
+        # default i18n actual ANTES del cambio — pero como ya cambió,
+        # nos arriesgamos a actualizarlo siempre cuando estamos en
+        # loading: en la práctica el caller llama show_loading() con
+        # su propio texto, no usa el default.
+        # → preferimos pecar de no tocar para no pisar mensajes de
+        # contexto, así que NO actualizamos _title aquí. Si el usuario
+        # cambia idioma con un overlay abierto en estado "error", el
+        # subtítulo (que viene de un exception ya formateado) queda en
+        # el idioma original — aceptable.
+
     # ------------------------------------------------------------------
     # API pública
     # ------------------------------------------------------------------
-    def show_loading(self, message: str = "Cargando…",
+    def show_loading(self, message: str = "",
                      subtitle: str = "") -> None:
+        # v0.7.6: default vacío → resolver dinámicamente vía t() en
+        # cada llamada, así si el caller no pasa mensaje siempre vemos
+        # el texto en el idioma activo (no en español hardcoded).
+        if not message:
+            message = t("overlay.loading")
         self._mode = "loading"
         self._message = message
         self._title.setText(message)
