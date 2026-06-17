@@ -160,16 +160,44 @@ python -m shakevision
 ## 🚀 快速上手
 
 ```
-启动 → 默认进入 🌍 Globe 视图
-  ├── 点击任意 USGS 光点 → 弹窗"添加到 Pro?" → ✅ → 浮现在 Pro 控制面板下拉
-  ├── 切换 📊 Data → 查看 7 张联动图表 + 周期 / 区域过滤
-  └── 右上 🔬 Pro → 打开独立的专业窗口
-                    ├── 选刚才加入的 USGS 台站
-                    ├── 点 Connect → 走 SeedLink 实时流
-                    └── 看实时波形 / 频谱 / 鼓式记录 / 质点轨迹
+启动 → 默认进入 🌍 地球 视图（实时地震 + 台站）
 
-右上 ⚙ Settings → 切语言 + 时区，立即生效，无需重启
+主窗口顶栏 4 个页：
+  ├── 🌍 地球   点任意地震/台站光点 → 弹窗：复核 / ☆收藏 / 加入工作台
+  ├── 📊 数据   7 张联动图表 + 周期 / 区域过滤
+  ├── 🗂 事件   地震表；选中看右侧「就近大台站」(Δ°/km/类别)
+  │             └── 双击事件 → 用最近台站在工作台「历史回放」里复核
+  └── ⭐ 我的   收藏的地震/台站 + 记录区(录波 / 复核目录)
+                ├── 双击收藏地震 → 复核；双击收藏台站 → 选用
+                ├── 双击复核目录某行 → 重开那次复核(恢复 P/S 标记)
+                └── 「在文件夹中打开」→ 导出 MiniSEED/QuakeML 给别的软件
+
+🔬 工作台（独立窗口，建议放到第二块屏）：
+  ├── 实时      选台站 → Connect → SeedLink 实时三通道波形 + 频谱(可开关) + 烈度卡
+  ├── 24h       鼓式记录（helicorder）
+  ├── 质点      N-E 质点轨迹 + 极化方位角
+  └── 历史回放  缩放/平移 · 波段 · 去响应(VEL/DISP/ACC) · ZNE→ZRT 旋转
+                · TauP 理论 P/S · dB 频谱图 · PSD · 导出 PNG/CSV/QuakeML/存目录
+
+⚙ 设置 → 切语言 + 时区，立即生效，无需重启
 ```
+
+---
+
+## 🖥 多显示器与常见问题
+
+**为什么工作台是独立窗口?** SeismicGuard 按**多显示器**设计:主窗口(地球/数据/事件/我的)放一块屏做浏览,🔬 工作台作为**独立窗口**放到另一块屏做分析,两边同时可见、互不遮挡。**单显示器用户**注意:打开工作台后它可能被主窗口盖住——用 ⌘`(macOS)/ Alt+Tab(Windows)切换,或把它拖到一边即可。
+
+<details>
+<summary><b>常见问题(FAQ)</b></summary>
+
+- **找不到 Raspberry Shake 的公开实时流?** 不存在公开的 Raspberry Shake SeedLink 服务器。只能连本地局域网里你自己的设备(`rs.local:18000`)或付费 RTDC;所有公开实时流默认走 IRIS `rtserve.iris.washington.edu`。
+- **历史回放为什么有时要等几十秒?** 回放是从 IRIS FDSN dataselect **现下载**该时段波形,远程较慢时会有等待(已对自动时窗设上限并显示"计算中")。这不是卡死。
+- **收藏 / 录波 / 复核目录存在哪里?** 全部**本地**、零网络、零遥测:收藏在 QSettings,触发录波的 MiniSEED 与复核 `catalog.xml` 在 `~/SeismicGuard/`。可在「我的」里点「在文件夹中打开」直接取文件;「设置 → 清空缓存」会一并清掉它们。
+- **首次启动被系统拦截?** 二进制未做代码签名:Windows 点 SmartScreen 弹窗的「更多信息 → 仍要运行」;macOS 右键 `.app` → 打开。详见上面「下载安装」。
+- **macOS 工作台的绿色按钮?** 做的是原地铺满(zoom),不会开独立全屏 Space——避免在多屏环境下霸占整块屏幕。
+
+</details>
 
 ---
 
@@ -222,6 +250,7 @@ graph TB
         Globe[GlobeView<br/>QWebEngineView]
         Dash[DashboardView<br/>QWebEngineView]
         Pro[ProWindow<br/>独立浮窗]
+        Events[EventCenter +<br/>My Collection 顶栏页]
         Widgets[Waveform · Spectrogram<br/>Helicorder · ParticleMotion]
     end
 
@@ -230,6 +259,8 @@ graph TB
     Worker --> Cache
     Worker --> Globe
     Worker --> Dash
+    Worker --> Events
+    Events --> Pro
 
     SL --> Seedlink --> Buffer
     Mock --> Buffer
@@ -253,8 +284,12 @@ graph TB
     class Worker,Clients,Cache,Auth,TZ,Loc svc
     class Base,Seedlink,Replay,Mock src
     class Buffer,Filter,Detect,Spec,Rec,Son,Int ds
-    class Main,Globe,Dash,Pro,Widgets uic
+    class Main,Globe,Dash,Pro,Events,Widgets uic
 ```
+
+> 注:上图的 `ReplaySource → Buffer` 是**实时数据源**抽象(合成/LAN 回放仍可用)。
+> v0.8 的**历史回放页**是另一条独立路径——直接从 IRIS FDSN dataselect **下载**选定时段的
+> 波形做静态分析(去响应/旋转/TauP/PSD/导出),不经过 RingBuffer。
 
 ### 端到端时序：从点击地球到看到波形
 
@@ -392,7 +427,25 @@ classDiagram
 
 ### 关键状态机
 
+#### STA/LTA 触发检测器（`processing/detector.py`）
+
+这是"地震来了 → 自动触发录波"的判定核心,也是项目里最实打实的一个状态机:对每个数据块算 **STA/LTA 比值**,带**迟滞**——比值升过 `threshold_on` 才进触发、降到 `threshold_off` 以下才退出(两个阈值不同,避免在临界点抖动反复触发)。进/退触发分别发出 `EventSignal.TRIGGERED` / `RELEASED`,后者落盘成 MiniSEED。
+
+```mermaid
+stateDiagram-v2
+    [*] --> WATCHING: enabled
+    WATCHING --> WATCHING: STA/LTA < threshold_on
+    WATCHING --> TRIGGERED: STA/LTA ≥ threshold_on<br/>(EventSignal.TRIGGERED · 开始录波)
+    TRIGGERED --> TRIGGERED: STA/LTA > threshold_off
+    TRIGGERED --> WATCHING: STA/LTA ≤ threshold_off<br/>(EventSignal.RELEASED · 保存 MiniSEED)
+    WATCHING --> [*]: disabled / reset()
+```
+
 #### SeedLinkSource 生命周期
+
+> 说明:这是**概念模型**。代码里并没有一个 `SourceState` 枚举,而是 `sources/seedlink.py`
+> 里一个**顺序发 `status` 消息的 worker**(DNS→TCP→握手→SELECT→streaming);下图描述它的
+> 阶段流转,可视化投影是 `ui/app_header.py` 的 `ConnectionState`(4 态 LED)。
 
 公开 SeedLink 没有官方"协议优雅断开"的概念，所以这套状态机的核心目标是**任何阶段都能取消** —— v0.6 之前曾有 *CONNECTING* 永远阻塞导致 UI 假死的崩溃，那次修复后的最终状态机如下：
 
@@ -413,21 +466,10 @@ stateDiagram-v2
     ERROR --> CONNECTING: 用户重试
 ```
 
-#### AudioPlayer（地震波声学化）
-
-```mermaid
-stateDiagram-v2
-    [*] --> IDLE
-    IDLE --> PREPARING: 用户点 Listen
-    PREPARING --> PLAYING: QAudioSink.start()
-    PREPARING --> ERROR: 设备/格式失败
-    PLAYING --> PLAYING: chunk → 扬声器
-    PLAYING --> STOPPING: 用户点 Stop
-    PLAYING --> COMPLETED: 缓冲耗尽
-    STOPPING --> IDLE: QAudioSink.stop()
-    COMPLETED --> IDLE: 自动复位
-    ERROR --> IDLE: 关闭错误
-```
+> 声学化播放(`AudioPlayer`)也有一套小的播放状态机(IDLE→PREPARING→PLAYING→
+> COMPLETED/ERROR),细节见 `shakevision/ui/audio_player.py` 的注释——其中处理了
+> macOS 上 `QAudioSink` 会在收到首字节前先报 `IdleState` 的坑(用 `_has_been_active`
+> 标志避免误判"已播完")。
 
 ---
 
@@ -496,7 +538,7 @@ seismic-shakevision/
 │   │   ├── seedlink.py                   # ObsPy EasySeedLinkClient 包 QThread；分阶段状态机，可随时取消
 │   │   └── replay.py                     # MiniSEED 回放，可调速度（1× – 60×）
 │   │
-│   ├── processing/                       # ── 纯 DSP（无 Qt 依赖） (7) ──
+│   ├── processing/                       # ── 纯 DSP（无 Qt 依赖） (8) ──
 │   │   ├── buffer.py                     # RingBuffer：线程安全 deque + RLock
 │   │   ├── filters.py                    # WaveformProcessor：去趋势 + Butterworth bandpass (filtfilt)
 │   │   ├── detector.py                   # STA/LTA 触发检测器 + 状态机
@@ -506,7 +548,7 @@ seismic-shakevision/
 │   │   ├── intensity.py                  # PGA → MMI 烈度（修订 Wood-Anderson）
 │   │   └── measurements.py              # ZNE→ZRT 旋转 · 极化方位角 · Welch PSD · 大圆距离
 │   │
-│   ├── services/                         # ── 异步 I/O 层 (17) ──
+│   ├── services/                         # ── 异步 I/O 层 (19) ──
 │   │   ├── data_models.py                # @dataclass: Earthquake · Station · Trigger · StationPreset
 │   │   ├── cache.py                      # 文件响应缓存，5 min TTL，Windows NTFS 时钟纠正
 │   │   ├── worker.py                     # QObject 包装的周期刷新（30 s）+ 双 period slot
@@ -527,7 +569,7 @@ seismic-shakevision/
 │   │   ├── github_auth.py                # GitHub Device Flow OAuth；烘焙 DEFAULT_CLIENT_ID
 │   │   └── settings_backup.py            # 设置 JSON 导出/导入（v0.7-C 后仅测试使用）
 │   │
-│   ├── ui/                               # ── PySide6 (32) ──
+│   ├── ui/                               # ── PySide6 (38) ──
 │   │   ├── main_window.py                # 根 QMainWindow + 全局 signal hub + 菜单
 │   │   ├── app_header.py                 # 顶部应用栏（tabs + 主题/层切换 + Settings/Profile/Workbench 按钮）
 │   │   ├── sidebar_nav.py                # 左侧导航栏（默认隐藏）
@@ -582,7 +624,7 @@ seismic-shakevision/
 │   └── utils/
 │       └── logging.py                    # setup_logging + PyInstaller --windowed 兜底
 │
-├── tests/                                # 45+ pytest 模块（含 mock ObsPy 客户端、PySide6 widget 单测）
+├── tests/                                # 50+ pytest 模块（含 mock ObsPy 客户端、PySide6 widget 单测）
 ├── packaging/                            # ── 打包 ──
 │   ├── shakevision.spec                  # PyInstaller spec（macOS BUNDLE + Win VS_VERSIONINFO）
 │   ├── build.py                          # 跨平台打包驱动（含 dmg/AppImage 后处理）

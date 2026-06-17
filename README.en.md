@@ -173,17 +173,45 @@ python -m shakevision
 ## 🚀 Quick start
 
 ```
-Launch → defaults to the 🌍 Globe view
-  ├── Click any USGS dot → "Add to Pro?" prompt → ✅ → appears in Pro panel
-  ├── Switch to 📊 Data → 7 linked charts + period / region filters
-  └── Top-right 🔬 Pro → opens the standalone professional window
-                          ├── Pick the USGS station you just added
-                          ├── Click Connect → live SeedLink stream
-                          └── Watch real-time waveform / spectrogram / helicorder / particle motion
+Launch → defaults to the 🌍 Globe view (live quakes + stations)
 
-Top-right ⚙ Settings → switch language + timezone, applied instantly, no restart
-Top-right 👤 Profile → identity card + usage stats + recent activity timeline
+Main window — 4 top-level tabs:
+  ├── 🌍 Globe   Click any quake/station dot → Review / ☆Favorite / Add to Workbench
+  ├── 📊 Data    7 linked charts + period / region filters
+  ├── 🗂 Events  Quake table; selecting one lists "nearby major stations" (Δ°/km/category)
+  │              └── Double-click an event → review it with the nearest station in Replay
+  └── ⭐ Mine    Favorite quakes/stations + records (recordings / review catalog)
+                 ├── Double-click a favorite quake → review; a favorite station → use it
+                 ├── Double-click a catalog row → reopen that review (P/S markers restored)
+                 └── "Open folder" → export MiniSEED/QuakeML to other software
+
+🔬 Workbench (standalone window, ideally on a second monitor):
+  ├── Live      Pick a station → Connect → live 3-ch SeedLink waveform + spectrogram (toggle) + MMI card
+  ├── 24h       Helicorder drum recorder
+  ├── Particle  N-E particle motion + polarization azimuth
+  └── Replay    zoom/pan · band · response removal (VEL/DISP/ACC) · ZNE→ZRT rotate
+                · theoretical P/S via TauP · dB spectrogram · PSD · export PNG/CSV/QuakeML/catalog
+
+⚙ Settings → switch language + timezone, applied instantly, no restart
+👤 Profile  → identity card + usage stats + recent activity timeline
 ```
+
+---
+
+## 🖥 Multi-monitor & FAQ
+
+**Why is the Workbench a separate window?** SeismicGuard is built for **multi-monitor** use: keep the main window (Globe/Data/Events/Mine) on one screen for browsing and put the 🔬 Workbench on another for analysis — both visible at once, no overlap. **Single-monitor users:** the Workbench may open behind the main window — use ⌘\` (macOS) / Alt+Tab (Windows) to switch, or drag it aside.
+
+<details>
+<summary><b>FAQ</b></summary>
+
+- **Can't find a public Raspberry Shake live stream?** There is no public Raspberry Shake SeedLink server. You can only connect to your own device on the LAN (`rs.local:18000`) or a paid RTDC; all public live streams default to IRIS `rtserve.iris.washington.edu`.
+- **Why does Replay sometimes take a while?** It **downloads** the chosen window from IRIS FDSN dataselect on demand; a slow remote means a wait (the auto-window is capped and shows "computing"). It is not frozen.
+- **Where are favorites / recordings / the review catalog stored?** All **local**, zero network, zero telemetry: favorites in QSettings; triggered MiniSEED recordings and the review `catalog.xml` under `~/SeismicGuard/`. Use "Open folder" in Mine to grab the files; "Settings → Clear cache" wipes them too.
+- **Blocked on first launch?** The binaries are unsigned: on Windows click SmartScreen's "More info → Run anyway"; on macOS right-click the `.app` → Open. See Download above.
+- **The green button on macOS Workbench?** It zooms in place rather than opening a separate full-screen Space — so it won't hijack a whole monitor.
+
+</details>
 
 ---
 
@@ -236,6 +264,7 @@ graph TB
         Globe[GlobeView<br/>QWebEngineView]
         Dash[DashboardView<br/>QWebEngineView]
         Pro[ProWindow<br/>floating workbench]
+        Events[EventCenter +<br/>My Collection tabs]
         Widgets[Waveform · Spectrogram<br/>Helicorder · ParticleMotion]
     end
 
@@ -244,6 +273,8 @@ graph TB
     Worker --> Cache
     Worker --> Globe
     Worker --> Dash
+    Worker --> Events
+    Events --> Pro
 
     SL --> Seedlink --> Buffer
     Mock --> Buffer
@@ -267,8 +298,13 @@ graph TB
     class Worker,Clients,Cache,Auth,TZ,Loc svc
     class Base,Seedlink,Replay,Mock src
     class Buffer,Filter,Detect,Spec,Rec,Son,Int ds
-    class Main,Globe,Dash,Pro,Widgets uic
+    class Main,Globe,Dash,Pro,Events,Widgets uic
 ```
+
+> Note: `ReplaySource → Buffer` above is the **realtime source** abstraction (synthetic /
+> LAN replay still use it). v0.8's **historical Replay tab** is a separate path — it
+> **downloads** the chosen window straight from IRIS FDSN dataselect for static analysis
+> (response removal/rotation/TauP/PSD/export) and does not go through the RingBuffer.
 
 ### End-to-end sequence: from globe click to live waveform
 
@@ -406,7 +442,26 @@ classDiagram
 
 ### Key state machines
 
+#### STA/LTA trigger detector (`processing/detector.py`)
+
+This is the heart of "an earthquake arrives → auto-record it", and the most literal state machine in the project: for each block it computes the **STA/LTA ratio** with **hysteresis** — it only enters TRIGGERED once the ratio rises above `threshold_on`, and only leaves once it falls below `threshold_off` (two distinct thresholds prevent flapping at the boundary). Entering/leaving emits `EventSignal.TRIGGERED` / `RELEASED`; the latter writes the event to MiniSEED.
+
+```mermaid
+stateDiagram-v2
+    [*] --> WATCHING: enabled
+    WATCHING --> WATCHING: STA/LTA < threshold_on
+    WATCHING --> TRIGGERED: STA/LTA ≥ threshold_on<br/>(EventSignal.TRIGGERED · recording starts)
+    TRIGGERED --> TRIGGERED: STA/LTA > threshold_off
+    TRIGGERED --> WATCHING: STA/LTA ≤ threshold_off<br/>(EventSignal.RELEASED · save MiniSEED)
+    WATCHING --> [*]: disabled / reset()
+```
+
 #### SeedLinkSource lifecycle
+
+> Note: this is a **conceptual model**. There is no `SourceState` enum in code — instead
+> `sources/seedlink.py` is a worker that **emits `status` messages sequentially**
+> (DNS→TCP→handshake→SELECT→streaming); the diagram describes its phases, and its visual
+> projection is `ConnectionState` (the 4-state LED in `ui/app_header.py`).
 
 Public SeedLink has no protocol notion of "graceful disconnect", so this state machine's core goal is **cancellable at any stage**. Pre-v0.6, a hung *CONNECTING* phase could freeze the UI; after that fix the final state machine is:
 
@@ -427,21 +482,11 @@ stateDiagram-v2
     ERROR --> CONNECTING: user retry
 ```
 
-#### AudioPlayer (sonification)
-
-```mermaid
-stateDiagram-v2
-    [*] --> IDLE
-    IDLE --> PREPARING: user click Listen
-    PREPARING --> PLAYING: QAudioSink.start()
-    PREPARING --> ERROR: device/format failed
-    PLAYING --> PLAYING: chunk → speaker
-    PLAYING --> STOPPING: user click Stop
-    PLAYING --> COMPLETED: buffer drained
-    STOPPING --> IDLE: QAudioSink.stop()
-    COMPLETED --> IDLE: auto reset
-    ERROR --> IDLE: dismiss
-```
+> Sonification playback (`AudioPlayer`) has its own small state machine
+> (IDLE→PREPARING→PLAYING→COMPLETED/ERROR); see the comments in
+> `shakevision/ui/audio_player.py` — including the macOS gotcha where `QAudioSink`
+> emits `IdleState` before the first byte (guarded with `_has_been_active` to avoid a
+> false "finished").
 
 ---
 
@@ -510,7 +555,7 @@ seismic-shakevision/
 │   │   ├── seedlink.py                   # ObsPy EasySeedLinkClient in QThread; stage-tracked, cancellable
 │   │   └── replay.py                     # MiniSEED playback at adjustable speed (1× – 60×)
 │   │
-│   ├── processing/                       # ── pure DSP (no Qt dependency) (7) ──
+│   ├── processing/                       # ── pure DSP (no Qt dependency) (8) ──
 │   │   ├── buffer.py                     # RingBuffer: thread-safe deque + RLock
 │   │   ├── filters.py                    # WaveformProcessor: detrend + Butterworth bandpass (filtfilt)
 │   │   ├── detector.py                   # STA/LTA event detector + state machine
@@ -519,7 +564,7 @@ seismic-shakevision/
 │   │   ├── sonifier.py                   # Seismic waveform → accelerated PCM audio
 │   │   └── intensity.py                  # PGA → MMI intensity (revised Wood-Anderson)
 │   │
-│   ├── services/                         # ── async I/O layer (17) ──
+│   ├── services/                         # ── async I/O layer (19) ──
 │   │   ├── data_models.py                # @dataclass: Earthquake · Station · Trigger · StationPreset
 │   │   ├── cache.py                      # File response cache, 5 min TTL, Windows NTFS clock correction
 │   │   ├── worker.py                     # QObject periodic refresh (30 s) + dual-period slot
@@ -538,7 +583,7 @@ seismic-shakevision/
 │   │   ├── github_auth.py                # GitHub Device Flow OAuth; baked-in DEFAULT_CLIENT_ID
 │   │   └── settings_backup.py            # Settings JSON export/import (test-only after v0.7-C)
 │   │
-│   ├── ui/                               # ── PySide6 (32) ──
+│   ├── ui/                               # ── PySide6 (38) ──
 │   │   ├── main_window.py                # Root QMainWindow + global signal hub + menus
 │   │   ├── app_header.py                 # Top app bar (tabs + theme/layer toggles + Settings/Profile/Workbench buttons)
 │   │   ├── sidebar_nav.py                # Left navigation sidebar (hidden in default layout)
@@ -589,7 +634,7 @@ seismic-shakevision/
 │   └── utils/
 │       └── logging.py                    # setup_logging with PyInstaller --windowed fallback
 │
-├── tests/                                # 45+ pytest modules (mock ObsPy clients, PySide6 widget unit tests)
+├── tests/                                # 50+ pytest modules (mock ObsPy clients, PySide6 widget unit tests)
 ├── packaging/                            # ── Packaging ──
 │   ├── shakevision.spec                  # PyInstaller spec (macOS BUNDLE + Win VS_VERSIONINFO)
 │   ├── build.py                          # Cross-platform packaging driver (dmg/AppImage post-processing)
