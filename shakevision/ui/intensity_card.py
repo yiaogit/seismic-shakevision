@@ -45,6 +45,7 @@ from shakevision.processing.intensity import (
     IntensityLevel,
     IntensitySnapshot,
 )
+from shakevision.ui.signal_safety import subscribe
 from shakevision.ui.theme import (
     FONT_STACK_MONO,
     FONT_STACK_SANS,
@@ -129,7 +130,8 @@ class IntensityCard(QFrame):
         root.addWidget(text_container, stretch=1)
 
         # Suscribirse a cambios de idioma para retraducir en caliente
-        LocaleService.language_changed_signal().connect(self._retranslate)
+        subscribe(self, LocaleService.language_changed_signal(),
+                  self._retranslate)  # v0.7.7 (B1)
 
     # ------------------------------------------------------------------
     # API pública
@@ -212,11 +214,10 @@ class IntensityCard(QFrame):
 
         self._set_level(INTENSITY_LEVELS[1])
         # v0.6: re-pintar al cambiar tema
-        try:
-            from shakevision.ui.theme_manager import ThemeManager
-            ThemeManager.changed_signal().connect(self._on_theme_changed)
-        except Exception:  # noqa: BLE001
-            pass
+        # v0.7.7 (B1): subscribe() añade disconnect-on-destroyed + guarda.
+        from shakevision.ui.theme_manager import ThemeManager
+        subscribe(self, ThemeManager.changed_signal(),
+                  self._on_theme_changed)
 
     def _build_base_qss(self) -> str:
         """Genera el QSS de los labels leyendo del módulo theme en runtime."""

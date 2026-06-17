@@ -70,7 +70,8 @@ SCHEMA_VERSION: int = 1
 
 
 def _now_iso_utc() -> str:
-    return _dt.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    return _dt.datetime.now(_dt.timezone.utc).replace(
+        tzinfo=None, microsecond=0).isoformat() + "Z"
 
 
 # ============================================================
@@ -371,11 +372,14 @@ def _restore_usage_stats(stats: dict) -> None:
 
     try:
         from shakevision.services import usage_tracker as ut
-        from PySide6.QtCore import QSettings
     except Exception as exc:  # noqa: BLE001
         raise RuntimeError(f"usage restore unavailable: {exc}")
 
-    s = QSettings(ut._QSETTINGS_ORG, ut._QSETTINGS_APP)
+    # A través de ut._settings() (no QSettings(org,app) directo) para que las
+    # pruebas puedan aislar el almacén y no escriban en los datos reales.
+    s = ut._settings()
+    if s is None:
+        raise RuntimeError("usage restore unavailable: QSettings")
     # ── Strings ──
     for key_attr, dict_key in (
         ("KEY_FIRST_LAUNCH_ISO", "first_launch_iso"),

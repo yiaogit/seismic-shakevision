@@ -44,6 +44,7 @@ from shakevision.i18n import LocaleService, t
 from shakevision.i18n.service import LANGUAGE_LABELS, SUPPORTED_LANGUAGES
 from shakevision.services.shake_presets import ShakePresetStore
 from shakevision.services.timezone_service import TimezoneService
+from shakevision.ui.signal_safety import subscribe
 
 
 def _safe_today() -> str:
@@ -278,7 +279,8 @@ class SettingsDialog(QDialog):
         layout.addLayout(btn_row)
 
         # Suscribirse a cambios externos del store (otra ventana, etc.)
-        ShakePresetStore.changed_signal().connect(self._reload_shakes_list)
+        subscribe(self, ShakePresetStore.changed_signal(),
+                  self._reload_shakes_list)  # v0.7.7 (B1)
         self._reload_shakes_list()
 
         self._retranslate_shakes_tab()

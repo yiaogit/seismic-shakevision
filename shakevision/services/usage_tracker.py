@@ -164,7 +164,8 @@ def _set_str(key: str, value: str) -> None:
 def _now_iso_utc() -> str:
     """ISO 8601 UTC con sufijo Z, sin microsegundos (más legible)."""
 
-    return _dt.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    return _dt.datetime.now(_dt.timezone.utc).replace(
+        tzinfo=None, microsecond=0).isoformat() + "Z"
 
 
 # ============================================================

@@ -49,6 +49,7 @@ from PySide6.QtWidgets import (
 )
 
 from shakevision.i18n import LocaleService, t
+from shakevision.ui.signal_safety import subscribe
 from shakevision.services.github_auth import (
     AuthorizationDeniedError,
     AuthorizationExpiredError,
@@ -144,11 +145,9 @@ class GitHubLoginDialog(QDialog):
 
         # v0.5 阶段 O — escuchar cambios de idioma para re-traducir el
         # diálogo en vivo (igual que el resto de diálogos modales).
-        try:
-            LocaleService.language_changed_signal().connect(
-                lambda _l: self._retranslate())
-        except Exception:  # noqa: BLE001
-            pass
+        # v0.7.7 (B1): subscribe() — disconnect en destroyed + guarda.
+        subscribe(self, LocaleService.language_changed_signal(),
+                  self._retranslate)
 
     # ------------------------------------------------------------------
     # Páginas

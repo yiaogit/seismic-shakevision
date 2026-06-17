@@ -57,6 +57,14 @@ _QSETTINGS_KEY: str = "shakes/lan_presets"
 
 DEFAULT_PORT: int = 18000
 
+
+def _settings():
+    """Fábrica de QSettings (seam de pruebas: las pruebas la parchean para
+    aislar el almacén y no tocar los datos reales del usuario)."""
+
+    from PySide6.QtCore import QSettings
+    return QSettings(_QSETTINGS_ORG, _QSETTINGS_APP)
+
 # Límite blando para evitar listas inmanejables.
 MAX_PRESETS: int = 32
 
@@ -204,8 +212,7 @@ class _Singleton(QObject):
             return
         self._loaded = True
         try:
-            from PySide6.QtCore import QSettings
-            settings = QSettings(_QSETTINGS_ORG, _QSETTINGS_APP)
+            settings = _settings()
             raw = settings.value(_QSETTINGS_KEY, "", type=str)
             if raw:
                 data = json.loads(raw)
@@ -222,8 +229,7 @@ class _Singleton(QObject):
         """Persiste en QSettings. Llamar SIEMPRE con el lock tomado."""
 
         try:
-            from PySide6.QtCore import QSettings
-            settings = QSettings(_QSETTINGS_ORG, _QSETTINGS_APP)
+            settings = _settings()
             payload = json.dumps([asdict(p) for p in self._presets])
             settings.setValue(_QSETTINGS_KEY, payload)
         except Exception as exc:  # noqa: BLE001

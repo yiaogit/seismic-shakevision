@@ -61,6 +61,7 @@ from shakevision.services.activity_log import (
 from shakevision.services.github_auth import GitHubAuthService
 from shakevision.services.usage_tracker import UsageTracker
 from shakevision.ui.icons import get_icon
+from shakevision.ui.signal_safety import subscribe
 from shakevision.ui.theme_manager import ThemeManager
 
 
@@ -183,27 +184,18 @@ class ProfileView(QFrame):
 
         # Re-render al insertarse nueva actividad en cualquier parte
         # de la app (record_launch, record_report_generated, etc.).
-        try:
-            ActivityLog.changed_signal().connect(
-                lambda _entry: self._refresh_activity())
-        except Exception:  # noqa: BLE001
-            pass
+        # v0.7.7 (B1): subscribe() — disconnect en destroyed + guarda.
+        subscribe(self, ActivityLog.changed_signal(), self._refresh_activity)
         # Re-traducir labels al cambiar idioma
-        try:
-            LocaleService.language_changed_signal().connect(
-                lambda _l: self.refresh_all())
-        except Exception:  # noqa: BLE001
-            pass
+        subscribe(self, LocaleService.language_changed_signal(),
+                  self.refresh_all)
         # v0.6 Phase 14-fix — re-aplicar QSS al cambiar tema. Sin esto el
         # diálogo (que es lazy + persistente) se queda con las constantes
         # COLOR_PANEL / COLOR_TEXT_* del tema con el que se construyó.
         # Resultado visible: cards blancos sobre fondo oscuro porque
         # COLOR_PANEL se "congeló" en light durante el primer abrir.
-        try:
-            ThemeManager.changed_signal().connect(
-                lambda _t: self._refresh_themed_qss())
-        except Exception:  # noqa: BLE001
-            pass
+        subscribe(self, ThemeManager.changed_signal(),
+                  self._refresh_themed_qss)  # v0.7.7 (B1)
 
         self.refresh_all()
 

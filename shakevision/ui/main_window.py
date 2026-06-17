@@ -6,33 +6,28 @@ Reúne en una sola ``QMainWindow``:
   - El panel de formas de onda (derecha).
   - Una barra de estado inferior con la latencia y los mensajes.
 
-Flujo de datos
---------------
-  1. La fuente activa (``MockSource`` por ahora) corre en un hilo
-     trabajador y emite ``SampleBatch`` cada ~100 ms.
-  2. ``_on_data_ready`` recibe el batch en el hilo de la UI y lo
-     escribe en el búfer circular (``RingBuffer``).
-  3. Un ``QTimer`` a 30 FPS lee la última ventana del búfer y la pasa
-     al ``WaveformPanel`` para refrescar las tres trazas.
-  4. La barra de estado muestra la latencia entre el último timestamp
-     escrito y el reloj actual.
+Arquitectura (v0.7.7)
+---------------------
+``MainWindow`` es el **shell**: header, pestañas Globo/Datos, status bar,
+diálogos, exportación de reporte y el feed USGS para el globo/dashboard.
 
-Cambiar de estación o pulsar "Detener" detiene la fuente y limpia el
-búfer; pulsar "Conectar" instancia la fuente apropiada para el preset
-seleccionado.
+Toda la **canalización Workbench en tiempo real** (fuente de datos, búfer,
+DSP, detector STA/LTA, grabación, sonificación, espectrograma, timers de
+refresco y la animación de alerta) vive en ``WorkbenchController``, que
+conduce la ``ProWindow``. MainWindow solo instancia el controlador, cablea
+las señales de control de la ProWindow a sus slots, y conecta las señales
+del controlador (status/latencia/estación/conexión) a sus widgets.
 """
 
 from __future__ import annotations
 
-import time
+import logging
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import QTimer
-from PySide6.QtGui import QAction, QColor
+from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QFileDialog,
-    QGraphicsDropShadowEffect,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -45,35 +40,20 @@ from PySide6.QtWidgets import (
 from shakevision import APP_NAME, __version__
 from shakevision.config import (
     AppConfig,
-    FilterConfig,
     StationPreset,
-    TriggerConfig,
 )
-from shakevision.processing.buffer import RingBuffer
-from shakevision.processing.detector import EventSignal, StaLtaDetector
-from shakevision.processing.filters import WaveformProcessor
-from shakevision.processing.intensity import (
-    IntensitySmoother,
-    IntensitySnapshot,
-    default_gain_for,
-)
-from shakevision.processing.recorder import EventRecorder
-from shakevision.processing.sonifier import sonify
-from shakevision.processing.spectrum import SpectrumComputer
 from shakevision.services import FileCache
 from shakevision.services.iris import IRISClient
 from shakevision.services.shakenet import ShakeNetClient
 from shakevision.services.usgs import USGSClient
 from shakevision.services.report import ReportGenerator
 from shakevision.services.worker import DataRefreshWorker
-from shakevision.sources import DataSource, MockSource, SampleBatch, SeedLinkSource
-from shakevision.ui.animations import make_breathing_glow, make_fade_in
+from shakevision.utils.periods import filter_for_period, period_seconds
+from shakevision.ui.animations import make_fade_in
 from shakevision.i18n import LocaleService, t
 from shakevision.ui.app_header import AppHeader, ConnectionState
 from shakevision.ui.dashboard_view import DashboardPanel
 from shakevision.ui.globe_view import GlobePanel
-from shakevision.ui.theme import COLOR_ALERT
-from shakevision.ui.audio_player import AudioPlayer
 from shakevision.ui.pdf_exporter import PdfExporter
 from shakevision.ui.macos_native import (
     enhance_macos_window,
@@ -82,16 +62,18 @@ from shakevision.ui.macos_native import (
     title_bar_inset_for,
 )
 from shakevision.ui.pro_window import ProWindow
+from shakevision.ui.signal_safety import subscribe
+from shakevision.ui.workbench_controller import WorkbenchController
+
+logger = logging.getLogger(__name__)
 
 
 # Índices de las pestañas de nivel superior (v0.5.3: Profile salió
 # a un diálogo, ya no es tab — su botón en AppHeader abre el modal).
 TAB_GLOBE: int = 0      # 🌍 Globo (vista por defecto)
 TAB_DATA:  int = 1      # 📊 Datos
-
-# Periodo de refresco del helicorder (más lento que el oscilograma).
-# 24 h cambia muy despacio; cada 5 s es más que suficiente.
-HELICORDER_REFRESH_MS: int = 5000
+TAB_EVENTS: int = 2     # 📋 Eventos (centro de eventos)
+TAB_MINE: int = 3       # 👤 Mi colección (favoritos + registros)
 
 
 class MainWindow(QMainWindow):
@@ -103,64 +85,10 @@ class MainWindow(QMainWindow):
         # Guardar la configuración mutable (las señales del panel la actualizan)
         self._config = config
 
-        # Estación actualmente seleccionada (la primera por defecto)
-        self._current_station: StationPreset = config.stations[0]
-
-        # Búfer circular compartido entre la fuente y la UI
-        self._buffer = RingBuffer(
-            sample_rate_hz=config.stream.sample_rate_hz,
-            capacity_seconds=config.stream.buffer_seconds,
-        )
-
-        # Procesador DSP (detrend + Butterworth pasa-banda).
-        # Se aplica a la ventana de visualización en cada frame.
-        self._processor = WaveformProcessor(
-            sample_rate_hz=config.stream.sample_rate_hz,
-            filt=config.filt,
-        )
-
-        # Calculador de espectrograma para el panel inferior derecho
-        self._spectrum_computer = SpectrumComputer(
-            sample_rate_hz=config.stream.sample_rate_hz
-        )
-
-        # Suavizador del PGV para la tarjeta de intensidad (estilo VU meter)
-        self._intensity_smoother = IntensitySmoother(
-            decay_per_second=0.3,
-            refresh_hz=float(config.stream.refresh_fps),
-        )
-
-        # Reproductor de audio (sonificación bajo demanda)
-        self._audio_player = AudioPlayer(parent=self)
-        self._audio_player.playback_started.connect(self._on_playback_started)
-        self._audio_player.playback_finished.connect(self._on_playback_finished)
-        self._audio_player.playback_failed.connect(self._on_playback_failed)
-
-        # Detector STA/LTA con histéresis
-        self._detector = StaLtaDetector(
-            sample_rate_hz=config.stream.sample_rate_hz,
-            config=config.trigger,
-        )
-
-        # Grabador de eventos en MiniSEED
-        self._recorder = EventRecorder(
-            sample_rate_hz=config.stream.sample_rate_hz,
-            pre_event_seconds=config.trigger.pre_event_seconds,
-        )
-
-        # Animaciones activas durante una alerta de evento sísmico.
-        # Cada elemento es la tupla (panel, efecto, animación) para
-        # poder detenerlas y limpiar los efectos al finalizar.
-        self._alert_animations: list = []
-
-        # Contador para limitar el cómputo del espectrograma a 1/3 de
-        # los frames. La UI sigue a 30 FPS pero el espectro se actualiza
-        # a ~10 Hz, suficiente para percibirlo "en tiempo real" y
-        # ahorrando ~5 ms de SciPy por dos de cada tres frames.
-        self._spectrum_frame_skip: int = 0
-
-        # Fuente de datos activa (None mientras esté desconectado)
-        self._source: Optional[DataSource] = None
+        # v0.7.7 (S1): toda la canalización Workbench (source, buffer,
+        # processor, detector, recorder, audio, timers, …) vive ahora en
+        # ``WorkbenchController``. Se instancia más abajo, tras crear la
+        # ProWindow que conduce. MainWindow solo cablea sus señales.
 
         # Configuración básica de la ventana.
         # Tras el rediseño "Globo como protagonista" la ventana es más
@@ -236,6 +164,29 @@ class MainWindow(QMainWindow):
             t("dashboard.tab_title"),
         )
 
+        # ── Tab 3: Centro de eventos (catálogo + estaciones cercanas) ──
+        from shakevision.ui.event_center_panel import EventCenterPanel
+        self.event_center = EventCenterPanel(parent=self._tabs)
+        self.event_center.review_requested.connect(self._on_event_review_requested)
+        self._tabs.addTab(
+            self.event_center,
+            _get_icon_n("events", theme=_theme_n, size=64),
+            t("events.tab_title"),
+        )
+
+        # ── Tab 4: Mi colección (favoritos + grabaciones + catálogo) ──
+        from shakevision.ui.my_data_panel import MyDataPanel
+        self.my_data = MyDataPanel(parent=self._tabs)
+        self.my_data.review_event.connect(self._on_review_favorite_event)
+        self.my_data.use_station.connect(self._on_use_favorite_station)
+        self.my_data.recording_activated.connect(self._on_recording_activated)
+        self.my_data.review_catalog.connect(self._on_review_catalog)
+        self._tabs.addTab(
+            self.my_data,
+            _get_icon_n("user", theme=_theme_n, size=64),
+            t("mine.tab_title"),
+        )
+
         # NOTA v0.5.3: Profile dejó de ser tab — ahora se abre desde
         # el botón 👤 de la AppHeader como diálogo modal (ProfileDialog).
         # profile_panel se mantiene como atributo lazy (se instancia al
@@ -250,10 +201,9 @@ class MainWindow(QMainWindow):
 
         # Reaplicar iconos cuando el tema cambia (claro <-> oscuro)
         # para que el color del trazo coincida con el texto del tab.
-        try:
-            _TM_n.changed_signal().connect(lambda _t: self._refresh_tab_icons())
-        except Exception:  # noqa: BLE001
-            pass
+        # v0.7.7 (B1): subscribe() en vez de lambda — disconnect en
+        # destroyed + guarda RuntimeError.
+        subscribe(self, _TM_n.changed_signal(), self._refresh_tab_icons)
 
         # Globo es la vista por defecto (índice 0)
         self._tabs.setCurrentIndex(0)
@@ -271,14 +221,35 @@ class MainWindow(QMainWindow):
         # propio ProWindow intercepta closeEvent y solo se oculta,
         # preservando todo el estado (buffers, helicorder, etc.).
         self.pro_window = ProWindow(config=config)
-        # Conectar las 6 señales del ControlPanel (re-emitidas por
-        # ProWindow) a los slots existentes de MainWindow.
-        self.pro_window.station_changed.connect(self._on_station_changed)
-        self.pro_window.filter_changed.connect(self._on_filter_changed)
-        self.pro_window.trigger_changed.connect(self._on_trigger_changed)
-        self.pro_window.connect_clicked.connect(self._on_connect_clicked)
-        self.pro_window.disconnect_clicked.connect(self._on_disconnect_clicked)
-        self.pro_window.listen_clicked.connect(self._on_listen_clicked)
+
+        # v0.7.7 (S1): el controlador posee la canalización (source, buffer,
+        # detector, timers, audio…) y conduce la ProWindow. MainWindow
+        # cablea las 6 señales de control de la ProWindow a sus slots.
+        self._workbench = WorkbenchController(config, view=self.pro_window)
+        self.pro_window.station_changed.connect(
+            self._workbench.on_station_changed)
+        self.pro_window.filter_changed.connect(
+            self._workbench.on_filter_changed)
+        self.pro_window.trigger_changed.connect(
+            self._workbench.on_trigger_changed)
+        self.pro_window.connect_clicked.connect(
+            self._workbench.on_connect_clicked)
+        self.pro_window.disconnect_clicked.connect(
+            self._workbench.on_disconnect_clicked)
+        self.pro_window.listen_clicked.connect(
+            self._workbench.on_listen_clicked)
+        # v0.7.7: las unidades físicas (m/s) las pide la barra del propio
+        # oscilograma; el controlador obtiene la sensibilidad. Congelar y
+        # los pickers son internos al panel (no necesitan al controlador).
+        self.pro_window.waveform_panel.units_requested.connect(
+            self._workbench.on_units_toggled)
+
+        # v0.7.7: modo kiosko (monitorización a pantalla completa, estilo
+        # SWARM): F11 alterna; Esc sale. Oculta cabecera + barra de pestañas
+        # para una vista limpia del globo/datos.
+        self._kiosk: bool = False
+        QShortcut(QKeySequence("F11"), self, activated=self._toggle_kiosk)
+        QShortcut(QKeySequence("Esc"), self, activated=self._exit_kiosk)
 
         # Atajos cómodos a los paneles internos del banco de trabajo —
         # permiten que el resto de MainWindow siga escribiendo
@@ -290,12 +261,10 @@ class MainWindow(QMainWindow):
         self.helicorder_panel = self.pro_window.helicorder_panel
         self.particle_panel = self.pro_window.particle_panel
 
-        # Mostrar inmediatamente la estación inicial en la cabecera del panel
-        self.waveform_panel.set_station_label(self._current_station.label)
-        # … y en la barra superior de la app
-        self.app_header.set_station(
-            f"{self._current_station.network}.{self._current_station.station}"
-        )
+        # Estación inicial en la barra superior (el panel de ondas lo fija
+        # el propio controlador en su __init__).
+        _st0 = self._workbench.current_station
+        self.app_header.set_station(f"{_st0.network}.{_st0.station}")
         self.app_header.set_connection_state(ConnectionState.DISCONNECTED)
 
         # Botón "🔬 Pro" del AppHeader → mostrar la ventana flotante.
@@ -304,12 +273,6 @@ class MainWindow(QMainWindow):
         self.app_header.settings_clicked.connect(self._on_settings_clicked)
         # Botón 👤 Profile (v0.5.3) → abre ProfileDialog modal.
         self.app_header.profile_clicked.connect(self._open_profile_dialog)
-
-        # Temporizador independiente para el helicorder (refresco lento)
-        self._helicorder_timer = QTimer(self)
-        self._helicorder_timer.setInterval(HELICORDER_REFRESH_MS)
-        self._helicorder_timer.timeout.connect(self.helicorder_panel.refresh)
-        self._helicorder_timer.start()
 
         # ----------------------------------------------------------------
         # Barra de estado
@@ -326,8 +289,18 @@ class MainWindow(QMainWindow):
         self._status_bar.addPermanentWidget(self._connection_label)
         self._status_bar.showMessage(t("status.ready"))
 
+        # v0.7.7 (S1): cablear las señales del controlador a los widgets
+        # del shell (ya existen status bar + labels). El controlador no
+        # referencia estos widgets directamente.
+        self._workbench.status_message.connect(self._status_bar.showMessage)
+        self._workbench.latency_text.connect(self._latency_label.setText)
+        self._workbench.station_changed.connect(self.app_header.set_station)
+        self._workbench.connection_status_changed.connect(
+            self._set_connection_status)
+
         # Re-traducir cuando cambie el idioma: tabs, menús, status bar
-        LocaleService.language_changed_signal().connect(self._retranslate)
+        subscribe(self, LocaleService.language_changed_signal(),
+                  self._retranslate)  # v0.7.7 (B1)
 
         # ----------------------------------------------------------------
         # Menú "Archivo" mínimo
@@ -336,15 +309,8 @@ class MainWindow(QMainWindow):
 
         # NOTA: las conexiones señal-slot del ControlPanel ahora se
         # establecen contra ProWindow (que las reemite); ver más arriba
-        # en este __init__.
-
-        # ----------------------------------------------------------------
-        # Reloj de refresco de UI: lee del búfer a "refresh_fps" Hz
-        # ----------------------------------------------------------------
-        self._refresh_timer = QTimer(self)
-        self._refresh_timer.setInterval(1000 // max(1, config.stream.refresh_fps))
-        self._refresh_timer.timeout.connect(self._on_refresh_tick)
-        self._refresh_timer.start()
+        # en este __init__. El reloj de refresco de UI y los timers viven
+        # ahora en WorkbenchController.
 
         # ----------------------------------------------------------------
         # Capa de servicios externos (USGS + ShakeNet) que alimenta el globo
@@ -407,10 +373,19 @@ class MainWindow(QMainWindow):
         self.globe_panel.period_changed.connect(
             self._on_globe_period_changed
         )
+        # v0.7.7: el centro de eventos puede ampliar la ventana del feed
+        # (día/semana/mes) y refrescar a demanda.
+        self.event_center.period_changed.connect(self._data_worker.set_period)
+        self.event_center.refresh_requested.connect(self._data_worker.refresh_now)
         # Click en una estación del globo → diálogo de confirmación →
         # añadir a la lista del ControlPanel de la ventana Pro.
         self.globe_panel.station_clicked.connect(
             self._on_globe_station_clicked
+        )
+        # v0.7.7: click en un sismo → revisión histórica (Replay) con la
+        # estación seleccionada + ventana alrededor del origen + P/S teóricas.
+        self.globe_panel.earthquake_clicked.connect(
+            self._on_globe_quake_clicked
         )
         # v0.6 Phase 13: right-click en sismo → toggle favorito.
         self.globe_panel.favorite_toggled.connect(
@@ -419,13 +394,10 @@ class MainWindow(QMainWindow):
         # Cuando el FavoritesStore cambie (por cualquier vía: globe,
         # Profile dialog, settings import…), re-empuja la lista al
         # globo para que actualice las ★ visuales.
-        try:
-            from shakevision.services.favorites_store import FavoritesStore
-            FavoritesStore.changed_signal().connect(
-                self._push_favorited_event_ids_to_globe
-            )
-        except Exception:  # noqa: BLE001
-            pass
+        # v0.7.7 (B1): subscribe() — disconnect en destroyed + guarda.
+        from shakevision.services.favorites_store import FavoritesStore
+        subscribe(self, FavoritesStore.changed_signal(),
+                  self._push_favorited_event_ids_to_globe)
         # Push inicial cuando el globo esté listo (los favoritos
         # persistidos en QSettings ya tienen IDs, hay que mostrarlos
         # con ★ aunque el usuario no haga ningún cambio).
@@ -436,7 +408,8 @@ class MainWindow(QMainWindow):
                     self._push_favorited_event_ids_to_globe
                 )
         except Exception:  # noqa: BLE001
-            pass
+            logger.debug("No se pudo conectar globe_ready del bridge",
+                         exc_info=True)
 
         # Reconectar el botón "Reintentar" de los overlays
         for panel in (self.globe_panel, self.dashboard_panel):
@@ -505,443 +478,16 @@ class MainWindow(QMainWindow):
         # Tabs de nivel superior
         self._tabs.setTabText(TAB_GLOBE, t("globe.tab_title"))
         self._tabs.setTabText(TAB_DATA, t("dashboard.tab_title"))
+        self._tabs.setTabText(TAB_EVENTS, t("events.tab_title"))
+        self._tabs.setTabText(TAB_MINE, t("mine.tab_title"))
 
         # Menús: reconstruir
         self._build_menus()
 
         # Status bar permanente
-        if self._source is None:
+        if not self._workbench.has_source:
             self._connection_label.setText(t("header.status.disconnected"))
             self._latency_label.setText(t("status.latency_none"))
-
-    # ------------------------------------------------------------------
-    # Slots del panel de control
-    # ------------------------------------------------------------------
-    def _on_station_changed(self, preset: StationPreset) -> None:
-        """Actualiza la cabecera y, si la fuente está activa, la reinicia."""
-
-        self._current_station = preset
-        self.waveform_panel.set_station_label(preset.label)
-        self.app_header.set_station(f"{preset.network}.{preset.station}")
-        self._status_bar.showMessage(
-            t("status.station_selected",
-              station=f"{preset.network}.{preset.station}"),
-            4000,
-        )
-
-        # Reiniciar la conexión si ya estaba activa
-        if self._source is not None:
-            self._stop_source()
-            self._buffer.clear()
-            self._start_source_for(preset)
-
-    def _on_filter_changed(self, cfg: FilterConfig) -> None:
-        """Recibe la nueva configuración de filtro y la propaga al procesador."""
-
-        self._config.filt = cfg
-        self._processor.update_filter(cfg)
-        if cfg.enabled:
-            self._status_bar.showMessage(
-                t("status.filter_enabled",
-                  low=cfg.lowcut_hz, high=cfg.highcut_hz, order=cfg.order),
-                3000,
-            )
-        else:
-            self._status_bar.showMessage(t("status.filter_disabled"), 3000)
-
-    def _on_trigger_changed(self, cfg: TriggerConfig) -> None:
-        """Recibe la nueva configuración del detector."""
-
-        self._config.trigger = cfg
-        self._detector.update_config(cfg)
-        self._recorder.update_pre_event_seconds(cfg.pre_event_seconds)
-        self._status_bar.showMessage(
-            t("status.trigger_set",
-              sta=cfg.sta_seconds, lta=cfg.lta_seconds, th=cfg.threshold_on),
-            3000,
-        )
-
-    def _on_connect_clicked(self) -> None:
-        """Arranca la fuente de datos correspondiente al preset actual."""
-
-        if self._source is not None:
-            self._status_bar.showMessage(t("status.source_already_active"), 2000)
-            return
-
-        self._buffer.clear()
-        self._start_source_for(self._current_station)
-
-    def _on_disconnect_clicked(self) -> None:
-        """Detiene la fuente de datos y limpia la pantalla.
-
-        Pulsar Detener también detiene cualquier sonificación en curso
-        — antes podían quedarse colgadas en "Reproduciendo" y romper
-        toda la UI si el usuario también pulsaba Detener en ese estado.
-        """
-
-        # SIEMPRE detener audio primero (idempotente). Esto cubre el
-        # caso de "Escuchar últimos 60 s" → clip colgado → Detener.
-        self._audio_player.stop()
-
-        if self._source is None:
-            self._status_bar.showMessage(t("status.no_source_active"), 2500)
-            return
-
-        self._stop_source()
-        self._set_connection_status("Desconectado", "StatusWarn")
-        self._latency_label.setText(t("status.latency_none"))
-        self.waveform_panel.reset()
-        self.spectrogram_panel.reset()
-        self.particle_panel.reset()
-        self.helicorder_panel.reset()
-        self.intensity_card.reset()
-        self._intensity_smoother.reset()
-        self._stop_alert_blink()
-        self._detector.reset()
-        self._status_bar.showMessage(t("status.acquisition_stopped"), 3000)
-
-    # ------------------------------------------------------------------
-    # Gestión de la fuente de datos
-    # ------------------------------------------------------------------
-    def _start_source_for(self, preset: StationPreset) -> None:
-        """Crea e inicia la fuente apropiada para el preset dado.
-
-        Resolución del servidor SeedLink en este orden:
-          1. Si el preset trae ``seedlink_host``/``seedlink_port``
-             explícitos (típico cuando se construyó a partir de un
-             click en el globo), se usan.
-          2. Para AM (Raspberry Shake) caemos al servidor configurado
-             globalmente en ``AppConfig`` (``rs.local`` por defecto)
-             para preservar el comportamiento histórico.
-          3. Para cualquier otra red (IU/US/II/IC…) se consulta
-             ``seedlink_server_for()`` que enruta a rtserve.iris.
-        """
-
-        # Estación simulada: fuente local sin red
-        if preset.network == "XX" and preset.station == "MOCK":
-            source: DataSource = MockSource(
-                sample_rate_hz=self._config.stream.sample_rate_hz,
-                station_label=preset.label,
-            )
-        else:
-            from shakevision.config import (
-                seedlink_channels_for,
-                seedlink_location_for,
-                seedlink_server_for,
-            )
-
-            if preset.seedlink_host and preset.seedlink_port:
-                host, port = preset.seedlink_host, preset.seedlink_port
-            elif preset.network == "AM":
-                # Mantener el host global configurado para AM (rs.local
-                # por defecto, sustituible por el usuario en su config).
-                host = self._config.seedlink_host
-                port = self._config.seedlink_port
-            else:
-                # Redes profesionales → IRIS rtserve
-                host, port = seedlink_server_for(preset.network)
-
-            # Canales por red (AM=EHZ, IRIS=BHZ…). Pedirle EHZ a IRIS
-            # provoca un "timeout silencioso": el servidor acepta el
-            # SELECT pero nunca envía datos porque ese stream no existe.
-            channels = seedlink_channels_for(preset.network)
-
-            # Location: si el preset trae uno concreto válido, lo usamos;
-            # si no, lo derivamos de la red (IRIS → "00", AM → "").
-            # Filtrar comodines incompatibles con SeedLink.
-            loc = (preset.location or "").strip()
-            if loc in ("", "*", "--"):
-                loc = seedlink_location_for(preset.network)
-
-            source = SeedLinkSource(
-                host=host,
-                port=port,
-                network=preset.network,
-                station=preset.station,
-                location=loc,
-                channels=channels,
-                sample_rate_hz=self._config.stream.sample_rate_hz,
-                station_label=preset.label,
-            )
-
-        # Conectar señales antes de arrancar para no perder el primer batch
-        source.data_ready.connect(self._on_data_ready)
-        source.status_changed.connect(self._on_source_status)
-
-        self._source = source
-        self._set_connection_status("Conectando…", "StatusWarn")
-        source.start()
-        # El estado pasará a "Conectado" cuando llegue el primer batch
-        # (gestionado por _on_data_ready).
-
-    def _stop_source(self) -> None:
-        """Detiene de forma segura la fuente activa.
-
-        Robusto frente a:
-          * Click repetido en Detener (idempotente — segunda llamada
-            sale inmediatamente al ver self._source = None).
-          * Source bloqueada en handshake SeedLink (stop interno usa
-            socket.shutdown + terminate del hilo como fallback).
-          * Race entre deleteLater y hilos trabajadores aún vivos
-            (esperamos al hilo dentro de source.stop() antes de
-            deleteLater).
-        """
-
-        if self._source is None:
-            return
-
-        # ─── PASO 1: Quitar la referencia DE INMEDIATO para que un
-        # segundo click en Detener (mientras este stop tarda) sea no-op.
-        src = self._source
-        self._source = None
-
-        # Feedback inmediato. El stop() de SeedLinkSource puede tardar
-        # hasta 8-10 s si el handshake estaba colgado; sin este mensaje
-        # el usuario cree que la app se quedó frita.
-        self._status_bar.showMessage(t("status.stopping_source"), 0)
-
-        # ─── PASO 2: Desconectar señales para no recibir más callbacks
-        # de un objeto que vamos a destruir.
-        try:
-            src.data_ready.disconnect(self._on_data_ready)
-            src.status_changed.disconnect(self._on_source_status)
-        except (RuntimeError, TypeError):
-            pass
-
-        # ─── PASO 3: stop() bloquea hasta que el hilo worker muera
-        # (o el watchdog de terminate() se dispare). Capturar
-        # cualquier excepción para no impedir la limpieza posterior.
-        try:
-            src.stop()
-        except Exception:  # noqa: BLE001
-            import logging
-            logging.getLogger(__name__).exception(
-                "Excepción al detener la fuente; continuando con cleanup."
-            )
-
-        # ─── PASO 4: deleteLater solo es seguro AHORA que el hilo
-        # worker está garantizado muerto.
-        src.deleteLater()
-
-        self._status_bar.showMessage(t("status.source_stopped"), 3000)
-
-    # ------------------------------------------------------------------
-    # Slots del flujo de datos
-    # ------------------------------------------------------------------
-    def _on_data_ready(self, batch: SampleBatch) -> None:
-        """Escribe el bloque recibido en el búfer circular."""
-
-        self._buffer.write(
-            timestamp_unix=batch.timestamp_unix,
-            z=batch.z,
-            n=batch.n,
-            e=batch.e,
-        )
-        # Alimentar también el búfer largo del helicorder con el canal Z.
-        # El helicorder tiene su propio temporizador para repintar.
-        self.helicorder_panel.ingest(batch.z)
-
-        # Al recibir el primer batch, marcar la conexión como activa.
-        if self._connection_label.text() != "Conectado":
-            self._set_connection_status("Conectado", "StatusOk")
-
-    def _on_source_status(self, message: str) -> None:
-        """Muestra los mensajes de la fuente en la barra de estado."""
-
-        self._status_bar.showMessage(message, 4000)
-
-    def _on_refresh_tick(self) -> None:
-        """Lee la última ventana del búfer, la procesa y refresca todas las vistas."""
-
-        # Si no hay datos aún, no hace falta repintar.
-        if self._buffer.total_written == 0:
-            return
-
-        # 1. Leer la ventana de visualización del búfer circular.
-        raw = self._buffer.read_window(
-            seconds=self._config.stream.display_window_seconds
-        )
-
-        # 2. Pasarla por la cadena DSP (detrend + Butterworth pasa-banda).
-        #    Cuando el filtro está deshabilitado, ``apply_snapshot`` se
-        #    comporta como copia: el coste sigue siendo despreciable.
-        processed = self._processor.apply_snapshot(raw)
-
-        # 3. Pintar las trazas resultantes — solo si la VENTANA Pro
-        # está visible (Globo y Datos no consumen el búfer local; si
-        # Pro está oculta, no hay nada que renderizar y ahorramos CPU).
-        if self.pro_window.isVisible():
-            if self.pro_window.is_live_subtab_visible():
-                self.waveform_panel.update_from_snapshot(processed)
-                # Espectrograma: solo cada 3 frames (≈ 10 Hz) para
-                # reducir la carga de SciPy. La forma de onda sí se
-                # refresca cada frame para conservar la fluidez.
-                self._spectrum_frame_skip = (self._spectrum_frame_skip + 1) % 3
-                if self._spectrum_frame_skip == 0:
-                    spectrum = self._spectrum_computer.compute(
-                        processed.samples["Z"]
-                    )
-                    self.spectrogram_panel.update_from_spectrum(spectrum)
-            elif self.pro_window.is_particle_subtab_visible():
-                self.particle_panel.update_from_snapshot(processed)
-        # La pestaña helicorder se refresca con su propio temporizador
-        # (HELICORDER_REFRESH_MS), no en este tick.
-
-        # 3b. Actualizar la tarjeta de intensidad — siempre visible,
-        #     independientemente de la pestaña seleccionada.
-        gain = default_gain_for(
-            self._current_station.network, self._current_station.station
-        )
-        intensity_snap = IntensitySnapshot.from_samples(
-            samples=processed.samples["Z"],
-            gain_cm_s_per_count=gain,
-            smoother=self._intensity_smoother,
-        )
-        self.intensity_card.update_from_snapshot(intensity_snap)
-
-        # 5. Detección STA/LTA y, si dispara, lanzar grabación + alerta.
-        result = self._detector.process(processed)
-        if result.signal == EventSignal.TRIGGERED:
-            self._on_event_triggered(result.cft_max)
-        elif result.signal == EventSignal.RELEASED:
-            self._on_event_released()
-
-        # Actualizar la latencia entre la última muestra y "ahora"
-        latency_s = max(0.0, time.time() - raw.latest_timestamp_unix)
-        if latency_s < 10.0:
-            self._latency_label.setText(
-                t("status.latency_ms", value=latency_s * 1000)
-            )
-        else:
-            self._latency_label.setText(
-                t("status.latency_s", value=latency_s)
-            )
-
-    # ------------------------------------------------------------------
-    # Sonificación bajo demanda
-    # ------------------------------------------------------------------
-    def _on_listen_clicked(self, seconds: int, speed_factor: int) -> None:
-        """Toma la última ventana del búfer y la reproduce acelerada.
-
-        Comportamiento toggle: si ya hay un clip en reproducción cuando
-        el usuario pulsa de nuevo el botón, se detiene en lugar de
-        intentar arrancar otro. Esto evita que el usuario quede
-        atascado mirando "▶ Reproduciendo…" tras un clip muy corto
-        (típico con speed=60× → 1 s de audio).
-        """
-
-        if self._audio_player.is_playing:
-            self._audio_player.stop()
-            return
-
-        if self._buffer.total_written == 0:
-            self._status_bar.showMessage(t("status.no_audio_yet"), 4000)
-            return
-
-        # Leer la ventana solicitada (canal Z, el más representativo)
-        snap = self._buffer.read_window(seconds=float(seconds))
-        z = snap.samples.get("Z")
-        if z is None or z.size == 0:
-            self._status_bar.showMessage(t("status.empty_channel"), 3000)
-            return
-
-        # Sonificar y reproducir
-        result = sonify(
-            samples=z,
-            input_rate_hz=self._config.stream.sample_rate_hz,
-            speed_factor=float(speed_factor),
-        )
-        if result.audio.size == 0:
-            self._status_bar.showMessage(t("status.no_audio_generated"), 3000)
-            return
-
-        self._audio_player.play(result.audio, result.audio_rate_hz)
-        self._status_bar.showMessage(
-            t("status.playing_clip",
-              seconds=seconds, speed=speed_factor,
-              duration=result.audio_duration_s),
-            int(result.audio_duration_s * 1000) + 1500,
-        )
-        # Métrica local: tiempo total escuchado (en segundos enteros).
-        try:
-            from shakevision.services.usage_tracker import UsageTracker
-            UsageTracker.record_audio_played(result.audio_duration_s)
-        except Exception:  # noqa: BLE001
-            pass
-
-    def _on_playback_started(self) -> None:
-        """Mientras suena el clip, el botón se convierte en "Parar".
-
-        Cambio v0.3.1: el botón permanece ENABLED durante la
-        reproducción para que el usuario pueda interrumpir
-        clip-extra-cortos (speed=60× da ~1 s de audio). El texto
-        viene de i18n; el comportamiento toggle se gestiona en
-        ``_on_listen_clicked``.
-        """
-
-        self.control_panel.set_listen_button_enabled(
-            True, label=t("controls.sound.stop_playing")
-        )
-
-    def _on_playback_finished(self) -> None:
-        """Restaura el botón al terminar el clip + notifica al usuario."""
-
-        self.control_panel.set_listen_button_enabled(True)
-        self._status_bar.showMessage(t("status.playback_finished"), 2500)
-
-    def _on_playback_failed(self, message: str) -> None:
-        """Muestra el error y restaura el botón.
-
-        ``message`` puede llegar como i18n key (preferido, AudioPlayer
-        emite identificadores) o como texto libre legacy. Si parece
-        una key (empieza por "audio.error.") la traducimos.
-        """
-
-        text = t(message) if message.startswith("audio.error.") else message
-        self._status_bar.showMessage(t("status.audio_error", message=text), 5000)
-        self.control_panel.set_listen_button_enabled(True)
-
-    # ------------------------------------------------------------------
-    # Manejo de eventos sísmicos detectados
-    # ------------------------------------------------------------------
-    def _on_event_triggered(self, cft_max: float) -> None:
-        """El detector ha cruzado el umbral: alerta visual + grabación."""
-
-        self._start_alert_blink()
-        self._status_bar.showMessage(
-            t("status.event_detected", cft=cft_max), 8000,
-        )
-
-        # Lanzar la grabación del MiniSEED en este mismo tick. Captura
-        # cualquier excepción para no detener nunca la UI.
-        try:
-            result = self._recorder.record_event(
-                buffer=self._buffer,
-                network=self._current_station.network,
-                station=self._current_station.station,
-                location=self._current_station.location,
-                trigger_time_unix=time.time(),
-            )
-        except Exception as exc:  # pragma: no cover - red de seguridad
-            self._status_bar.showMessage(
-                t("status.event_save_failed", error=str(exc)), 6000,
-            )
-            return
-
-        if result.success and result.path is not None:
-            self._status_bar.showMessage(
-                t("status.event_saved", path=str(result.path)), 8000,
-            )
-        else:
-            self._status_bar.showMessage(
-                t("status.event_save_failed", error=str(result.error)), 6000,
-            )
-
-    def _on_event_released(self) -> None:
-        """El detector ha bajado del umbral de salida."""
-
-        self._stop_alert_blink()
-        self._status_bar.showMessage(t("status.event_ended"), 4000)
 
     # ------------------------------------------------------------------
     # Datos externos (USGS) — caché para reporte
@@ -950,26 +496,18 @@ class MainWindow(QMainWindow):
     # NOTA: ``all_6h`` no es un feed real de USGS — pedimos ``all_month``
     # como super-set y filtramos localmente en cliente. Aquí solo
     # registramos las equivalencias para los selectores del UI.
-    _PERIOD_SECONDS = {
-        "all_hour":  3600,
-        "all_6h":    6 * 3600,
-        "all_day":   86_400,
-        "all_week":  7 * 86_400,
-        "all_month": 30 * 86_400,
-    }
-
+    # v0.7.7 (O2): el mapeo periodo→segundos y el filtrado por ventana
+    # se extrajeron a ``shakevision.utils.periods`` (funciones puras
+    # testeables). Estos métodos delegan para no tocar a los llamadores.
     def _filter_for_period(self, quakes: list, period: str) -> list:
         """Devuelve los sismos ocurridos en las últimas ``period`` segundos."""
 
-        import time as _time
-        seconds = self._PERIOD_SECONDS.get(period, 86_400)
-        cutoff = _time.time() - seconds
-        return [q for q in quakes if q.timestamp_unix >= cutoff]
+        return filter_for_period(quakes, period)
 
     def _period_seconds(self, period: str) -> int:
         """Helper para mapear nombre de periodo → segundos."""
 
-        return self._PERIOD_SECONDS.get(period, 86_400)
+        return period_seconds(period)
 
     def _on_earthquakes_ready(self, quakes: list) -> None:
         """Recibe el catálogo completo, lo guarda y lo distribuye filtrado."""
@@ -982,6 +520,13 @@ class MainWindow(QMainWindow):
         # Globo: filtro temporal puro.
         globe_q = self._filter_for_period(quakes, self._globe_period)
         self.globe_panel.update_earthquakes(globe_q)
+
+        # Centro de eventos (nivel superior): catálogo completo + frescura.
+        try:
+            self.event_center.set_events(quakes)
+            self.event_center.set_last_updated()
+        except (RuntimeError, AttributeError):
+            pass
 
         # Dashboard: aplicar tanto periodo como filtro de fuente,
         # y pasar period_seconds para que el payload se construya
@@ -1014,6 +559,12 @@ class MainWindow(QMainWindow):
         self._stations_by_nsl = {
             (s.network, s.code): s for s in stations
         }
+        self._latest_stations = list(stations)
+        # Centro de eventos: catálogo de estaciones para "más cercanas".
+        try:
+            self.event_center.set_stations(stations)
+        except (RuntimeError, AttributeError):
+            pass
         # Si ya tenemos sismos cargados, repintar el panel para refrescar
         # el KPI station_summary también.
         if self._latest_earthquakes:
@@ -1092,6 +643,185 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     # Globe → Pro: click en estación → confirmación → add_station
     # ------------------------------------------------------------------
+    def _on_globe_quake_clicked(self, quake_id: str) -> None:
+        """v0.7.7: click en un sismo del globo → revisión histórica.
+
+        Abre el Workbench en la pestaña Replay, fija la ventana temporal
+        alrededor del origen del sismo (manteniendo la estación seleccionada)
+        y guarda las coordenadas del evento para superponer las llegadas
+        teóricas P/S tras la descarga. NO descarga automáticamente: el usuario
+        revisa la estación/ventana y pulsa Descargar.
+        """
+
+        if not quake_id:
+            return
+        from datetime import datetime, timezone
+        from shakevision.i18n import t
+        from PySide6.QtWidgets import QMessageBox
+        from shakevision.services.favorites_store import FavoritesStore
+
+        quake = None
+        for q in getattr(self, "_latest_earthquakes", []) or []:
+            if q.id == quake_id:
+                quake = q
+                break
+        if quake is None:
+            return
+
+        when = datetime.fromtimestamp(quake.timestamp_unix, tz=timezone.utc)
+        box = QMessageBox(self)
+        box.setWindowTitle(t("dialog.replay_event.title"))
+        box.setText(t("dialog.replay_event.body",
+                      mag=f"{quake.magnitude:.1f}", place=quake.place,
+                      when=when.strftime("%Y-%m-%d %H:%M:%S UTC")))
+        review_btn = box.addButton(t("dialog.btn_review"), QMessageBox.AcceptRole)
+        fav_now = FavoritesStore.is_favorite_event(quake_id)
+        fav_btn = box.addButton(
+            t("dialog.btn_unfavorite") if fav_now else t("dialog.btn_favorite"),
+            QMessageBox.ActionRole)
+        box.addButton(t("dialog.btn_cancel"), QMessageBox.RejectRole)
+        box.setDefaultButton(review_btn)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is review_btn:
+            self._open_event_in_replay(quake)
+        elif clicked is fav_btn:
+            self._on_globe_favorite_toggled(quake_id)   # add/quita favorito
+
+    def _find_quake(self, quake_id: str):
+        for q in getattr(self, "_latest_earthquakes", []) or []:
+            if q.id == quake_id:
+                return q
+        return None
+
+    def _nearest_station_to(self, quake):
+        """Estación IRIS/Shake más cercana al sismo (o None)."""
+
+        from shakevision.processing.measurements import great_circle_degrees
+        stations = getattr(self, "_latest_stations", None) or []
+        best, best_d = None, None
+        for s in stations:
+            lat = getattr(s, "latitude", None)
+            lon = getattr(s, "longitude", None)
+            # Solo redes reproducibles vía IRIS dataselect (no Raspberry Shake).
+            if lat is None or lon is None or getattr(s, "provider", "") != "usgs":
+                continue
+            d = great_circle_degrees(quake.latitude, quake.longitude, lat, lon)
+            if best_d is None or d < best_d:
+                best, best_d = s, d
+        return best
+
+    def _event_name(self, quake) -> str:
+        return f"M{quake.magnitude:.1f} — {quake.place}"
+
+    def _open_event_in_replay(self, quake, station=None) -> None:
+        """Abre el Workbench/Replay en el evento dado (sin diálogo).
+
+        Si se da (o se encuentra) una estación CERCANA, se usa esa para el
+        evento (ventana razonable, P/S dentro del dato), sin tocar el combo ni
+        la conexión en vivo. Si no hay catálogo de estaciones, cae al modo
+        antiguo (estación seleccionada en la barra lateral).
+        """
+
+        from datetime import datetime, timezone
+        when = datetime.fromtimestamp(quake.timestamp_unix, tz=timezone.utc)
+        self.pro_window.show_and_focus()
+        self.pro_window.subtabs.setCurrentIndex(self.pro_window.PRO_REPLAY)
+        # Tip para usuarios de UN solo monitor: el análisis abre en OTRA ventana
+        # (el Workbench), que puede quedar tapada por la principal.
+        self._status_bar.showMessage(t("status.opened_in_workbench"), 5000)
+        if station is None:
+            station = self._nearest_station_to(quake)
+        try:
+            if station is not None:
+                from shakevision.config import seedlink_channels_for
+                band = seedlink_channels_for(station.network)[0][:2]
+                self.pro_window.replay_panel.set_event_review(
+                    lat=quake.latitude, lon=quake.longitude,
+                    depth_km=quake.depth_km, origin=when,
+                    event_name=self._event_name(quake),
+                    net=station.network, sta=station.code, band=band,
+                    duration_s=600,
+                )
+            else:
+                self.pro_window.replay_panel.prefill_from_event_context(
+                    lat=quake.latitude, lon=quake.longitude,
+                    depth_km=quake.depth_km, origin=when, duration_s=600,
+                    event_name=self._event_name(quake),
+                )
+        except Exception:  # noqa: BLE001
+            logger.debug("Replay: prefill desde evento falló", exc_info=True)
+
+    def _on_event_review_requested(self, quake_id: str, station) -> None:
+        """Centro de eventos: el usuario eligió un evento + estación cercana."""
+
+        quake = self._find_quake(quake_id)
+        if quake is not None:
+            self._open_event_in_replay(quake, station=station)
+
+    def _on_recording_activated(self, path: str, net: str, sta: str) -> None:
+        """Doble clic en una grabación local → abrir en Replay."""
+
+        self.pro_window.show_and_focus()
+        self.pro_window.subtabs.setCurrentIndex(self.pro_window.PRO_REPLAY)
+        try:
+            self.pro_window.replay_panel.load_local_stream(path, net, sta)
+        except Exception:  # noqa: BLE001
+            logger.debug("Replay: cargar grabación local falló", exc_info=True)
+
+    def _on_review_catalog(self, idx: int) -> None:
+        """"Mi colección": doble clic en el catálogo → reabrir esa revisión
+        (estación + ventana + picks P/S guardados) en Replay."""
+
+        from shakevision.services.catalog_store import CatalogStore
+        detail = CatalogStore().get_event(int(idx))
+        if not detail:
+            self._status_bar.showMessage(t("mine.catalog_open_failed"), 4000)
+            return
+        self.pro_window.show_and_focus()
+        self.pro_window.subtabs.setCurrentIndex(self.pro_window.PRO_REPLAY)
+        self._status_bar.showMessage(t("status.opened_in_workbench"), 5000)
+        try:
+            self.pro_window.replay_panel.load_catalog_event(detail)
+        except Exception:  # noqa: BLE001
+            logger.debug("Replay: reabrir desde catálogo falló", exc_info=True)
+
+    def _on_review_favorite_event(self, fav) -> None:
+        """"Mi colección": doble clic en un sismo favorito → revisar.
+
+        El favorito guarda lat/lon/depth (v0.7.7) → se construye un objeto
+        tipo-Earthquake y se reusa la ruta de revisión. Favoritos antiguos sin
+        coords se intentan resolver en el feed actual por id.
+        """
+
+        from types import SimpleNamespace
+        if getattr(fav, "latitude", 0.0) or getattr(fav, "longitude", 0.0):
+            quake = SimpleNamespace(
+                id=fav.id, magnitude=fav.magnitude, place=fav.place,
+                timestamp_unix=fav.timestamp_unix, latitude=fav.latitude,
+                longitude=fav.longitude, depth_km=fav.depth_km)
+        else:
+            quake = self._find_quake(fav.id)
+        if quake is not None:
+            self._open_event_in_replay(quake)
+        else:
+            self._status_bar.showMessage(t("mine.fav_no_coords"), 4000)
+
+    def _on_use_favorite_station(self, net: str, code: str) -> None:
+        """"Mi colección": doble clic en estación favorita → añadir al combo
+        del Workbench (sin conectar) y mostrarlo."""
+
+        st = self._stations_by_nsl.get((net, code))
+        if st is not None:
+            self._on_globe_station_clicked(net, code)
+        else:
+            # Sin metadatos no podemos construir un preset completo; al menos
+            # abrir el Workbench para que el usuario la seleccione/añada.
+            self.pro_window.show_and_focus()
+            self._status_bar.showMessage(
+                t("status.station_already_there", network=net, code=code), 3000)
+
+    # ------------------------------------------------------------------
     def _on_globe_favorite_toggled(self, quake_id: str) -> None:
         """v0.6 Phase 13: right-click sobre un sismo en el globo.
 
@@ -1138,6 +868,9 @@ class MainWindow(QMainWindow):
                 magnitude=float(quake.magnitude),
                 place=quake.place or "",
                 timestamp_unix=float(quake.timestamp_unix),
+                latitude=float(quake.latitude),
+                longitude=float(quake.longitude),
+                depth_km=float(quake.depth_km),
             )
             self._status_bar.showMessage(
                 t("status.favorite_added",
@@ -1156,7 +889,8 @@ class MainWindow(QMainWindow):
             if hasattr(self, "globe_panel"):
                 self.globe_panel.push_favorited_event_ids(ids)
         except Exception:  # noqa: BLE001
-            pass
+            logger.debug("No se pudieron empujar favoritos al globo",
+                         exc_info=True)
 
     def _on_globe_station_clicked(self, network: str, code: str) -> None:
         """Maneja el click sobre una estación en el globo 3D.
@@ -1181,7 +915,8 @@ class MainWindow(QMainWindow):
             from shakevision.services.usage_tracker import UsageTracker
             UsageTracker.record_station_clicked()
         except Exception:  # noqa: BLE001 — métricas nunca rompen UI
-            pass
+            logger.debug("UsageTracker.record_station_clicked falló",
+                         exc_info=True)
 
         from PySide6.QtWidgets import QMessageBox
         from shakevision.config import (
@@ -1235,14 +970,28 @@ class MainWindow(QMainWindow):
             channels=selectors,
             slot=used + 1, cap=cap,
         )
-        answer = QMessageBox.question(
-            self,
-            t("dialog.usgs.title", network=network, code=code),
-            msg,
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.Yes,
-        )
-        if answer != QMessageBox.Yes:
+        from shakevision.services.favorites_store import FavoritesStore
+        box = QMessageBox(self)
+        box.setWindowTitle(t("dialog.usgs.title", network=network, code=code))
+        box.setText(msg)
+        add_btn = box.addButton(t("dialog.btn_add_workbench"),
+                                QMessageBox.AcceptRole)
+        fav_now = FavoritesStore.is_favorite_station(network, code)
+        fav_btn = box.addButton(
+            t("dialog.btn_unfavorite") if fav_now else t("dialog.btn_favorite"),
+            QMessageBox.ActionRole)
+        box.addButton(t("dialog.btn_cancel"), QMessageBox.RejectRole)
+        box.setDefaultButton(add_btn)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is fav_btn:
+            if fav_now:
+                FavoritesStore.remove_station(network, code)
+            else:
+                FavoritesStore.add_station(
+                    network, code, site_name=site or "", provider="usgs")
+            return
+        if clicked is not add_btn:
             return
 
         # Construir el preset con host + location + canal explícitos.
@@ -1287,6 +1036,65 @@ class MainWindow(QMainWindow):
                 )
         self._data_worker.refresh_now()
 
+    # ------------------------------------------------------------------
+    # Helpers de exportación de reporte (v0.7.7 O1: de-duplicar HTML/PDF)
+    # ------------------------------------------------------------------
+    def _station_label(self) -> str:
+        """Etiqueta ``RED.ESTACION`` del station activo para el reporte."""
+
+        station = self._workbench.current_station
+        return f"{station.network}.{station.station}"
+
+    def _ensure_report_generator(self) -> Optional[ReportGenerator]:
+        """Crea el ``ReportGenerator`` perezosamente.
+
+        Devuelve ``None`` (y muestra el error en la status bar) si la
+        plantilla no carga — los llamadores deben abortar en ese caso.
+        """
+
+        if self._report_generator is None:
+            try:
+                self._report_generator = ReportGenerator()
+            except Exception as exc:  # noqa: BLE001
+                self._status_bar.showMessage(
+                    t("status.template_load_error", error=str(exc)), 8000,
+                )
+                return None
+        return self._report_generator
+
+    def _ask_report_save_path(
+        self, ext: str, title: str, file_filter: str,
+    ) -> Optional[Path]:
+        """Diálogo "guardar como" con nombre por defecto + sufijo forzado.
+
+        Devuelve ``None`` si el usuario cancela.
+        """
+
+        from datetime import datetime, timezone
+        default_name = datetime.now(timezone.utc).strftime(
+            f"shakevision_reporte_%Y%m%d_%H%M.{ext}"
+        )
+        path_str, _ = QFileDialog.getSaveFileName(
+            self, title, str(Path.home() / default_name), file_filter,
+        )
+        if not path_str:
+            return None
+        target = Path(path_str)
+        if target.suffix.lower() != f".{ext}":
+            target = target.with_suffix(f".{ext}")
+        return target
+
+    @staticmethod
+    def _record_report_metric() -> None:
+        """Métrica local "reporte generado" — nunca rompe la UI."""
+
+        try:
+            from shakevision.services.usage_tracker import UsageTracker
+            UsageTracker.record_report_generated()
+        except Exception:  # noqa: BLE001 — métricas nunca rompen UI
+            logger.debug("UsageTracker.record_report_generated falló",
+                         exc_info=True)
+
     def _on_export_report(self) -> None:
         """Pregunta al usuario dónde guardar el reporte y lo escribe."""
 
@@ -1294,47 +1102,25 @@ class MainWindow(QMainWindow):
             self._status_bar.showMessage(t("status.no_data_for_report"), 6000)
             return
 
-        # Sugerir un nombre por defecto basado en la fecha actual
-        from datetime import datetime
-        default_name = datetime.utcnow().strftime(
-            "shakevision_reporte_%Y%m%d_%H%M.html"
-        )
-        default_path = str(Path.home() / default_name)
-
-        path_str, _ = QFileDialog.getSaveFileName(
-            self,
-            "Exportar reporte HTML",
-            default_path,
+        target = self._ask_report_save_path(
+            "html", "Exportar reporte HTML",
             "HTML (*.html);;Todos los archivos (*)",
         )
-        if not path_str:
+        if target is None:
             return  # cancelado
 
-        target = Path(path_str)
-        if target.suffix.lower() != ".html":
-            target = target.with_suffix(".html")
-
-        # Construir el generador perezosamente
-        if self._report_generator is None:
-            try:
-                self._report_generator = ReportGenerator()
-            except Exception as exc:
-                self._status_bar.showMessage(
-                    t("status.template_load_error", error=str(exc)), 8000,
-                )
-                return
+        generator = self._ensure_report_generator()
+        if generator is None:
+            return
 
         try:
-            written = self._report_generator.generate(
+            written = generator.generate(
                 quakes=self._latest_earthquakes,
-                station_label=(
-                    f"{self._current_station.network}."
-                    f"{self._current_station.station}"
-                ),
+                station_label=self._station_label(),
                 version=__version__,
                 output_path=target,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             self._status_bar.showMessage(
                 t("status.report_error", error=str(exc)), 8000,
             )
@@ -1343,12 +1129,7 @@ class MainWindow(QMainWindow):
         self._status_bar.showMessage(
             t("status.report_exported", path=str(written)), 8000,
         )
-        # Métrica local
-        try:
-            from shakevision.services.usage_tracker import UsageTracker
-            UsageTracker.record_report_generated()
-        except Exception:  # noqa: BLE001
-            pass
+        self._record_report_metric()
 
     def _on_export_report_pdf(self) -> None:
         """Misma lógica que el HTML pero invocando QWebEngineView.printToPdf."""
@@ -1357,41 +1138,20 @@ class MainWindow(QMainWindow):
             self._status_bar.showMessage(t("status.no_data_for_report"), 6000)
             return
 
-        from datetime import datetime
-        default_name = datetime.utcnow().strftime(
-            "shakevision_reporte_%Y%m%d_%H%M.pdf"
-        )
-        default_path = str(Path.home() / default_name)
-
-        path_str, _ = QFileDialog.getSaveFileName(
-            self,
-            "Exportar reporte PDF",
-            default_path,
+        target = self._ask_report_save_path(
+            "pdf", "Exportar reporte PDF",
             "PDF (*.pdf);;Todos los archivos (*)",
         )
-        if not path_str:
+        if target is None:
             return
 
-        target = Path(path_str)
-        if target.suffix.lower() != ".pdf":
-            target = target.with_suffix(".pdf")
+        generator = self._ensure_report_generator()
+        if generator is None:
+            return
 
-        # Generar el HTML con el mismo ReportGenerator
-        if self._report_generator is None:
-            try:
-                self._report_generator = ReportGenerator()
-            except Exception as exc:
-                self._status_bar.showMessage(
-                    t("status.template_load_error", error=str(exc)), 8000,
-                )
-                return
-
-        html = self._report_generator.render(
+        html = generator.render(
             quakes=self._latest_earthquakes,
-            station_label=(
-                f"{self._current_station.network}."
-                f"{self._current_station.station}"
-            ),
+            station_label=self._station_label(),
             version=__version__,
         )
 
@@ -1403,11 +1163,7 @@ class MainWindow(QMainWindow):
             self._status_bar.showMessage(
                 t("status.pdf_exported", path=str(path)), 8000,
             )
-            try:
-                from shakevision.services.usage_tracker import UsageTracker
-                UsageTracker.record_report_generated()
-            except Exception:  # noqa: BLE001
-                pass
+            self._record_report_metric()
 
         self._pdf_exporter.finished.connect(_on_pdf_done)
         self._pdf_exporter.failed.connect(
@@ -1427,6 +1183,36 @@ class MainWindow(QMainWindow):
         # show_and_focus es idempotente: si ya estaba visible solo la
         # trae al frente; si estaba oculta la muestra. Nunca recrea.
         self.pro_window.show_and_focus()
+
+    # ------------------------------------------------------------------
+    # Modo kiosko (pantalla completa de monitorización)
+    # ------------------------------------------------------------------
+    def _toggle_kiosk(self) -> None:
+        self._set_kiosk(not self._kiosk)
+
+    def _exit_kiosk(self) -> None:
+        if self._kiosk:
+            self._set_kiosk(False)
+
+    def _set_kiosk(self, on: bool) -> None:
+        """Entra/sale del modo kiosko: oculta cabecera + barra de pestañas y
+        pasa a pantalla completa (o revierte)."""
+
+        self._kiosk = bool(on)
+        self.app_header.setVisible(not on)
+        try:
+            self._tabs.tabBar().setVisible(not on)
+        except (RuntimeError, AttributeError):
+            pass
+        if on:
+            self.showFullScreen()
+            try:
+                from shakevision.i18n import t
+                self._status_bar.showMessage(t("status.kiosk_on"), 4000)
+            except (RuntimeError, AttributeError, KeyError):
+                pass
+        else:
+            self.showNormal()
 
     def _on_settings_clicked(self) -> None:
         """Abre el diálogo de preferencias.
@@ -1464,10 +1250,12 @@ class MainWindow(QMainWindow):
                                   get_icon("globe", theme=theme, size=64))
             self._tabs.setTabIcon(TAB_DATA,
                                   get_icon("chart", theme=theme, size=64))
+            self._tabs.setTabIcon(TAB_EVENTS,
+                                  get_icon("events", theme=theme, size=64))
+            self._tabs.setTabIcon(TAB_MINE,
+                                  get_icon("user", theme=theme, size=64))
         except Exception as exc:  # noqa: BLE001
-            import logging
-            logging.getLogger(__name__).debug(
-                "Tab icon refresh skip (%s)", exc)
+            logger.debug("Tab icon refresh skip (%s)", exc)
 
     def _open_profile_dialog(self) -> None:
         """Abre el ProfileDialog modal (v0.5.3).
@@ -1519,6 +1307,14 @@ class MainWindow(QMainWindow):
         oscuro de varios segundos antes de estabilizarse.
         """
 
+        # Al entrar en "Mi colección": re-escanear disco (grabaciones nuevas /
+        # catálogo) sin pulsar Refrescar.
+        if index == TAB_MINE:
+            try:
+                self.my_data.refresh()
+            except (RuntimeError, AttributeError):
+                pass
+
         new_widget = self._tabs.widget(index)
         if new_widget is None:
             return
@@ -1534,52 +1330,6 @@ class MainWindow(QMainWindow):
             return
         self._fade_in_animation = make_fade_in(new_widget, duration_ms=180)
         self._fade_in_animation.start()
-
-    # ------------------------------------------------------------------
-    # Animación de alerta (respiración cíclica del marco)
-    # ------------------------------------------------------------------
-    def _start_alert_blink(self) -> None:
-        """Inicia la respiración: borde rojo fijo + halo difuso pulsante."""
-
-        if self._alert_animations:
-            return  # Ya hay alerta activa, no apilamos animaciones
-
-        # Activar el borde rojo estático (regla QSS [alert="true"])
-        self._apply_alert_property(True)
-
-        # Aplicar un halo de sombra rojo a cada panel y animar su radio
-        # de difuminado entre 8 y 32 píxeles con curva sinusoidal.
-        for panel in (self.waveform_panel, self.spectrogram_panel):
-            effect = QGraphicsDropShadowEffect(panel)
-            effect.setColor(QColor(COLOR_ALERT))
-            effect.setOffset(0, 0)
-            effect.setBlurRadius(8.0)
-            panel.setGraphicsEffect(effect)
-
-            anim = make_breathing_glow(
-                effect, b"blurRadius", low=8.0, high=32.0, duration_ms=1400
-            )
-            anim.start()
-            self._alert_animations.append((panel, effect, anim))
-
-    def _stop_alert_blink(self) -> None:
-        """Detiene la respiración y limpia los efectos visuales."""
-
-        for panel, _effect, anim in self._alert_animations:
-            anim.stop()
-            panel.setGraphicsEffect(None)
-        self._alert_animations.clear()
-        self._apply_alert_property(False)
-
-    def _apply_alert_property(self, on: bool) -> None:
-        """Activa/desactiva la propiedad ``alert`` del panel de ondas (QSS)."""
-
-        for panel in (self.waveform_panel, self.spectrogram_panel):
-            panel.setProperty("alert", "true" if on else "false")
-            style = panel.style()
-            if style is not None:
-                style.unpolish(panel)
-                style.polish(panel)
 
     # ------------------------------------------------------------------
     # Helpers
@@ -1642,12 +1392,10 @@ class MainWindow(QMainWindow):
         ``_force_close = True`` para que respete la solicitud de salida.
         """
 
-        self._refresh_timer.stop()
-        self._helicorder_timer.stop()
-        self._stop_alert_blink()
-        self._audio_player.stop()
+        # v0.7.7 (S1): el controlador detiene timers + alerta + audio +
+        # fuente. El worker de datos (feed USGS) sigue viviendo aquí.
+        self._workbench.shutdown()
         self._data_worker.stop()
-        self._stop_source()
         # Cerrar realmente la ventana Pro (no solo ocultarla)
         if hasattr(self, "pro_window") and self.pro_window is not None:
             # Reemplazamos su closeEvent para que esta vez sí termine

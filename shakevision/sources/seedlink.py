@@ -34,6 +34,7 @@ from typing import Optional
 import numpy as np
 from PySide6.QtCore import QObject, QThread, QTimer, Signal, Slot
 
+from shakevision.i18n import t
 from shakevision.sources.base import DataSource, SampleBatch
 
 
@@ -42,6 +43,13 @@ DEFAULT_CHANNELS: tuple[str, str, str] = ("EHZ", "EHN", "EHE")
 
 # Periodo del temporizador que empaqueta y emite SampleBatch (ms)
 EMIT_INTERVAL_MS: int = 100
+
+# Timeout del pre-check TCP. NO bajar de 5 s: aunque una conexión LAN sana
+# responde en decenas de ms, los servidores SeedLink internacionales
+# (p. ej. rtserve.iris.edu desde Asia) pueden tardar 3-5 s solo en el
+# DNS+TCP. v0.7.7 lo bajó a 3 s "para fallar más rápido" y provocó timeouts
+# espurios en conexiones reales pero lentas → revertido a 5 s.
+TCP_PRECHECK_TIMEOUT_S: float = 5.0
 
 
 # ============================================================
@@ -116,7 +124,7 @@ class _SeedLinkWorker(QObject):
         try:
             from obspy.clients.seedlink.easyseedlink import create_client
         except Exception as exc:  # pragma: no cover
-            self.status.emit(f"❌ ObsPy no disponible: {exc}")
+            self.status.emit(t("source.seedlink.obspy_missing", error=exc))
             return
 
         endpoint = f"{self._host}:{self._port}"
@@ -128,33 +136,33 @@ class _SeedLinkWorker(QObject):
 
         if self._stopping:
             return
-        self.status.emit(f"🔍 Resolviendo DNS «{self._host}»…")
+        self.status.emit(t("source.seedlink.dns_resolving", host=self._host))
         t0 = _time.monotonic()
         try:
             with _socket.create_connection(
-                (self._host, self._port), timeout=5.0
+                (self._host, self._port), timeout=TCP_PRECHECK_TIMEOUT_S
             ):
                 pass
         except _socket.gaierror as exc:
             self.status.emit(
-                f"❌ DNS falló para «{self._host}»: {exc}. "
-                "Verifica el nombre del host o tu conexión."
+                t("source.seedlink.dns_failed", host=self._host, error=exc)
             )
             return
         except (_socket.timeout, TimeoutError):
             self.status.emit(
-                f"❌ TCP timeout (5 s) hacia {endpoint}. "
-                "Probable firewall/VPN bloqueando :{self._port}."
+                t("source.seedlink.tcp_timeout",
+                  seconds=int(TCP_PRECHECK_TIMEOUT_S), endpoint=endpoint)
             )
             return
         except OSError as exc:
-            self.status.emit(f"❌ Socket inalcanzable {endpoint}: {exc}")
+            self.status.emit(
+                t("source.seedlink.socket_unreachable",
+                  endpoint=endpoint, error=exc)
+            )
             return
 
         tcp_ms = (_time.monotonic() - t0) * 1000
-        self.status.emit(
-            f"🌐 TCP OK ({tcp_ms:.0f} ms). Iniciando handshake SeedLink…"
-        )
+        self.status.emit(t("source.seedlink.tcp_ok", ms=f"{tcp_ms:.0f}"))
 
         # ──────────────────────────────────────────────────────────────
         # 3. Crear cliente (HELLO + INFO). Sin timeout: dejamos que
@@ -163,16 +171,14 @@ class _SeedLinkWorker(QObject):
         # ──────────────────────────────────────────────────────────────
         if self._stopping:
             return
-        self.status.emit(
-            "🤝 Handshake con servidor SeedLink (puede tardar 10-60 s "
-            "si el servidor está congestionado)…"
-        )
+        self.status.emit(t("source.seedlink.handshake"))
         t1 = _time.monotonic()
         try:
             client = create_client(endpoint, on_data=self._on_trace)
         except Exception as exc:
             if not self._stopping:
-                self.status.emit(f"❌ Handshake falló: {exc}")
+                self.status.emit(
+                    t("source.seedlink.handshake_failed", error=exc))
             return
 
         with self._client_lock:
@@ -185,39 +191,44 @@ class _SeedLinkWorker(QObject):
 
         hello_s = _time.monotonic() - t1
         self.status.emit(
-            f"✅ Handshake OK ({hello_s:.1f} s). Enviando SELECT…"
-        )
+            t("source.seedlink.handshake_ok", seconds=f"{hello_s:.1f}"))
 
         # ──────────────────────────────────────────────────────────────
-        # 4. SELECT por cada canal
+        # 4. SELECT con comodín por banda (una sola subscripción)
         # ──────────────────────────────────────────────────────────────
+        # v0.7.7 fix: antes se enviaban 3 SELECT separadas (BHZ, BHN, BHE).
+        # Algunos servidores solo atienden la primera → solo llegaba la
+        # vertical y el hodograma se quedaba sin horizontales (caso IU.DAV).
+        # Ahora una sola SELECT con comodín "{loc}{banda}?" (p. ej. "00BH?")
+        # captura las TRES componentes de una vez — e incluye horizontales
+        # nombradas BH1/BH2 (orientación arbitraria, común en GSN) además de
+        # BHN/BHE. El mapeo 1→N, 2→E se hace en _on_trace.
         loc = (self._location or "").strip()
         if loc in ("", "*", "--"):
             loc = ""
 
-        selectors: list[str] = []
+        # Banda = código de canal sin la última letra de componente
+        # ("BHZ" → "BH", "EHZ" → "EH"). Fallback a "BH" (broadband).
+        band = self._channels[0][:-1] if self._channels else "BH"
+        selector = f"{loc}{band}?"
+        selectors = [selector]
         try:
-            for i, channel in enumerate(self._channels, start=1):
-                if self._stopping:
-                    return
-                selector = f"{loc}{channel}" if loc else channel
-                selectors.append(selector)
-                self.status.emit(
-                    f"📡 SELECT {i}/{len(self._channels)}: "
-                    f"{self._network}.{self._station} → {selector}"
-                )
-                client.select_stream(self._network, self._station, selector)
+            self.status.emit(
+                t("source.seedlink.select",
+                  index=1, total=1,
+                  nslc=f"{self._network}.{self._station}",
+                  selector=selector)
+            )
+            client.select_stream(self._network, self._station, selector)
         except Exception as exc:
             if not self._stopping:
-                self.status.emit(f"❌ SELECT falló: {exc}")
+                self.status.emit(t("source.seedlink.select_failed", error=exc))
             return
 
         if self._stopping:
             return
         self.status.emit(
-            f"⏳ Suscrito a [{', '.join(selectors)}]. "
-            "Esperando primer paquete…"
-        )
+            t("source.seedlink.subscribed", selectors=", ".join(selectors)))
 
         # ──────────────────────────────────────────────────────────────
         # 5. Loop bloqueante. Termina cuando:
@@ -228,16 +239,16 @@ class _SeedLinkWorker(QObject):
             client.run()
         except Exception as exc:
             if not self._stopping:
-                self.status.emit(f"❌ Conexión perdida: {exc}")
+                self.status.emit(t("source.seedlink.conn_lost", error=exc))
         finally:
             # Limpiamos la referencia ANTES de emitir el último status
             # para que stop() no intente cerrar un cliente ya muerto.
             with self._client_lock:
                 self._client = None
             if self._stopping:
-                self.status.emit("⏹ Conexión cancelada por el usuario.")
+                self.status.emit(t("source.seedlink.cancelled"))
             else:
-                self.status.emit("Cliente SeedLink finalizado.")
+                self.status.emit(t("source.seedlink.finished"))
 
     # ------------------------------------------------------------------
     # Cancelación segura — llamada desde el hilo principal
@@ -317,9 +328,14 @@ class _SeedLinkWorker(QObject):
     def _on_trace(self, trace) -> None:  # noqa: ANN001 (tipo dinámico de ObsPy)
         """Convierte el ``Trace`` recibido y lo reenvía al hilo principal."""
 
-        # Última letra del canal: 'EHZ' -> 'Z', etc.
-        channel_letter = str(trace.stats.channel)[-1].upper()
-        if channel_letter not in ("Z", "N", "E"):
+        # Última letra del canal → componente. v0.7.7: muchas estaciones
+        # GSN nombran las horizontales BH1/BH2 (orientación arbitraria) en
+        # vez de BHN/BHE; las tratamos como N/E para poder dibujar el
+        # hodograma. 'EHZ'/'BHZ' → Z, 'BHN'/'BH1' → N, 'BHE'/'BH2' → E.
+        last = str(trace.stats.channel)[-1].upper()
+        channel_letter = {"Z": "Z", "N": "N", "E": "E",
+                          "1": "N", "2": "E"}.get(last)
+        if channel_letter is None:
             return
 
         # ``starttime`` es un objeto ``UTCDateTime``; ``.timestamp`` ya es Unix
@@ -346,6 +362,15 @@ class SeedLinkSource(DataSource):
     Conectarse a ``data.raspberryshake.org`` no funciona — ver el
     docstring del módulo para las razones.
     """
+
+    # v0.7.7 fix: fuentes en proceso de cierre. Mantiene una referencia
+    # FUERTE a cada fuente que se está deteniendo hasta que su hilo termina
+    # de verdad. Sin esto, al desconectar (sobre todo DURANTE la conexión,
+    # cuando el worker está bloqueado en el pre-check TCP), el controlador
+    # suelta la fuente, el GC la destruye y un emit diferido del worker o el
+    # propio teardown tocan un objeto C++ a medio morir → SEGFAULT (la app
+    # se cierra al pulsar Detener).
+    _closing: set = set()
 
     def __init__(
         self,
@@ -379,6 +404,9 @@ class SeedLinkSource(DataSource):
         # Acumuladores por canal (recibidos en el hilo principal vía señal)
         self._buf_lock = threading.Lock()
         self._chunks: dict[str, list[np.ndarray]] = {"Z": [], "N": [], "E": []}
+        # v0.7.7: último valor real de cada canal, para rellenar los huecos
+        # de alineación con "hold DC" en vez de ceros (ver _emit_pending).
+        self._last_value: dict[str, float] = {"Z": 0.0, "N": 0.0, "E": 0.0}
         self._latest_ts: float = 0.0
         # Bandera: ¿ya hemos recibido el primer paquete tras conectar?
         # Sirve para emitir un solo "streaming" en cuanto llegue, en
@@ -430,23 +458,26 @@ class SeedLinkSource(DataSource):
         self._thread.start()
         self._emit_timer.start()
 
-    def stop(self) -> None:
-        """Detiene el temporizador, cancela la conexión y espera al hilo.
+    def stop(self, wait_ms: int = 0) -> None:
+        """Detiene la fuente de forma ASÍNCRONA — sin congelar la UI.
 
-        El cierre es de tres pasos progresivos para garantizar que el
-        hilo trabajador SIEMPRE muere, incluso si está bloqueado en un
-        recv() de ObsPy sin timeout:
+        ``wait_ms``: 0 en desconexión normal (no bloquea). Al CERRAR la app
+        se pasa un valor pequeño (p. ej. 3000) para esperar a que el hilo
+        muera antes de salir del proceso — pero NUNCA se usa terminate().
 
-          1. ``request_stop`` — set flag + ``socket.shutdown(SHUT_RDWR)``.
-             Si el worker está en recv(), recibirá EOF y saldrá.
-          2. ``thread.wait(8000)`` — 8 segundos de gracia.
-          3. Si sigue vivo: ``thread.terminate()`` (nuclear pero
-             seguro porque el worker no comparte estado con la UI más
-             que vía señales).
 
-        El último paso es importante: si ObsPy se queda bloqueado en
-        algún lugar interno que ignora el shutdown del socket, la UI
-        no debe colgarse esperando.
+        v0.7.7 fix (congelaba/crasheaba al desconectar): la versión anterior
+        hacía ``thread.wait(8000)`` en el HILO DE LA UI (congelación de hasta
+        8 s) y, si el hilo no moría, ``thread.terminate()`` — que puede
+        CRASHEAR la app porque el worker puede estar dentro de ObsPy con el
+        GIL tomado.
+
+        Ahora:
+          1. ``request_stop`` cierra el socket (``socket.shutdown``) → la
+             llamada bloqueante de ObsPy (``client.run()``) recibe EOF y
+             devuelve → el hilo termina solo, en segundo plano.
+          2. Al emitir ``finished``, ``deleteLater`` libera worker e hilo.
+             La UI no espera ni un milisegundo y nunca se fuerza terminate().
         """
 
         if not self._running:
@@ -454,30 +485,51 @@ class SeedLinkSource(DataSource):
         self._running = False
         self._emit_timer.stop()
 
-        # 1) Cancelación cooperativa (no bloquea)
+        # Desconectar TODAS las señales worker→source de inmediato. CLAVE:
+        # al terminar ``run()`` el worker emite ``status`` ("cancelado" /
+        # "finalizado"); si esa emisión diferida (cross-thread) llega cuando
+        # la fuente ya se está destruyendo, choca contra un objeto C++ muerto
+        # → SEGFAULT y la app se cierra al desconectar. Cortando ambas
+        # señales aquí, ninguna emisión tardía toca a la fuente.
+        for sig, slot in (
+            (self._worker.trace_received, self._on_trace_received),
+            (self._worker.status, self.status_changed),
+        ):
+            try:
+                sig.disconnect(slot)
+            except (RuntimeError, TypeError):
+                pass
+
+        # Cancelación cooperativa (no bloquea: solo cierra el socket).
         self._worker.request_stop()
 
-        # 2) Esperar a que el hilo termine ordenadamente
+        # Mantener la fuente VIVA hasta que el hilo termine de verdad (clave
+        # para el caso de desconectar DURANTE la conexión, cuando el worker
+        # sigue bloqueado en el pre-check unos segundos). worker e hilo se
+        # liberan con el patrón estándar de Qt (finished → deleteLater).
+        SeedLinkSource._closing.add(self)
+        self._thread.finished.connect(self._worker.deleteLater)
+        self._thread.finished.connect(self._thread.deleteLater)
+        self._thread.finished.connect(self._on_thread_finished)
         self._thread.quit()
-        if not self._thread.wait(8000):
-            # 3) El hilo no respondió en 8 s. Probable bug en ObsPy o
-            # socket bloqueado en una llamada que ignora shutdown.
-            # ``terminate()`` aborta el hilo a nivel del SO sin
-            # liberar recursos Python (riesgoso pero NO causa SEGFAULT
-            # en el hilo principal porque cierra al hijo limpiamente).
-            import logging
-            logging.getLogger(__name__).warning(
-                "SeedLink: hilo worker no terminó en 8 s, forzando terminate()"
-            )
-            self._thread.terminate()
-            self._thread.wait(2000)
+        if wait_ms > 0:
+            # Solo al cerrar la app: espera acotada SIN terminate().
+            self._thread.wait(wait_ms)
 
-        # Vaciar acumuladores por si se reinicia la fuente más tarde
+        # Vaciar acumuladores (la fuente puede recrearse más tarde).
         with self._buf_lock:
             for key in self._chunks:
                 self._chunks[key] = []
             self._latest_ts = 0.0
         self._got_first_packet = False
+
+    @Slot()
+    def _on_thread_finished(self) -> None:
+        """El hilo terminó de verdad (corre en el hilo principal: afinidad de
+        la fuente). Ya no puede haber emits del worker → soltar la referencia
+        fuerte para que el GC libere la fuente con seguridad."""
+
+        SeedLinkSource._closing.discard(self)
 
     # ------------------------------------------------------------------
     # Slots de datos
@@ -498,14 +550,20 @@ class SeedLinkSource(DataSource):
             except Exception:
                 pass
 
-        # Si la frecuencia de muestreo del trace difiere de la nominal,
-        # no intentamos remuestrear: aceptamos el bloque tal cual; el
-        # ratio es típicamente exactamente 100 Hz en Raspberry Shake.
+        # Duración REAL del bloque (con la tasa nativa del trace) — la
+        # usamos para el timestamp antes de remuestrear.
+        real_duration = samples.size / max(1, sample_rate)
+
+        # v0.7.7 fix: remuestrear a la tasa nominal del pipeline (config,
+        # típicamente 100 Hz). Las estaciones broadband IRIS (BHZ/BHN/BHE)
+        # llegan a 20/40 Hz; sin esto, el búfer (fijado a 100 Hz) interpreta
+        # mal el eje temporal → oscilograma comprimido y hodograma a saltos.
+        if sample_rate != self._sample_rate and samples.size > 0:
+            samples = self._resample(samples, sample_rate, self._sample_rate)
+
         with self._buf_lock:
             self._chunks.setdefault(channel, []).append(samples)
-            # Marca de tiempo del extremo del trace (start + duración)
-            duration = samples.size / max(1, sample_rate)
-            end_ts = start_ts + duration
+            end_ts = start_ts + real_duration
             if end_ts > self._latest_ts:
                 self._latest_ts = end_ts
 
@@ -531,12 +589,21 @@ class SeedLinkSource(DataSource):
         if max_len == 0:
             return
 
-        # Alinear longitudes rellenando con ceros AL INICIO de los
-        # canales más cortos. Eso preserva el extremo derecho (más
-        # reciente) en el oscilograma.
-        z = self._pad_left(chunks["Z"], max_len)
-        n = self._pad_left(chunks["N"], max_len)
-        e = self._pad_left(chunks["E"], max_len)
+        # v0.7.7 fix: alinear longitudes rellenando AL INICIO con el ÚLTIMO
+        # valor real del canal ("hold DC"), no con ceros. En estaciones IRIS
+        # las componentes Z/N/E llegan en paquetes ASÍNCRONOS: en un mismo
+        # intervalo suele haber datos de solo una; rellenar con ceros las
+        # otras inyectaba picos a 0 (oscilograma a "barras" y el balín del
+        # hodograma saltando al origen). Mantener el último valor deja un
+        # tramo plano, mucho menos disruptivo.
+        z = self._pad_left(chunks["Z"], max_len, self._last_value["Z"])
+        n = self._pad_left(chunks["N"], max_len, self._last_value["N"])
+        e = self._pad_left(chunks["E"], max_len, self._last_value["E"])
+
+        # Actualizar el último valor real de cada canal (si trajo datos).
+        for ch, arr in (("Z", chunks["Z"]), ("N", chunks["N"]), ("E", chunks["E"])):
+            if arr.size > 0:
+                self._last_value[ch] = float(arr[-1])
 
         batch = SampleBatch(
             timestamp_unix=latest_ts if latest_ts > 0 else time.time(),
@@ -551,13 +618,28 @@ class SeedLinkSource(DataSource):
     # Helpers
     # ------------------------------------------------------------------
     @staticmethod
-    def _pad_left(arr: np.ndarray, length: int) -> np.ndarray:
-        """Rellena con ceros al inicio hasta alcanzar ``length``."""
+    def _resample(samples: np.ndarray, src_rate: int, dst_rate: int) -> np.ndarray:
+        """Remuestrea ``samples`` de ``src_rate`` a ``dst_rate`` (interp lineal).
+
+        Suficiente para visualización/detección; evita dependencias y es
+        barato. Si las tasas coinciden o el bloque está vacío, no hace nada.
+        """
+
+        if src_rate == dst_rate or samples.size == 0:
+            return samples
+        n_out = max(1, int(round(samples.size * dst_rate / src_rate)))
+        x_old = np.arange(samples.size, dtype=np.float64)
+        x_new = np.linspace(0.0, samples.size - 1, n_out)
+        return np.interp(x_new, x_old, samples).astype(np.float32)
+
+    @staticmethod
+    def _pad_left(arr: np.ndarray, length: int, fill: float = 0.0) -> np.ndarray:
+        """Rellena al inicio con ``fill`` (por defecto 0) hasta ``length``."""
 
         if arr.size == length:
             return arr
         if arr.size > length:
             return arr[-length:]
-        out = np.zeros(length, dtype=np.float32)
+        out = np.full(length, fill, dtype=np.float32)
         out[length - arr.size :] = arr
         return out

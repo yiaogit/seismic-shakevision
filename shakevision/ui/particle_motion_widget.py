@@ -21,6 +21,7 @@ Detalles de renderizado
 
 from __future__ import annotations
 
+import time
 from typing import Optional
 
 import numpy as np
@@ -30,6 +31,7 @@ from PySide6.QtGui import QColor, QPen
 from PySide6.QtWidgets import QFrame, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
 from shakevision.i18n import LocaleService, t
+from shakevision.ui.signal_safety import subscribe
 from shakevision.ui.theme import (
     COLOR_BACKGROUND,
     COLOR_PANEL_BORDER,
@@ -83,6 +85,12 @@ class ParticleMotionPanel(QFrame):
         self._sample_rate = int(sample_rate_hz)
         self._window_samples = int(window_seconds * sample_rate_hz)
         self._n_segments = int(n_segments)
+        # v0.7.7: estabilidad del hodograma. (1) Limitar el repintado a ~12 FPS
+        # (el tick de refresco va a 30; redibujar 60 segmentos tan rápido hacía
+        # que la trayectoria "temblara"). (2) ``_last_draw_t`` marca el último
+        # pintado para esa puerta temporal.
+        self._min_redraw_interval_s: float = 0.08
+        self._last_draw_t: float = 0.0
 
         # Layout
         layout = QVBoxLayout(self)
@@ -97,6 +105,13 @@ class ParticleMotionPanel(QFrame):
         self._header.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         layout.addWidget(self._header)
 
+        # v0.7.7: lectura de polarización (azimut del eje principal +
+        # rectilinearidad) — estimación de dirección de una sola estación.
+        self._polar_label = QLabel("")
+        self._polar_label.setObjectName("StatusValue")
+        self._polar_label.setStyleSheet("font-family: monospace; font-size: 11px;")
+        layout.addWidget(self._polar_label)
+
         # v0.6 P11: theme-aware
         self._plot = pg.PlotWidget(background=COLOR_BACKGROUND)
         self._plot.setMouseEnabled(x=False, y=False)
@@ -110,19 +125,22 @@ class ParticleMotionPanel(QFrame):
         subscribe_pg_plot(self._plot)
         layout.addWidget(self._plot, stretch=1)
 
-        LocaleService.language_changed_signal().connect(self._retranslate)
+        # v0.7.7 fix: crear las curvas/cabeza/guías UNA vez aquí. Antes
+        # vivían en _retranslate(), que solo se llama al cambiar idioma →
+        # el hodograma no dibujaba nada hasta el primer cambio de idioma
+        # (update_from_snapshot fallaba con AttributeError sobre
+        # self._segments), y además duplicaba 60 curvas en cada cambio.
+        self._build_plot_items()
 
-    def _retranslate(self) -> None:
-        self._header.setText(
-            t("particle.title", seconds=self._window_seconds_val)
-        )
-        self._plot.setLabel("bottom", t("particle.axis_east"))
-        self._plot.setLabel("left", t("particle.axis_north"))
+        subscribe(self, LocaleService.language_changed_signal(),
+                  self._retranslate)  # v0.7.7 (B1)
 
-        # Crear ``n_segments`` curvas individuales: cada una recibirá su
-        # propio color del gradiente. Es más caro que una sola curva
-        # multicolor, pero PyQtGraph no soporta gradiente nativo en
-        # PlotCurveItem. Con 60 segmentos el coste es despreciable.
+    def _build_plot_items(self) -> None:
+        """Crea las curvas del gradiente, la cabeza y las guías (una vez)."""
+
+        # ``n_segments`` curvas individuales: cada una recibe su propio
+        # color del gradiente. PyQtGraph no soporta gradiente nativo en
+        # PlotCurveItem; con 60 segmentos el coste es despreciable.
         self._segments: list[pg.PlotCurveItem] = []
         colors = color_trail(self._n_segments)
         for i in range(self._n_segments):
@@ -150,20 +168,76 @@ class ParticleMotionPanel(QFrame):
         self._plot.setXRange(-self._range, self._range, padding=0.0)
         self._plot.setYRange(-self._range, self._range, padding=0.0)
 
+        # v0.7.7: aviso central para estaciones sin canales horizontales
+        # (vertical-only). Centrado en el origen, oculto por defecto.
+        self._no_horiz = pg.TextItem(
+            text=t("particle.no_horizontal"),
+            color="#9aa0a6",
+            anchor=(0.5, 0.5),
+        )
+        self._no_horiz.setPos(0.0, 0.0)
+        self._no_horiz.setVisible(False)
+        self._plot.addItem(self._no_horiz)
+
+    def _retranslate(self) -> None:
+        """Solo textos i18n; los items del plot se crean una vez en init."""
+
+        self._header.setText(
+            t("particle.title", seconds=self._window_seconds_val)
+        )
+        self._plot.setLabel("bottom", t("particle.axis_east"))
+        self._plot.setLabel("left", t("particle.axis_north"))
+        if hasattr(self, "_no_horiz"):
+            self._no_horiz.setText(t("particle.no_horizontal"))
+
+    def _show_no_horizontal(self, show: bool) -> None:
+        """Muestra/oculta el aviso y limpia la trayectoria cuando aplica."""
+
+        self._no_horiz.setVisible(show)
+        if show:
+            for curve in self._segments:
+                curve.clear()
+            self._head.clear()
+            self._polar_label.clear()
+
     # ------------------------------------------------------------------
     # API pública
     # ------------------------------------------------------------------
     def update_from_snapshot(self, snapshot) -> None:  # BufferSnapshot
         """Pinta los últimos ``window_samples`` de los canales N y E."""
 
+        # (1) Puerta temporal: ignorar refrescos demasiado seguidos (estabiliza
+        # la imagen y baja el coste). El "no horizontal" sí pasa siempre.
+        now = time.monotonic()
+
         n = snapshot.samples.get("N")
         e = snapshot.samples.get("E")
-        if n is None or e is None or n.size == 0 or e.size == 0:
+        # v0.7.7: estación vertical-only → la fuente rellena N/E con ceros.
+        # Sin energía horizontal el hodograma es imposible: mostrar un aviso
+        # en vez de dejar el "balín" congelado en el origen sin explicación.
+        if (n is None or e is None or n.size == 0 or e.size == 0
+                or not np.any(n) or not np.any(e)):
+            self._show_no_horizontal(True)
             return
+        self._show_no_horizontal(False)
+
+        if now - self._last_draw_t < self._min_redraw_interval_s:
+            return
+        self._last_draw_t = now
+
+        # (2) Nº de muestras de la ventana según el dt REAL de la instantánea
+        # (no la frecuencia de construcción): así 1.5 s son 1.5 s aunque la
+        # estación llegue a 20/40/100 Hz.
+        win = self._window_samples
+        if snapshot.times.size >= 2:
+            dt = float(snapshot.times[1] - snapshot.times[0])
+            if dt > 0:
+                win = max(self._n_segments + 1,
+                          int(self._window_seconds_val / dt))
 
         # Tomar la cola
-        n_window = n[-self._window_samples :]
-        e_window = e[-self._window_samples :]
+        n_window = n[-win:]
+        e_window = e[-win:]
 
         # Si las longitudes no coinciden (raro), recortar
         n_min = min(n_window.size, e_window.size)
@@ -186,10 +260,25 @@ class ParticleMotionPanel(QFrame):
         # Cabeza brillante: la última muestra
         self._head.setData([float(e_window[-1])], [float(n_window[-1])])
 
-        # Auto-rango simétrico (con suavizado para evitar parpadeos)
+        # Polarización (azimut del eje principal + rectilinearidad).
+        from shakevision.processing.measurements import polarization_azimuth
+        pol = polarization_azimuth(n_window, e_window)
+        if pol is not None:
+            az, rect = pol
+            self._polar_label.setText(
+                t("particle.polarization", az=f"{az:.0f}", rect=f"{rect:.2f}"))
+        else:
+            self._polar_label.clear()
+
+        # Auto-rango con PEAK-HOLD: crece de inmediato al nuevo máximo pero se
+        # encoge lentamente (≈3%/frame). Antes un EMA simétrico hacía que la
+        # vista "respirara" (zoom in/out constante) cuando la amplitud variaba
+        # de frame a frame — la causa principal de la sensación de inestabilidad.
         target_range = auto_range(np.concatenate([n_window, e_window]))
-        # Suavizado exponencial: nuevo = 0.7·viejo + 0.3·objetivo
-        self._range = 0.7 * self._range + 0.3 * target_range
+        if target_range >= self._range:
+            self._range = target_range
+        else:
+            self._range = max(target_range, self._range * 0.97)
         self._plot.setXRange(-self._range, self._range, padding=0.0)
         self._plot.setYRange(-self._range, self._range, padding=0.0)
 
@@ -199,3 +288,6 @@ class ParticleMotionPanel(QFrame):
         for curve in self._segments:
             curve.clear()
         self._head.clear()
+        self._polar_label.clear()
+        self._last_draw_t = 0.0
+        self._range = 0.05

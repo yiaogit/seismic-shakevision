@@ -42,10 +42,11 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PySide6.QtCore import QSettings, Qt, Signal
+from PySide6.QtCore import QSettings, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QMainWindow,
+    QPushButton,
     QSplitter,
     QTabWidget,
     QVBoxLayout,
@@ -60,6 +61,7 @@ from shakevision.ui.intensity_card import IntensityCard
 from shakevision.ui.particle_motion_widget import ParticleMotionPanel
 from shakevision.ui.replay_panel import ReplayPanel
 from shakevision.ui.spectrogram_widget import SpectrogramPanel
+from shakevision.ui.signal_safety import subscribe
 from shakevision.ui.waveform_widget import WaveformPanel
 
 
@@ -143,8 +145,21 @@ class ProWindow(QMainWindow):
 
         # ── Sub-tab "En vivo" ──
         live_container = QWidget()
-        live_layout = QHBoxLayout(live_container)
+        live_layout = QVBoxLayout(live_container)
         live_layout.setContentsMargins(0, 0, 0, 0)
+        live_layout.setSpacing(4)
+        # Pequeña barra: conmutador para mostrar/ocultar el espectrograma
+        # (la traza siempre visible) — consistente con Replay, libera alto.
+        live_bar = QHBoxLayout()
+        live_bar.addStretch(1)
+        self.live_spec_toggle = QPushButton(t("replay.toggle_spectrogram"))
+        self.live_spec_toggle.setObjectName("ToolbarButton")
+        self.live_spec_toggle.setCheckable(True)
+        self.live_spec_toggle.setChecked(True)
+        self.live_spec_toggle.toggled.connect(self._on_live_spec_toggled)
+        live_bar.addWidget(self.live_spec_toggle)
+        live_layout.addLayout(live_bar)
+
         live_splitter = QSplitter(Qt.Vertical, parent=live_container)
         self.waveform_panel = WaveformPanel(parent=live_splitter)
         self.spectrogram_panel = SpectrogramPanel(parent=live_splitter)
@@ -152,7 +167,7 @@ class ProWindow(QMainWindow):
         live_splitter.addWidget(self.spectrogram_panel)
         live_splitter.setStretchFactor(0, 65)
         live_splitter.setStretchFactor(1, 35)
-        live_layout.addWidget(live_splitter)
+        live_layout.addWidget(live_splitter, stretch=1)
         self._live_container = live_container
         self.subtabs.addTab(live_container, t("pro.subtab.live"))
 
@@ -173,13 +188,33 @@ class ProWindow(QMainWindow):
         self.replay_panel = ReplayPanel(config=config, parent=self.subtabs)
         self.subtabs.addTab(self.replay_panel, t("pro.subtab.replay"))
 
+        # v0.7.7 (UX): "Eventos" y "Local" del Workbench se eliminaron — viven
+        # ahora en el nivel superior (Eventos = centro de eventos; grabaciones +
+        # catálogo = pestaña "Mi colección"). El Workbench queda enfocado en
+        # análisis (4 sub-pestañas).
+
         right_layout.addWidget(self.subtabs, stretch=1)
         root.addWidget(right, stretch=1)
+
+        # v0.7.7 (UX): la tarjeta de intensidad (MMI en tiempo real) solo tiene
+        # sentido en "En vivo"; ocultarla en Replay/Eventos/Local/etc. evita
+        # mostrar un valor obsoleto y da más espacio a esas vistas.
+        self.subtabs.currentChanged.connect(self._on_subtab_changed)
+        self._on_subtab_changed(self.subtabs.currentIndex())
 
         # ─── Conectar las 6 señales del ControlPanel a las que
         #     reemitimos hacia afuera ───
         self.control_panel.station_changed.connect(self.station_changed)
+        # v0.7.7: el panel de Replay refleja la estación seleccionada en la
+        # barra lateral (N.S.L.C. de solo lectura) en lugar de tener sus
+        # propios campos de texto desacoplados.
+        self.control_panel.station_changed.connect(self.replay_panel.set_station)
+        self.replay_panel.set_station(self.control_panel.current_station())
         self.control_panel.filter_changed.connect(self.filter_changed)
+        # v0.7.7: el filtro también re-filtra la traza histórica YA cargada
+        # en Replay (sin re-descargar).
+        self.control_panel.filter_changed.connect(
+            self.replay_panel.on_filter_changed)
         self.control_panel.trigger_changed.connect(self.trigger_changed)
         self.control_panel.connect_clicked.connect(self.connect_clicked)
         self.control_panel.disconnect_clicked.connect(self.disconnect_clicked)
@@ -189,7 +224,8 @@ class ProWindow(QMainWindow):
         self._restore_geometry()
 
         # ─── Suscribirse a cambios de idioma para re-traducir tab titles ───
-        LocaleService.language_changed_signal().connect(self._retranslate)
+        subscribe(self, LocaleService.language_changed_signal(),
+                  self._retranslate)  # v0.7.7 (B1)
 
     def _retranslate(self) -> None:
         """Re-aplica el título de la ventana y las etiquetas de sub-pestañas."""
@@ -199,6 +235,8 @@ class ProWindow(QMainWindow):
         self.subtabs.setTabText(PRO_HELICORDER, t("pro.subtab.helicorder"))
         self.subtabs.setTabText(PRO_PARTICLE, t("pro.subtab.particle"))
         self.subtabs.setTabText(PRO_REPLAY, t("pro.subtab.replay"))
+        if hasattr(self, "live_spec_toggle"):
+            self.live_spec_toggle.setText(t("replay.toggle_spectrogram"))
 
     # ------------------------------------------------------------------
     # API pública
@@ -206,7 +244,14 @@ class ProWindow(QMainWindow):
     def show_and_focus(self) -> None:
         """Muestra la ventana y la trae al frente con focus."""
 
+        self._prewarm_obspy()
         self.show()
+        # macOS: tras tener NSWindow nativa (requiere estar visible), hacer que
+        # el botón verde haga ZOOM en lugar de abrir un Space a pantalla
+        # completa (evita el Space negro al cerrar). Una sola vez.
+        if not getattr(self, "_macos_fs_disabled", False):
+            from shakevision.ui.macos_native import disable_native_fullscreen
+            self._macos_fs_disabled = disable_native_fullscreen(self)
         # Si estaba minimizada en macOS/Windows, restaurarla
         if self.windowState() & Qt.WindowMinimized:
             self.setWindowState(
@@ -214,6 +259,50 @@ class ProWindow(QMainWindow):
             )
         self.raise_()
         self.activateWindow()
+
+    def _prewarm_obspy(self) -> None:
+        """Importa ObsPy en segundo plano la PRIMERA vez que se abre el
+        Workbench (v0.7.7, optimización de velocidad de conexión).
+
+        El worker SeedLink importa ObsPy de forma perezosa; la primera
+        importación tarda ~1-2 s. Al precalentarla en un hilo daemon
+        cuando el usuario abre el banco de trabajo (señal de que pronto
+        conectará), la PRIMERA conexión ya encuentra el módulo cacheado en
+        ``sys.modules`` y arranca el handshake sin esa espera. Idempotente
+        y silencioso: si ObsPy falta, la conexión real lo reportará.
+        """
+
+        if getattr(self, "_obspy_prewarmed", False):
+            return
+        self._obspy_prewarmed = True
+        import threading
+
+        def _warm() -> None:
+            try:
+                import obspy.clients.seedlink.easyseedlink  # noqa: F401
+            except Exception:  # noqa: BLE001
+                pass
+
+        threading.Thread(
+            target=_warm, name="obspy-prewarm", daemon=True
+        ).start()
+
+    def _on_live_spec_toggled(self, on: bool) -> None:
+        """Mostrar/ocultar el espectrograma en la sub-pestaña En vivo."""
+
+        try:
+            self.spectrogram_panel.setVisible(bool(on))
+        except (RuntimeError, AttributeError):
+            pass
+
+    def _on_subtab_changed(self, index: int) -> None:
+        """Tarjeta de intensidad solo en 'En vivo'; re-escanear 'Local' al
+        entrar (para que aparezcan las grabaciones nuevas sin pulsar Refrescar)."""
+
+        try:
+            self.intensity_card.setVisible(index == PRO_LIVE)
+        except (RuntimeError, AttributeError):
+            pass
 
     def is_live_subtab_visible(self) -> bool:
         """¿Es la sub-pestaña "En vivo" la actualmente seleccionada?"""
@@ -253,13 +342,41 @@ class ProWindow(QMainWindow):
         evitar que un timer siga emitiendo después de cerrar la ventana.
         """
 
-        self._save_geometry()
         try:
             self.replay_panel.close_resources()
         except Exception:  # noqa: BLE001
             pass
+
+        # macOS fallback (sin pyobjc): si la ventana sigue en un Space a
+        # pantalla completa nativo, ocultarla AHORA la deja en negro durante la
+        # animación de salida (~1 s). Salimos de fullscreen y aplazamos el
+        # hide hasta que termine la animación. (Con pyobjc el botón verde ya
+        # hace zoom y nunca entramos aquí — ver disable_native_fullscreen.)
+        if self.isFullScreen():
+            self.setWindowState(
+                self.windowState() & ~Qt.WindowFullScreen & ~Qt.WindowMaximized)
+            event.ignore()
+            QTimer.singleShot(800, self._finish_close_after_fullscreen)
+            return
+
+        if self.isMaximized():
+            self.setWindowState(self.windowState() & ~Qt.WindowMaximized)
+        self._save_geometry()
         event.ignore()
         self.hide()
+
+    def _finish_close_after_fullscreen(self) -> None:
+        """Oculta la ventana tras completarse la animación de salida de
+        pantalla completa (macOS, ruta de fallback sin pyobjc)."""
+
+        try:
+            self._save_geometry()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            self.hide()
+        except RuntimeError:
+            pass
 
     # ------------------------------------------------------------------
     # Persistencia ligera de geometría

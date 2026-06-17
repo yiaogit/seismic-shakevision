@@ -4,9 +4,14 @@
 
 **简体中文** · [English](README.en.md) · [Español](README.es.md) · [Français](README.fr.md)
 
-> 原名 **ShakeVision OpenData Monitor**。v0.7.0 完成 SeismicGuard 品牌重塑、
-> macOS Sonoma 风格主题、全栈 4 语言 i18n、Onboarding 引导、Profile 活动时间线、
-> IP 地理定位等大量改进。历史的 v0.1.x 二进制仍以 `ShakeVision-*` 名字保留在
+> 原名 **ShakeVision OpenData Monitor**。**v0.8.0** 围绕「事件 → 复核 → 个人收藏」
+> 重新组织了应用,并把**历史回放**彻底重写为专业级波形浏览器(缩放/平移、UTC
+> 绝对时间轴、波段选择、去仪器响应 VEL/DISP/ACC、ZNE→ZRT 旋转、TauP 理论 P/S
+> 到时、dB 频谱图、PSD 功率谱、PNG/CSV/QuakeML 导出);新增顶栏**事件中心**
+> (地震表 + 就近台站)与**「我的」收藏中心**(收藏地震/台站 + 录波/复核目录,
+> 支持重开已存复核与「在文件夹中打开」导出)。早期 v0.7.0 完成了 SeismicGuard
+> 品牌重塑、macOS Sonoma 风格主题、全栈 4 语言 i18n、Onboarding 引导、Profile
+> 活动时间线、IP 地理定位。历史的 v0.1.x 二进制仍以 `ShakeVision-*` 名字保留在
 > Releases 页面。
 
 **桌面级开源地震监测可视化工作站**
@@ -34,7 +39,10 @@
 |---------------------------|---------------------------------------------------------------------------------------------------------------------------------|
 | 🌍 **3D Globe**           | ECharts-GL 实时渲染地球，叠加 600+ Raspberry Shake 公民台站 + 400+ USGS / IRIS 骨干台站，地震按震级分色，可点击缩放并加入 Pro 工作台 |
 | 📊 **Data Dashboard**     | 7 张联动 ECharts：Top 国家、震级/深度直方图、24h 时间线（自适应密度气泡）、PAGER 雷达（区域过滤器）、周期自适应桶图、深度×震级散点  |
-| 🔬 **Pro Workbench**      | 独立浮窗：实时三通道波形 + 频谱图 + 24h 鼓式记录 + N-E 质点轨迹 + STA/LTA 触发录波 + MMI 烈度卡                                  |
+| 🗂 **事件中心**           | 顶栏页面:地震表 + 双击复核;右侧自动列出**就近大台站**（Δ°/km/距离类别），双击即用最近台站在回放里复核；☆ 一键收藏地震/台站      |
+| ⭐ **「我的」收藏中心**    | 顶栏页面:收藏的**地震 / 台站** + 记录区（STA/LTA 触发录波，有才显示 + **复核目录** QuakeML）；双击目录**重开已存复核**（恢复 P/S 标记）；「在文件夹中打开」导出 MiniSEED/QuakeML 给 ObsPy/SeisComP/SAC |
+| 🔬 **Pro Workbench**      | 独立浮窗：实时三通道波形 + 频谱图（可开关）+ 24h 鼓式记录 + N-E 质点轨迹（极化方位角）+ STA/LTA 触发录波 + MMI 烈度卡            |
+| ⏪ **历史回放（重写）**   | 专业波形浏览器:缩放/平移 + UTC 绝对时间轴 + 波段选择 + 去仪器响应（VEL/DISP/ACC）+ ZNE→ZRT 旋转 + TauP 理论 P/S 到时 + dB 频谱图 + PSD + 区段游标量取 + PNG/CSV/QuakeML 导出 |
 | 🔊 **Sonification**       | 把最近 60 秒的地动信号变速并播放成可听音频（1× – 60×）                                                                            |
 | 🌐 **i18n**               | 全栈 4 语言（EN / ES / 简中 / FR）即时切换，包括 Web 视图、图表内部、tooltip、HTML 报告                                          |
 | 🕒 **时区感知**           | 系统时区自动检测 + 手动覆盖；所有时间戳一致显示用户时区                                                                          |
@@ -495,7 +503,8 @@ seismic-shakevision/
 │   │   ├── spectrum.py                   # 滑窗 FFT（基于 scipy.signal.spectrogram）
 │   │   ├── recorder.py                   # 事件录波器，保存为 MiniSEED
 │   │   ├── sonifier.py                   # 地震波形 → 加速 PCM 音频
-│   │   └── intensity.py                  # PGA → MMI 烈度（修订 Wood-Anderson）
+│   │   ├── intensity.py                  # PGA → MMI 烈度（修订 Wood-Anderson）
+│   │   └── measurements.py              # ZNE→ZRT 旋转 · 极化方位角 · Welch PSD · 大圆距离
 │   │
 │   ├── services/                         # ── 异步 I/O 层 (17) ──
 │   │   ├── data_models.py                # @dataclass: Earthquake · Station · Trigger · StationPreset
@@ -511,8 +520,10 @@ seismic-shakevision/
 │   │   ├── activity_log.py               # 本地活动日志（最近 50 条，JSONL）
 │   │   ├── usage_tracker.py              # 使用统计计数（启动次数、监听秒数等）
 │   │   ├── shake_presets.py              # LAN Shake 预设持久化
-│   │   ├── favorites_store.py            # 收藏地震/台站
-│   │   ├── clear_cache.py                # 一键清空所有本地状态
+│   │   ├── favorites_store.py            # 收藏地震/台站（含坐标,便于随时复核）
+│   │   ├── catalog_store.py              # 持久化 QuakeML 复核目录（~/SeismicGuard/catalog.xml）
+│   │   ├── response.py                   # StationXML 仪器响应（去响应 + 台站坐标）
+│   │   ├── clear_cache.py                # 一键清空所有本地状态（含录波 + 目录）
 │   │   ├── github_auth.py                # GitHub Device Flow OAuth；烘焙 DEFAULT_CLIENT_ID
 │   │   └── settings_backup.py            # 设置 JSON 导出/导入（v0.7-C 后仅测试使用）
 │   │
@@ -527,9 +538,13 @@ seismic-shakevision/
 │   │   ├── waveform_widget.py            # 三通道 pyqtgraph 滚动波形
 │   │   ├── spectrogram_widget.py         # pyqtgraph ImageItem 频谱图
 │   │   ├── helicorder_widget.py          # 24h 鼓式记录视图
-│   │   ├── particle_motion_widget.py     # N-E 平面质点轨迹
+│   │   ├── particle_motion_widget.py     # N-E 平面质点轨迹 + 极化方位角（稳定化刷新）
+│   │   ├── spectrum_panel.py             # PSD 功率谱面板（power dB vs freq）
 │   │   ├── intensity_card.py             # MMI 烈度翻译卡（用户友好语言）
-│   │   ├── replay_panel.py               # 历史回放 UI（datetime 选 + 速度滑块）
+│   │   ├── replay_panel.py               # 历史回放（重写）：静态波形浏览器 — 去响应/旋转/TauP/PSD/导出
+│   │   ├── event_center_panel.py         # 顶栏「事件中心」：地震表 + 就近台站（Δ°/km/类别）+ ☆收藏
+│   │   ├── event_list_panel.py           # 可排序事件表组件（事件中心内复用）
+│   │   ├── my_data_panel.py              # 顶栏「我的」：收藏（地震/台站）+ 记录（录波/复核目录）
 │   │   ├── audio_player.py               # QAudioSink 包装 + 状态机
 │   │   ├── settings_dialog.py            # 设置（General · My Shakes · Reset）
 │   │   ├── profile_dialog.py             # Profile 对话框容器
@@ -552,7 +567,7 @@ seismic-shakevision/
 │   │
 │   ├── i18n/                             # ── 国际化 ──
 │   │   ├── service.py                    # LocaleService + t() + language_changed_signal
-│   │   └── locales/{en,zh,es,fr}.json    # 4 语言对齐字典，**each 444 keys**
+│   │   └── locales/{en,zh,es,fr}.json    # 4 语言对齐字典，**each 559 keys**
 │   │
 │   ├── web/                              # ── 嵌入式 Web 视图（被 QWebEngineView 加载）──
 │   │   ├── globe/                        # ECharts-GL 3D 地球（index.html + globe.js + styles.css + lib/）
@@ -605,7 +620,7 @@ CI 在每次 push / PR 跑：Ubuntu / macOS / Windows × Python 3.10 / 3.11 / 3.
 
 ## 🌐 i18n 翻译贡献
 
-字典在 `shakevision/i18n/locales/*.json`（each ≈260 keys，4 语言对齐）。
+字典在 `shakevision/i18n/locales/*.json`（each 559 keys，4 语言对齐）。
 
 **加新语言**：
 
@@ -693,8 +708,8 @@ git push origin v0.1.1
 - [x] **v0.2.0** — 历史回放：从 IRIS FDSN dataselect 下载 MiniSEED，可调速度回放
 - [x] **v0.3.0** — 自定义 LAN Raspberry Shake 连接 UI（下拉 "➕ Add LAN Shake…" + Settings "My Shakes" 标签页）
 - [x] **v0.7.0** — 品牌重塑为 SeismicGuard、macOS Sonoma 风格主题、Onboarding 引导、Profile 活动时间线、IP 地理定位、PDF 溢出修复
-- [ ] **v0.8.0** — 地球收藏地震 UX（按钮式，替代延后的右键方案）
-- [ ] **v1.0.0** — 代码签名（Windows EV cert + macOS Developer ID + 公证）；彻底移除 SmartScreen / Gatekeeper 警告
+- [x] **v0.8.0** — 历史回放重写为专业波形浏览器（去响应/旋转/TauP/PSD/导出）；顶栏事件中心 + 就近台站；「我的」收藏中心（收藏 + 录波 + 复核目录，支持重开与导出）；按钮式收藏入口；质点运动稳定化 + 极化方位角
+- [ ] **v1.0.0** — 代码签名（Windows EV cert + macOS Developer ID + 公证）；彻底移除 SmartScreen / Gatekeeper 警告；自动更新机制
 
 ---
 

@@ -6,6 +6,556 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ---
 
+## [0.8.0.0] — 2026-06-17
+
+🌟 **Release mayor** — reorganización de la app en torno al flujo
+*evento → revisión → colección personal* y una reescritura completa del
+módulo de **Replay** como navegador de formas de onda profesional.
+
+Lo más destacado:
+
+* **Replay reescrito** como navegador estático (zoom/pan, eje UTC absoluto,
+  selección de banda, deconvolución a VEL/DISP/ACC, rotación ZNE→ZRT,
+  llegadas teóricas P/S con TauP, espectrograma con escala dB, PSD, y
+  exportación PNG/CSV/QuakeML). Se eliminó el antiguo reproductor tipo vídeo.
+* **Centro de eventos** de nivel superior (tabla de sismos + estaciones
+  cercanas con Δ°/km/categoría) como único punto de entrada a la revisión.
+* **"Mi colección" (我的)** — nueva pestaña que reúne favoritos (sismos y
+  estaciones) y registros (grabaciones STA/LTA + catálogo QuakeML), con
+  reapertura de revisiones guardadas y "Abrir carpeta" para exportar.
+* **Análisis**: estabilización del hodograma + azimut de polarización, PSD,
+  presets de filtro reaplicables sin volver a descargar.
+* Numerosas correcciones de UX, i18n y específicas de macOS/Windows.
+
+> Las versiones 0.7.7 (auditoría/i18n) nunca se publicaron por separado; su
+> contenido se integra aquí.
+
+### Changed
+- **En vivo: conmutador para mostrar/ocultar el espectrograma.** La barra
+  superior de la pestaña en vivo trae un botón **"Espectrograma"** (la onda
+  siempre visible); al ocultarlo, la traza ocupa todo el alto. No se añadió PSD
+  en vivo (el espectrograma ya cubre el monitoreo de frecuencia; el PSD es para
+  selección/análisis en Replay) ni botón para ocultar el osciloscopio (es la
+  vista central y las herramientas cuelgan de ella).
+- **"Mi colección": el bloque "Catálogo guardado" (QuakeML) se oculta si está
+  vacío** (igual que las grabaciones, opción C). Es una función de analista
+  —acumular tus picados P/S revisados como QuakeML estándar exportable—; al
+  usuario casual ya no le muestra una tabla vacía.
+- **Replay: botones para mostrar/ocultar el espectrograma y el PSD.** Con tres
+  gráficas apretadas, ahora la barra superior tiene conmutadores
+  **"Espectrograma"** y **"PSD"** (la de ondas siempre visible): ocultar una da
+  más alto a las demás; las tres mantienen una altura mínima cuando se muestran.
+- **Nueva pestaña de nivel superior "Mi colección" (我的) — reemplaza la
+  pestaña "Local" del Workbench.** Reúne en el nivel superior (Globo/Datos/
+  Eventos/Mi colección) lo que es del usuario, en dos bloques: **Favoritos**
+  (★ sismos → doble clic revisa; ★ estaciones → doble clic la usa) y
+  **Registros** (grabaciones STA/LTA — *solo si hay alguna*, opción C; +
+  catálogo QuakeML), cada tabla con su acción (quitar favorito / eliminar /
+  abrir). El Workbench baja a 4 sub-pestañas (análisis puro). ``FavoriteEvent``
+  guarda ahora lat/lon/depth para que un favorito se pueda revisar siempre.
+- **UX (2.ª ronda).** (1) La pestaña **"Local" se re-escanea sola** al abrirla
+  (las grabaciones nuevas aparecen sin pulsar Refrescar). (2) Se **desambigua
+  "Pro"**: el control segmentado de la cabecera pasa a **"Vista estándar / Vista
+  pro"** (solo cambia la apariencia del globo/paleta) con tooltips que aclaran
+  que NO es el Workbench. (3) El catálogo de eventos muestra **estado de carga /
+  "sin sismos"** en vez de una tabla vacía. (4) En Replay, al revisar un evento
+  el texto de la estación indica que es la **estación del evento (independiente
+  de la estación en vivo de la barra)**.
+- **UX: se eliminó la pestaña "Eventos" del Workbench (deduplicación).** El
+  **centro de eventos de nivel superior** (Globo/Datos/Eventos, con tabla +
+  estaciones cercanas) es ahora el único punto de entrada a eventos; el
+  Workbench baja a 5 sub-pestañas (En vivo/Diario 24h/Hodograma/Replay/Local) y
+  queda enfocado en análisis. (``EventListPanel`` sigue usándose dentro del
+  centro de eventos.)
+- **UX: doble clic en un evento del centro = revisar con la estación más
+  cercana.** Antes, en el centro de eventos, el doble clic no hacía nada (solo
+  el clic simple listaba estaciones). Ahora: clic simple → lista de estaciones
+  cercanas (elegir a mano); doble clic → atajo que revisa con la más cercana,
+  igual que la lista del Workbench. (Ambas pestañas "Eventos" se mantienen.)
+- **UX (menos ruido en el Workbench).** La **tarjeta de intensidad** (MMI en
+  tiempo real) ahora se muestra SOLO en la sub-pestaña "En vivo" (se oculta en
+  Replay/Eventos/Local/etc., donde quedaba obsoleta y robaba espacio). En
+  Replay, los cuatro botones de exportación (PNG / CSV / QuakeML / catálogo) se
+  agrupan en un único menú **"Exportar ▾"**.
+
+### Added
+- **"Mi colección": reabrir una revisión del catálogo guardado.** Doble clic en
+  una fila de **"Catálogo guardado"** vuelve a abrir esa revisión en Replay:
+  fija la estación, una ventana que cubre los picks guardados, descarga y
+  **re-dibuja los picks P/S originales** encima (sin TauP — los picks guardados
+  son la referencia). Antes el catálogo solo se podía ver/eliminar; ahora se
+  puede recuperar y seguir trabajando. (``CatalogStore.get_event`` +
+  ``ReplayPanel.load_catalog_event``.)
+- **"Mi colección": botón "Abrir carpeta" en Grabaciones y Catálogo.** Abre la
+  carpeta correspondiente (``~/SeismicGuard/recordings`` / la de ``catalog.xml``)
+  en el explorador del sistema para exportar los ficheros (MiniSEED / QuakeML) a
+  otro software (ObsPy, SeisComP, SAC…). Crea la carpeta si aún no existe.
+- **Favoritos: entradas con botón (el click-derecho del globo no era fiable).**
+  Ahora se puede marcar/desmarcar favorito desde: (a) el **centro de eventos**
+  — botón ☆ para el sismo seleccionado y ☆ para la estación cercana
+  seleccionada (incluye estaciones, que antes NO tenían forma de favoritearse);
+  (b) los **diálogos de click-izquierdo del globo** — el de sismo ofrece
+  Revisar / ☆ Favorito / Cancelar, y el de estación Añadir al Workbench / ☆
+  Favorito / Cancelar. "Mi colección" se refresca al instante.
+- **Datos locales: botones de Eliminar + mecanismo aclarado.** Cada sección
+  ("Grabaciones disparadas" / "Catálogo guardado") tiene su botón **Eliminar**
+  (borra el ``.mseed`` o quita el evento del QuakeML, con confirmación) y un texto
+  que explica qué es cada una: grabaciones = waveforms crudos auto-guardados al
+  disparar STA/LTA; catálogo = picks revisados guardados desde Replay.
+  ``CatalogStore.remove_event``.
+- **UX: revisión de eventos más fluida.** (1) Al entrar a un evento, la ventana
+  temporal se **ajusta automáticamente para cubrir P→S** (TauP en segundo plano,
+  pre-obteniendo coords de estación) en vez de 600 s fijos — un teleseísmo ya no
+  se abre con una ventana sin señal. (2) El botón **Cargar se resalta** y el
+  estado guía ("pulsa Cargar para traer la forma de onda") cuando hay un evento
+  preparado, evitando quedarse ante una figura vacía. (3) En "estaciones
+  cercanas" la distancia se muestra en **grados + km + tipo (local/regional/
+  teleseísmo)** para elegir mejor la estación. Ver ``docs/ux-review.md``.
+- **Pestaña "Local" del Workbench + catálogo QuakeML persistente.** Nueva
+  pestaña que lista (a) las **grabaciones** MiniSEED del detector STA/LTA
+  (doble clic → abrir en Replay como navegador estático) y (b) el **catálogo
+  guardado** de fases revisadas. En Replay, un botón **"Guardar en catálogo"**
+  añade las fases P/S marcadas a un QuakeML local persistente
+  (``~/SeismicGuard/catalog.xml``, vía ``CatalogStore``). ``recorder`` gana
+  ``list_recordings`` / ``parse_recording_name`` (puros, con tests).
+- **Centro de eventos: ventana del feed (día/semana/mes) + refrescar + "última
+  actualización".** Barra superior: selector de ventana (amplía el feed USGS
+  vía ``worker.set_period`` — solo agranda, así Globo/Datos no se ven afectados),
+  botón de refresco manual (``refresh_now``) y la hora de la última
+  actualización del catálogo (cierra el hueco de "frescura" del feed: antes no
+  se sabía cuán reciente era el dato).
+- **Centro de eventos (pestaña de nivel superior, junto a Globo/Datos) +
+  estaciones cercanas.** Tabla de catálogo USGS a la izquierda; al seleccionar
+  un sismo, a la derecha aparecen las **estaciones más cercanas** (Δ en grados,
+  calculado en local sin red). Doble clic en una estación → revisa el evento en
+  Replay CON ESA estación (cercana ⇒ ventana razonable ⇒ P/S dentro del dato).
+  La revisión se **desacopla del flujo en vivo**: fija la estación directamente
+  en Replay (``set_event_review``) sin tocar el combo ni conectar SeedLink
+  (descarga del archivo IRIS). El **nombre del evento** se muestra en un banner
+  del Replay. La pestaña "Eventos" del Workbench queda como salto rápido (doble
+  clic → estación más cercana). Ver ``docs/events-feature-plan.md``;
+  ``measurements.great_circle_degrees`` con tests.
+- **Espectrograma: barra de color (dB) con contraste ajustable.** Leyenda de
+  potencia a la derecha del mapa; arrastrarla mueve los niveles (contraste) en
+  vivo. (``set_db_range`` sincroniza la barra; defensivo si la versión de
+  pyqtgraph no trae ``ColorBarItem``.) El eje de frecuencia logarítmico queda
+  pendiente — ``ImageItem`` necesitaría re-binning en log.
+- **Modo kiosko (monitorización a pantalla completa).** ``F11`` alterna, ``Esc``
+  sale: oculta la cabecera y la barra de pestañas para una vista limpia del
+  globo/datos (estilo SWARM).
+- **Workbench: pestaña "Eventos" — catálogo de sismos (USGS) navegable.**
+  Tabla ordenable (hora / magnitud / profundidad / lugar) con el feed USGS;
+  doble clic en un evento lo abre en Replay (misma ruta dirigida por evento que
+  el clic en el globo, pero más práctica para elegir uno concreto — patrón EEV
+  de SeisAn / lista de scolv). 3.er bloque del roadmap. (La exportación de las
+  fases revisadas ya existe vía QuakeML por evento; un catálogo local
+  persistente queda pendiente.)
+- **Replay: panel de PSD (espectro de potencia del tramo seleccionado).**
+  Tercer panel bajo el oscilograma y el espectrograma: al mover la caja amarilla
+  se calcula la PSD de Welch del tramo (canal Z) y se dibuja potencia (dB) vs
+  frecuencia, con una línea en la frecuencia dominante. Completa el 2.º bloque
+  del roadmap (frecuencia + polarización). Función pura
+  ``measurements.welch_psd`` con tests; ``WaveformPanel`` emite ``region_changed``
+  y expone ``selected_segment``.
+- **Hodograma: lectura de polarización (azimut + rectilinearidad).** Eigen-
+  análisis 2-D de la covarianza E/N: muestra el azimut del eje principal
+  (0–180°) y la rectilinearidad (0 ruido/circular → 1 lineal, típico de P).
+  Estimación de dirección de una sola estación. (Inicio del 2.º bloque del
+  roadmap.) Función pura ``measurements.polarization_azimuth`` con tests.
+
+### Fixed
+- **La suite de tests podía leer/BORRAR los datos reales del usuario.**
+  ``QSettings(org, app)`` no respeta ``setPath``/``setDefaultFormat`` (en macOS
+  lee el *plist* nativo real), así que el aislamiento por ``setPath`` no servía:
+  un favorito real se colaba en `test_favorites_store` y, peor, los
+  ``_reset_for_tests()`` → ``clear_all()`` borraban favoritos/uso/presets reales
+  en el teardown. Ahora un ``tests/conftest.py`` parchea la fábrica
+  ``_settings`` de cada almacén (favoritos, uso, GitHub, presets Shake) hacia un
+  ``.ini`` en ``tmp_path`` por test; ``shake_presets`` y ``settings_backup`` se
+  enrutan por ese mismo *seam*. La suite ya no toca el almacén nativo.
+- **Empaquetado macOS: el .dmg ahora incluye pyobjc.** El job `build-macos`
+  instalaba solo `.[dev]`, así que el binario publicado nunca tenía pyobjc y caía
+  a los fallbacks solo-Qt (sin barra de título translúcida y, ahora, sin el
+  arreglo del botón verde = zoom). Ahora instala `.[dev,macos]` y el spec declara
+  `objc`/`AppKit`/`Foundation` como hidden imports (se cargan de forma perezosa
+  y solo en darwin, invisibles al análisis estático).
+- **macOS: maximizar y cerrar el Workbench dejaba una ventana NEGRA unos
+  segundos.** El botón verde abría un *Space* a pantalla completa nativo; como
+  la ventana se oculta (no se destruye) para conservar su estado, al cerrarla el
+  Space quedaba en negro durante la animación de salida. Doble arreglo: (1) con
+  pyobjc, el Workbench pasa a ``FullScreenAuxiliary`` → el botón verde hace
+  *zoom* en el mismo Space en vez de abrir uno nuevo (también encaja mejor con el
+  diseño multiventana/multimonitor); (2) sin pyobjc, ``closeEvent`` sale de
+  pantalla completa y **aplaza el ``hide``** hasta que termina la animación, en
+  vez de ocultar a mitad de transición.
+- **Replay: elegir otro evento/tiempo no sobrescribía la traza anterior.** Ahora
+  al seleccionar otro evento (o grabación) se limpia primero la traza/caché y se
+  parte de cero (banner + "pulsa Cargar").
+- **"Limpiar caché" no borraba las grabaciones del detector.** Vivían en
+  ``~/SeismicGuard/`` (no en ~/.cache), así que ``clear_cache`` no las tocaba
+  pese a decir lo contrario. Ahora ``clear_all`` borra también
+  ``recordings/*.mseed`` y ``catalog.xml`` (``clear_recordings``); docstring
+  corregida.
+- **Estaciones cercanas duplicadas.** El catálogo IRIS puede repetir una misma
+  estación (varias épocas); ahora se deduplica por (red, código).
+- **La pestaña "Eventos" no se traducía** (se quedaba en "Events"): faltaba en el
+  re-traducido de las pestañas; ahora se actualiza con el idioma.
+- **Las pestañas "Datos" y "Eventos" compartían icono.** Eventos estrena su
+  propio icono (lista) — ``assets/icons/events.png``.
+- **Revisión de evento lenta / "no muestra".** La descarga va contra IRIS
+  dataselect (red, hasta 60 s); ahora la ventana auto se acota a 30 min (descargas
+  más pequeñas) y hay feedback "localizando estación / calculando ventana…" para
+  que no parezca colgado; si falla, el estado vuelve a "pulsa Cargar".
+- **Centro de eventos: gran hueco vacío arriba.** El splitter de las tablas no
+  tenía ``stretch`` y quedaba a su tamaño mínimo; ahora ocupa todo el alto.
+- **Estaciones cercanas recomendaban Raspberry Shake (no reproducibles).** La
+  revisión descarga de IRIS dataselect, que NO sirve la red AM (Shake). Ahora la
+  lista de "estaciones cercanas" (y el auto-más-cercana del doble clic) se filtra
+  a redes profesionales reproducibles (provider ``usgs``: IU/US…).
+- **Espectrograma / PSD aplastados bajo el splitter.** Sin altura mínima, el
+  splitter los reducía a una franja donde no se leían los ticks de frecuencia.
+  Ahora tienen ``minimumHeight`` (140 px) — siguen siendo redimensionables.
+- **Llegadas teóricas P/S "flotando" lejos del dato (eventos lejanos).** En un
+  teleseísmo P/S llegan mucho después del origen y caían fuera de la ventana de
+  600 s, apareciendo como líneas sueltas a la derecha (y estiraban la vista).
+  Ahora: (1) los marcadores se añaden con ``ignoreBounds`` (no estiran el eje);
+  (2) solo se dibujan las fases DENTRO de la ventana cargada; (3) si quedan
+  fuera, un aviso indica la distancia epicentral Δ y a cuántos segundos del
+  inicio llega la primera ("aumenta la duración"). El estado de "P/S
+  superpuestas" ahora incluye **Δ (distancia epicentral)** para distinguir
+  local de teleseísmo de un vistazo.
+- **Barra lateral: las cabeceras de las secciones colapsables salían
+  recortadas al expandir varias.** El contenido se ponía directo sobre el
+  panel sin scroll, así que al exceder la altura de la ventana Qt comprimía
+  los widgets y cortaba los títulos (STA/LTA, Sonido). Ahora todo el contenido
+  vive en un ``QScrollArea`` (ancho fijo 300, sin scroll horizontal): si no
+  cabe, aparece barra vertical y no se recorta nada.
+- **Replay: la selección (y el zoom) saltaban al inicio al cambiar
+  filtro/rotación/salida.** Cada re-render llamaba a ``load_static`` que
+  reseteaba la región al 5–15 % y ajustaba a toda la traza. Ahora, si la
+  ventana temporal es la MISMA (mismo dato, solo re-filtrado/rotado/deconv),
+  se CONSERVAN el zoom y la región del usuario; solo una descarga nueva los
+  reinicia. El sincronizado de las 3 cajas se blinda con try/finally para no
+  dejar la bandera ``_syncing_region`` atascada.
+- **La caja amarilla de selección no mostraba datos al arrastrarla.** Regresión
+  al ponerla en las 3 trazas: el slot conectado a ``sigRegionChanged`` recibía
+  el ``region`` como argumento y sobrescribía el canal por defecto del lambda →
+  ``KeyError`` y la lectura no se actualizaba. Se absorbe el argumento
+  (``lambda *_a, src_ch=ch: …``); ahora arrastrar cualquiera de las 3 cajas
+  sincroniza las otras y refresca pico/RMS/frecuencia/S-P.
+- **Hodograma inestable / "respiración" del zoom.** Tres causas, todas de
+  refresco/render: (1) se repintaba a cada tick (~30 FPS) → ahora ~12 FPS
+  (puerta temporal); (2) el auto-rango era un EMA simétrico que hacía zoom
+  in/out constante → ahora **peak-hold** (crece al máximo, decae ≈3%/frame);
+  (3) la ventana se contaba con la frecuencia de construcción → ahora con el
+  ``dt`` real de la instantánea (1.5 s son 1.5 s a cualquier frecuencia).
+- **Osciloscopio: el cursor en cruz ahora se engancha al dato y muestra
+  tiempo + amplitud.** Antes no había snap ni lectura. El crosshair se
+  sincroniza en las 3 trazas (misma X), se ENGANCHA a la muestra más cercana,
+  y una lectura (cabecera) muestra la hora UTC + la amplitud de esa traza en la
+  unidad vigente (counts / m/s / m / m/s²). Patrón SWARM/Snuffler.
+- **La caja de selección amarilla solo afectaba a BHZ.** La región vivía solo
+  en la traza Z; ahora hay una en CADA traza (Z/N/E), sincronizadas, así la
+  selección se ve y arrastra en las tres.
+- **Presets de banda del filtro: texto recortado en la barra lateral.** Las
+  etiquetas largas ("体波1–10"…) se cortaban; ahora son cortas (体波/面波/区域/
+  关闭) con el rango en Hz en el tooltip.
+
+### Added
+- **Replay: salida en unidades físicas por deconvolución completa
+  (Velocidad / Desplazamiento / Aceleración).** Nuevo selector de salida
+  (Counts / m/s / m / m/s²): para ≠Counts se quita la respuesta instrumental
+  de TODO el Stream con ObsPy (``remove_response``, que empareja por canal —
+  funciona con BH1/BH2), en segundo plano y cacheado por salida. El eje y el
+  readout muestran la unidad correcta con prefijo métrico. Sustituye, en
+  Replay, la aproximación escalar por sensibilidad (su botón "m/s" se oculta;
+  ``WaveformPanel`` gana ``set_amp_unit_override`` + ``ResponseService``
+  ``inventory_for``). Degrada con gracia a Counts si falta metadata/red.
+- **Filtro: presets de banda (un clic) + re-filtrado de Replay sin
+  re-descargar.** La sección de filtro de la barra lateral gana botones de
+  banda sísmica típica — **Cuerpo 1–10 Hz**, **Superficiales 0.02–0.1 Hz**,
+  **Regional 2–8 Hz**, **Off** — que fijan los cortes y reemiten. Además, al
+  cambiar el filtro, la traza histórica YA cargada en Replay se **re-filtra al
+  vuelo** (Replay guarda ahora los arrays CRUDOS y filtra en cada render), sin
+  volver a descargar; el CSV exporta lo que se ve (filtrado/rotado).
+- **Replay: rotación ZNE→ZRT (radial/transversal).** Botón conmutador que,
+  cuando se entró desde un sismo del globo, rota las horizontales N/E a
+  Radial/Transversal usando el **back-azimuth** (calculado de las coordenadas
+  del evento + las de la estación vía StationXML). Separa P-SV (R) de SH (T)
+  para un picking de S más limpio y análisis de ondas superficiales. Función
+  de rotación pura ``measurements.rotate_ne_rt`` (con tests; convención ObsPy).
+  El botón solo se habilita cuando hay back-azimuth disponible.
+- **Etiquetas de canal según la banda real.** El eje izquierdo de las trazas
+  ya no es "EH" fijo: refleja la banda real (``BHZ/BHN/BHE``, etc.) tanto en
+  vivo como en Replay, y pasa a ``…Z/…R/…T`` al rotar. ``WaveformPanel`` gana
+  ``set_channel_labels``.
+
+### Changed
+- **Reproducción histórica reescrita de "reproductor de vídeo" a NAVEGADOR
+  ESTÁTICO** (paradigma SWARM / Snuffler / ObsPyck; ver
+  `docs/replay-redesign.md`). Antes descargaba una ventana y la "reproducía" a
+  N× con barra de progreso; ahora:
+  - **Toda la traza se dibuja de una vez** y se navega con **zoom/pan** del
+    ratón; eje X = **hora UTC absoluta**. Se **eliminaron** reproducir / pausar
+    / detener / velocidad / barra de progreso.
+  - Las herramientas de análisis (región / cursor / picks P-S / unidades /
+    medidas) están **siempre activas** (ya no hace falta "congelar"); ⟲ ajusta
+    a toda la traza.
+  - **Selector de banda** (BH/HH/LH/EH/SH) junto a la estación de solo lectura.
+  - **Entrada dirigida por evento**: clic en un sismo del globo → abre Replay
+    con la estación seleccionada y la ventana alrededor del origen.
+  - **Llegadas teóricas P/S (TauP, iasp91)** superpuestas tras la descarga
+    cuando se entra desde un evento (usa coords de StationXML; defensivo).
+  - **Exportar** PNG (imagen) / CSV (tiempo UTC + Z/N/E) / **QuakeML** (picks).
+  - El `WaveformPanel` gana un `static_mode`; `ReplaySource` deja de usarse en
+    la UI (se conserva el módulo y sus tests). Limpieza de claves i18n del
+    reproductor.
+- **Reproducción histórica: la estación ya NO se teclea, sigue a la
+  selección.** Los 4 campos de texto editables (Red / Estación / Ubicación /
+  Canal) se sustituyen por una etiqueta N.S.L.C. de SOLO LECTURA que refleja
+  automáticamente la estación elegida en la barra lateral (p. ej. la barra
+  mostraba ``IU.GUMO`` pero Replay descargaba ``IU.ANMO`` por defecto: ese
+  desajuste desaparece). El canal vertical del preset (``BHZ``) se expande a
+  banda completa (``BH?``) para traer las 3 componentes. ``ProWindow`` conecta
+  ``ControlPanel.station_changed`` → ``ReplayPanel.set_station`` e inicializa
+  con la estación actual. Se añadió el preset de duración **1 h** y se corrigió
+  el recorte de "10 min"/"30 min" en la fila de presets. Se eliminaron 7 claves
+  i18n muertas (``replay.field.{network,location,channel}`` y los 4
+  ``replay.tooltip.*``); locales alineados (460 claves cada uno).
+- **Añadir una estación con un stream activo ya NO cambia la conexión.**
+  El diálogo de añadir prometía "se añade a la lista, pulsa Conectar para
+  empezar", pero el código auto-seleccionaba la estación nueva en el combo,
+  lo que (estando conectado) disparaba una reconexión inmediata y cortaba el
+  stream en curso. Ahora, si hay una fuente activa, añadir una estación solo
+  la agrega a la lista sin tocar la selección: el stream actual sigue intacto
+  y el usuario se cambia a la nueva estación manualmente cuando quiera. Sin
+  conexión activa, sigue auto-seleccionándose para que el próximo Conectar la
+  use. (El ``WorkbenchController`` mantiene sincronizado el estado vía
+  ``ControlPanel.set_source_active``.)
+
+### Fixed
+- **Replay: solo se veía la vertical (EHZ), sin las horizontales (N/E).**
+  ``_stream_to_channels`` mapeaba el componente por la ÚLTIMA letra del canal
+  y solo aceptaba Z/N/E. Las estaciones GSN/IU de banda ancha nombran las
+  horizontales como **BH1/BH2** (no BHN/BHE), así que se descartaban y solo
+  quedaba Z. Ahora se mapea ``1→N`` y ``2→E`` (igual que en SeedLink en vivo),
+  recuperando las tres componentes en la revisión histórica.
+- **Añadir una estación nueva mientras otra estaba en uso crasheaba la app.**
+  Al añadir una estación (p. ej. desde el globo), el combo la seleccionaba
+  automáticamente, lo que disparaba ``station_changed`` → reconexión
+  (detener fuente vieja + arrancar la nueva). Esa reconexión destruía y
+  recreaba un ``QThread``/socket de forma REENTRANTE dentro de la pila de
+  señales del combo y, en el caso del globo, dentro del callback del puente
+  QWebChannel + un ``QMessageBox`` modal — contexto en el que recrear hilos
+  provoca un cierre inesperado. Ahora la reconexión por cambio de estación se
+  DIFIERE a la siguiente iteración del bucle de eventos (``QTimer.singleShot``
+  + coalescing al último preset pedido), ejecutándose sobre una pila limpia.
+  Se cancela si el usuario pulsa Detener o cierra la app antes de que dispare.
+- **Desconectar congelaba la UI y a veces crasheaba la app.** ``stop()`` de
+  ``SeedLinkSource`` hacía ``thread.wait(8000)`` en el HILO DE LA UI (hasta
+  8 s de congelación) y, si el hilo no moría, ``thread.terminate()`` — que
+  puede CRASHEAR la app (el worker podía estar dentro de ObsPy con el GIL).
+  Ahora el cierre es ASÍNCRONO: el ``socket.shutdown`` hace que ObsPy
+  devuelva y el hilo termina solo en segundo plano; worker e hilo se liberan
+  con el patrón estándar ``finished → deleteLater``. La UI no espera y NUNCA
+  se usa terminate(). Además, para evitar un crash al pulsar Detener DURANTE
+  la conexión (el worker sigue bloqueado en el pre-check unos segundos), la
+  fuente se mantiene viva en un registro fuerte (``_closing``) hasta que su
+  hilo termina de verdad — así ni el GC ni un emit diferido tocan un objeto a
+  medio destruir. Se cortan TODAS las señales worker→source al detener.
+- **Globo: el botón de rotación "no hacía nada" estando en zoom + tirones/
+  crash.** En estado ZOOMED-IN, pulsar rotar solo guardaba la preferencia
+  (parecía no responder); ahora, si el usuario quiere rotar, sale del zoom y
+  empieza a girar. Además se ignoran los clics de rotación mientras hay una
+  animación de cámara en curso, evitando encadenar setOption sobre ECharts-GL
+  (causa de tirones / crash al pulsar durante el zoom).
+- **SeedLink: oscilograma "a barras" y hodograma a saltos con estaciones
+  IRIS broadband.** Dos causas, ambas por asumir el pipeline una Raspberry
+  Shake (100 Hz, 3 componentes síncronas): (1) las componentes BHZ/BHN/BHE
+  llegan en paquetes ASÍNCRONOS, y el empaquetado rellenaba con ceros las
+  que no tenían datos en cada intervalo → picos a 0. Ahora se rellena con el
+  ÚLTIMO valor real del canal ("hold DC"). (2) Los canales broadband son de
+  20/40 Hz, pero se trataban como 100 Hz → eje temporal comprimido. Ahora la
+  fuente remuestrea cada bloque a la tasa nominal del pipeline (`np.interp`).
+  Helpers con tests (`tests/test_seedlink_resample.py`).
+- **SeedLink: solo llegaba la componente vertical en estaciones de 3
+  componentes (p. ej. IU.DAV).** (1) Se enviaban 3 SELECT separadas
+  (BHZ/BHN/BHE) y algunos servidores solo atienden la primera → sin
+  horizontales. Ahora se usa UNA SELECT con comodín de banda (`{loc}{banda}?`,
+  p. ej. `00BH?`). (2) Muchas estaciones GSN nombran las horizontales
+  BH1/BH2 en vez de BHN/BHE; `_on_trace` ahora mapea `1→N` y `2→E`. Juntos
+  hacen que el hodograma reciba las horizontales de cualquier GSN/IRIS.
+- **Workbench: el Hodograma se quedaba congelado en el origen con
+  estaciones vertical-only.** Si la estación no tiene canales horizontales
+  (N/E) — p. ej. un Raspberry Shake RS1D — la fuente rellena N/E con ceros,
+  así que el "balín" se quedaba quieto en el centro sin explicación (aunque
+  hubiera un terremoto real en el canal Z). Ahora, cuando no hay energía
+  horizontal, el Hodograma muestra un aviso central ("sin canales
+  horizontales (N/E) — necesita una estación de 3 componentes") en lugar de
+  una trayectoria estática.
+- **Workbench: el Hodograma (gráfico de partícula) no se mostraba.** Las
+  curvas/cabeza del plot se creaban dentro de `_retranslate()`, que solo se
+  llama al cambiar de idioma → tras construir el panel los atributos no
+  existían y `update_from_snapshot` fallaba en silencio (no dibujaba nada
+  hasta el primer cambio de idioma, que además duplicaba 60 curvas). Ahora
+  los items se crean una vez en `__init__` (`_build_plot_items`) y
+  `_retranslate` solo actualiza los textos.
+- **Globo: la rotación se reanudaba al pulsar otros botones tras pausarla.**
+  `applyVisualMode()` (disparado por el toggle de tema o Standard/Pro)
+  reconstruía el globo con `autoRotate:true` hardcoded, pisando la pausa
+  del usuario. Ahora respeta `userPausedRotation` / `zoomedIn`.
+- **Dashboard «Línea temporal»: las fechas seguían en chino al cambiar
+  idioma.** `formatLocalDateTime` usaba `Intl.DateTimeFormat(undefined,…)`,
+  que resuelve al locale del SISTEMA, no al de la app. Ahora usa el código
+  de idioma del payload (`lang`). Además el dashboard gana `setI18n()` y
+  `DashboardPanel.push_i18n()` (suscrito a `language_changed`) para
+  re-traducir y re-pintar al instante, sin esperar al próximo refresco
+  (antes solo el globo tenía este camino).
+- **(B2) El LED de estado de conexión no cambiaba de color al alternar
+  tema.** `app_header._STATE_COLORS` cacheaba los `COLOR_*` al importar el
+  módulo, violando la regla de "leer colores en runtime" (CLAUDE.md §4).
+  Ahora el color se resuelve vía `theme as _t` en cada `set_connection_
+  state()`, y `_refresh_themed_assets()` re-pinta el LED al cambiar tema.
+- **(B1) Crash latente "Internal C++ object already deleted".** ~30
+  suscripciones de widgets a señales de singletons de larga vida
+  (`LocaleService` / `ThemeManager` / `LayerModeManager` / `FavoritesStore`
+  / `ShakePresetStore` / `ActivityLog`) se conectaban sin desconectarse al
+  destruir el widget — el mismo patrón que rompió 12 tests tras v0.7.6,
+  presente en 21 widgets más allá del `LoadingOverlay` ya arreglado.
+
+### Added
+- **Replay: análisis sobre datos históricos.** El tab Replay ya reusaba el
+  mismo `WaveformPanel`, así que congelar / cursor / región (pico/RMS/f₀) /
+  pickers P-S funcionan también sobre el evento descargado — que es el caso
+  de uso REAL del análisis (revisar un sismo pasado). Se añadió el cableado
+  de **m/s** (obtiene el StationXML de la estación del formulario de Replay,
+  en hilo de fondo) y se ocultan las herramientas del detector en vivo (cft,
+  ⚡), que no aplican a datos históricos. `WaveformPanel` gana el parámetro
+  `show_detector_tools`.
+- **Workbench: modo análisis de un solo canal + unidades físicas, en una
+  barra de herramientas sobre el oscilograma** (reestructuración UI patrón
+  SWARM/Snuffler — las acciones viven junto a la traza, no en el panel
+  lateral; ver docs/workbench-assessment y docs/seismic-software-survey).
+  Barra: **Congelar · m/s · P · S · limpiar · reset zoom**.
+  - **Congelar** — detiene el scroll para inspeccionar el búfer; **cursor en
+    cruz** (tiempo/amplitud) y **región arrastrable** que mide en vivo
+    **pico / RMS / frecuencia dominante** (`processing/measurements.py`).
+  - **P / S** — pickers de fase arrastrables; el readout calcula
+    **S-P → distancia → ML aproximada**.
+  - **m/s** — quita la respuesta instrumental (velocidad del suelo). La
+    sensibilidad se obtiene del StationXML del servicio FDSN de IRIS
+    (`services/response.py`) en un hilo de fondo y se cachea; degrada a
+    counts si no hay red/metadata.
+  - Un único readout monoespaciado concentra cursor, región y picks.
+  - Núcleos puros con tests: `tests/test_measurements.py` (7),
+    `tests/test_response.py` (3).
+  - La sección "Análisis" del panel lateral se eliminó (sus controles
+    pasaron a la barra del oscilograma).
+  - **Detector STA/LTA como entrada al análisis** (v0.7.7): la barra muestra
+    el **cft en vivo** (rojo si ≥ umbral) para ajustar el umbral sin
+    adivinar, y un botón **⚡ auto-análisis** que **congela la traza y marca
+    el evento** en cuanto el cft supera el umbral (señal fuerte en pantalla)
+    — responde al instante, no espera el "instante de disparo" exacto (que
+    podía tardar hasta el próximo evento → parecía que ⚡ "no hacía nada").
+    Convierte la detección en un evento listo para analizar. No intrusivo:
+    apagado por defecto. Los rotores de umbral/STA/LTA del panel lateral
+    siguen siendo la entrada de ajuste de este cft.
+  - Fix latente: ``set_frozen`` iteraba los picks como líneas sueltas tras
+    pasar a listas de 3 (multi-componente) — habría fallado al congelar con
+    picks puestos.
+  - **Análisis multi-componente**: los pickers P/S se dibujan ahora en las
+    TRES trazas (Z/N/E) sincronizadas — S se sitúa mirando las horizontales,
+    como en la práctica real; la medida de región reporta el pico del canal
+    más energético (no solo Z); la ML usa el pico de las HORIZONTALES (def.
+    clásica). Los pickers van por encima de la región para poder arrastrarse.
+- **Workbench: panel de control reestructurado (secciones colapsables).**
+  Conexión/estación quedan siempre visibles; **filtro / detector / sonido**
+  son ahora secciones plegables (cabecera clicable con chevron), de modo que
+  el panel deja de crecer sin límite al añadir funciones. **Sonido va plegado
+  por defecto** (degradado: es una función de divulgación, no de análisis).
+- **Workbench: visualización del progreso de conexión.** El ControlPanel
+  muestra ahora un spinner + una línea de estado en vivo que refleja cada
+  fase de la conexión SeedLink (DNS → TCP → handshake → SELECT → esperando
+  paquete → recibiendo datos). El spinner gira mientras conecta, se detiene
+  al llegar el primer paquete y se queda fijo en los errores. Antes estos
+  mensajes solo iban a la barra de estado de la ventana principal,
+  invisible desde el banco de trabajo.
+- **i18n de los mensajes de estado SeedLink** (`source.seedlink.*` +
+  `source.status.streaming`): ~16 mensajes que estaban hardcoded en español
+  ahora se traducen a los 4 idiomas (449 claves/locale, alineadas y con
+  placeholders idénticos).
+- **`shakevision/ui/signal_safety.py`** — helper `subscribe(owner, signal,
+  slot)` que generaliza el patrón de v0.7.6.1: envuelve el slot en
+  `try/except RuntimeError`, adapta la aridad (como Qt: descarta args
+  sobrantes) y desconecta automáticamente en `owner.destroyed`. Migrados
+  los 21 widgets afectados (`app_header`, `control_panel`, `main_window`,
+  `globe_view`, `dashboard_view`, `intensity_card`, los 4 paneles
+  pyqtgraph, los diálogos `add_shake`/`github_login`/`profile`/`settings`,
+  `onboarding_wizard`, `profile_view`, `pro_window`, `replay_panel`).
+  `pg_theming` se deja como está (conexión de proceso, por diseño).
+- `tests/test_signal_safety.py` — 5 tests (sin `QApplication`) que cubren
+  introspección de aridad, truncado de args, guardia de `RuntimeError` y
+  auto-desconexión en `destroyed`.
+
+### Removed
+- **(T1) 17 claves i18n muertas** sin llamadas (en Python, en el JS web ni
+  en la suite de tests), supervivientes del prune de v0.7.6.1:
+  `common.{ok,yes,no,close}`,
+  `settings.status.{applied,language_changed,timezone_changed}`,
+  `intensity.label.{mmi,pgv}`, `controls.sound.listen_playing`, varias
+  `web.globe.controls.*` / `web.*.error.*`. Eliminadas de los 4 locales
+  (450 → 433 claves cada uno; siguen alineados).
+  NOTA: `common.cancel` y `profile.tab_title` **se conservaron** — aunque
+  la app no los llama, la suite de tests (`test_i18n`, `test_profile_view`,
+  `test_visual_polish_n`) los exige como contrato del locale.
+
+### Changed
+- **Workbench: velocidad de conexión.** ObsPy se pre-importa en un hilo
+  daemon la primera vez que se abre el banco de trabajo, así la PRIMERA
+  conexión SeedLink no paga el coste de importación (~1-2 s). (El timeout
+  del pre-check TCP se mantiene en 5 s — un intento intermedio de bajarlo a
+  3 s causaba timeouts espurios en servidores internacionales lentos.)
+- **(B3)** Los 6 `except Exception: pass` de métricas/conexión en
+  `main_window.py` ahora registran con `logger.debug(..., exc_info=True)`
+  en vez de tragarse el error en silencio.
+- `CLAUDE.md` §2: corregida la afirmación de que no quedaban claves i18n
+  muertas tras v0.7.6.1 (ver T1).
+
+### Internal
+- Informe de auditoría completo en `docs/audit-0.7.7.md` (bugs, i18n,
+  estructura) con severidad y orden de ejecución sugerido.
+- **(S1) Extraído `WorkbenchController`** (`shakevision/ui/
+  workbench_controller.py`, ~600 líneas): toda la canalización Workbench
+  en tiempo real (fuente, búfer, DSP, detector STA/LTA, grabación,
+  sonificación, espectrograma, timers de refresco/helicorder y la
+  animación de alerta) salió del god-object `main_window.py`. El
+  controlador es un `QObject` que **conduce** la `ProWindow` (su vista) y
+  se comunica con el shell **solo por señales** (`status_message`,
+  `latency_text`, `station_changed`, `connection_status_changed`), sin
+  referenciar widgets del shell. Comportamiento preservado 1:1 (el estado
+  de conexión, antes leído del texto del label, ahora es un flag interno).
+  `main_window.py`: **1663 → 1105 líneas** (−558). Plan y diseño en
+  `docs/refactor-plan.md`. ⚠️ Verificar con `pytest -q` (suite GUI) en
+  máquina con Qt antes de publicar.
+- `tests/test_workbench_controller.py` reescrito a tests de integración
+  (config real + vista stub); se saltan limpiamente sin backend Qt.
+- **(O3)** Unificado el `logger` de módulo en `main_window.py` (se quitan 2
+  `import logging` + `logging.getLogger(__name__)` inline).
+- **(O1)** De-duplicada la exportación de reporte: `_on_export_report`
+  (HTML) y `_on_export_report_pdf` comparten ahora 4 helpers privados
+  (`_station_label`, `_ensure_report_generator`, `_ask_report_save_path`,
+  `_record_report_metric`). Comportamiento idéntico.
+- **(O2)** Extraída la lógica de "periodos" (mapeo periodo→segundos +
+  filtrado por ventana temporal) a `shakevision/utils/periods.py`
+  (funciones puras, sin Qt), con `tests/test_periods.py` (6 tests).
+- **Andamio** `shakevision/ui/workbench_controller.py` (`QObject` puro con
+  la interfaz objetivo: señales `status_message` / `latency_changed` /
+  `station_changed` / `connection_state` + `__init__(config, view)`) y
+  `tests/test_workbench_controller.py` (4 tests, sin `QApplication`). Listo
+  para recibir los métodos en 0.8.0.
+
+---
+
 ## [0.7.6.1] — 2026-05-21
 
 🩹 **Patch release** wrapping up the post-v0.7.6 fixes — loading overlay

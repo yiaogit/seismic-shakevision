@@ -26,10 +26,14 @@ Qué se borra
 2. **Caché de disco** — todo el árbol ``~/.cache/shakevision/``:
    * GeoJSON cacheado de USGS / ShakeNet
    * Reportes HTML/PDF generados
-   * Cualquier mini-SEED grabado por el recorder
+   * StationXML / respuesta instrumental cacheados
 
-3. **Nada más** — NO se tocan archivos de música, documentos del
-   usuario, ni nada fuera del cache y QSettings de la app.
+3. **Datos de usuario en disco** — ``~/SeismicGuard/``:
+   * Grabaciones del detector STA/LTA (``recordings/*.mseed``)
+   * Catálogo QuakeML de fases revisadas (``catalog.xml``)
+
+4. **Nada más** — NO se tocan archivos de música, documentos del
+   usuario, ni nada fuera de lo anterior.
 
 Política
 --------
@@ -86,6 +90,12 @@ _QSETTINGS_APPS: tuple[str, ...] = (
 # de services/cache.py.
 _DEFAULT_CACHE_DIR: Path = Path.home() / ".cache" / "shakevision"
 
+# Datos de usuario en disco (NO en ~/.cache): grabaciones del detector +
+# catálogo QuakeML. Deben coincidir con recorder.DEFAULT_RECORDINGS_DIR y
+# catalog_store.DEFAULT_CATALOG_PATH.
+_RECORDINGS_DIR: Path = Path.home() / "SeismicGuard" / "recordings"
+_CATALOG_FILE: Path = Path.home() / "SeismicGuard" / "catalog.xml"
+
 
 def clear_qsettings(apps: Iterable[str] = _QSETTINGS_APPS) -> dict[str, str]:
     """Borra QSettings para cada app dada. Devuelve resumen por app.
@@ -134,10 +144,45 @@ def clear_disk_cache(cache_dir: Path | None = None) -> dict[str, str]:
         return {"cache": f"error: {exc!s}"}
 
 
+def clear_recordings(
+    recordings_dir: Path | None = None,
+    catalog_file: Path | None = None,
+) -> dict[str, str]:
+    """Borra las grabaciones del detector + el catálogo QuakeML del usuario.
+
+    Forman parte del "reset a primera instalación": viven en
+    ``~/SeismicGuard/`` (no en ~/.cache), por eso ``clear_disk_cache`` no las
+    tocaba. Mejor esfuerzo e idempotente.
+    """
+
+    results: dict[str, str] = {}
+    rec = Path(recordings_dir) if recordings_dir else _RECORDINGS_DIR
+    if rec.exists():
+        try:
+            shutil.rmtree(rec)
+            rec.mkdir(parents=True, exist_ok=True)
+            results["recordings"] = "ok"
+        except Exception as exc:  # noqa: BLE001
+            results["recordings"] = f"error: {exc!s}"
+            logger.warning("clear_cache: borrar %s falló (%s)", rec, exc)
+    else:
+        results["recordings"] = "no existía"
+
+    cat = Path(catalog_file) if catalog_file else _CATALOG_FILE
+    try:
+        cat.unlink(missing_ok=True)
+        results["catalog"] = "ok"
+    except Exception as exc:  # noqa: BLE001
+        results["catalog"] = f"error: {exc!s}"
+        logger.warning("clear_cache: borrar %s falló (%s)", cat, exc)
+    return results
+
+
 def clear_all(cache_dir: Path | None = None) -> dict[str, str]:
-    """Borra QSettings + disco cache. Devuelve resumen unificado."""
+    """Borra QSettings + disco cache + datos de usuario. Resumen unificado."""
 
     summary: dict[str, str] = {}
     summary.update(clear_qsettings())
     summary.update(clear_disk_cache(cache_dir))
+    summary.update(clear_recordings())
     return summary

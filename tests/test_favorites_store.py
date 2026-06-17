@@ -21,14 +21,25 @@ pytest.importorskip("PySide6.QtCore", reason="PySide6 no instalado")
 
 
 @pytest.fixture(autouse=True)
-def _isolated_settings(tmp_path):
-    from PySide6.QtCore import QCoreApplication, QSettings
-    QCoreApplication.setOrganizationName("SeismicGuardTest")
-    QSettings.setDefaultFormat(QSettings.IniFormat)
-    QSettings.setPath(
-        QSettings.IniFormat, QSettings.UserScope, str(tmp_path))
+def _isolated_settings(tmp_path, monkeypatch):
+    """Aísla COMPLETAMENTE el store en un .ini de ``tmp_path``.
+
+    Importante: ``QSettings(org, app)`` IGNORA ``setDefaultFormat`` /
+    ``setPath`` (esos solo afectan al constructor sin argumentos), así que en
+    macOS leería/escribiría el plist REAL del usuario — contaminando el test y,
+    peor aún, BORRANDO los favoritos reales al llamar ``clear_all`` en el
+    teardown. Parcheamos ``_settings`` para devolver un QSettings basado en un
+    fichero concreto: nunca toca el almacén nativo.
+    """
+
+    from PySide6.QtCore import QSettings
 
     from shakevision.services import favorites_store as fs
+
+    ini_path = str(tmp_path / "favorites.ini")
+    monkeypatch.setattr(
+        fs, "_settings", lambda: QSettings(ini_path, QSettings.IniFormat))
+
     fs._reset_for_tests()
     yield
     fs._reset_for_tests()

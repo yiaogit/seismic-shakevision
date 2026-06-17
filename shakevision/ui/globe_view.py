@@ -36,6 +36,7 @@ from shakevision.ui.theme import (
     COLOR_PANEL_BORDER,
     COLOR_TEXT_SECONDARY,
 )
+from shakevision.ui.signal_safety import subscribe
 from shakevision.ui.theme_manager import ThemeManager
 
 logger = logging.getLogger(__name__)
@@ -434,27 +435,19 @@ class GlobePanel(QFrame):
         # Empujar la tabla de i18n al JS y suscribirse a cambios
         # de idioma para mantenerla actualizada en caliente.
         self.push_i18n()
-        try:
-            LocaleService.language_changed_signal().connect(
-                lambda _lang: self.push_i18n()
-            )
-        except Exception:  # noqa: BLE001 — defensa: si ya estaba conectado
-            pass
+        # v0.7.7 (B1): subscribe() — disconnect en destroyed + guarda.
+        subscribe(self, LocaleService.language_changed_signal(),
+                  self.push_i18n)
         # ─── Modo visual (día / noche / holográfico) ───
         # Empuja el modo inicial y se suscribe a cambios de Theme y
         # LayerMode para mantenerlo sincronizado. Sin esto, el globo
         # se queda siempre en "night" aunque el usuario alterne tema.
         self.push_visual_mode()
+        subscribe(self, ThemeManager.changed_signal(),
+                  self.push_visual_mode)  # v0.7.7 (B1)
         try:
-            ThemeManager.changed_signal().connect(
-                lambda _theme: self.push_visual_mode()
-            )
-        except Exception:  # noqa: BLE001
-            pass
-        try:
-            LayerModeManager.changed_signal().connect(
-                lambda _mode: self.push_visual_mode()
-            )
+            subscribe(self, LayerModeManager.changed_signal(),
+                      self.push_visual_mode)  # v0.7.7 (B1)
         except Exception:  # noqa: BLE001
             pass
         if self._pending_stations is not None:

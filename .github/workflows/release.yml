@@ -109,7 +109,10 @@ jobs:
       - name: Install project + PyInstaller + create-dmg
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          # [macos] añade pyobjc → barra de título translúcida nativa y el
+          # botón verde del Workbench hace zoom (no abre un Space negro).
+          # Sin esto el .dmg cae a los fallbacks solo-Qt.
+          pip install -e ".[dev,macos]"
           pip install "pyinstaller>=6.5"
           brew install create-dmg || true
 

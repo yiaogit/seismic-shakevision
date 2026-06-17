@@ -14,9 +14,9 @@ aplicación (fuente de datos, procesador, etc.).
 from __future__ import annotations
 
 from collections import deque
-from typing import Iterable
+from typing import Iterable, Optional
 
-from PySide6.QtCore import Qt, Signal, Slot
+from PySide6.QtCore import Qt, QTimer, Signal, Slot
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QSlider,
     QSpinBox,
@@ -50,6 +51,7 @@ from shakevision.services.shake_presets import (
     LanShakePreset,
     ShakePresetStore,
 )
+from shakevision.ui.signal_safety import subscribe
 
 
 # Identificador interno del item "+ Add LAN Shake..." en el combo.
@@ -94,21 +96,64 @@ class ControlPanel(QFrame):
         # eliminar también la entrada correspondiente del combo.
         self._dynamic_stations: deque = deque()
 
-        # Construir la interfaz por secciones
-        root = QVBoxLayout(self)
-        root.setContentsMargins(12, 12, 12, 12)
-        root.setSpacing(14)
+        # ¿Hay una fuente de datos activa (conectando o en streaming)?
+        # Lo mantiene sincronizado el WorkbenchController. Cuando es True,
+        # añadir una estación NO debe cambiar la selección del combo (eso
+        # interrumpiría/reconectaría el stream en curso): la estación solo
+        # se agrega a la lista y el usuario decide cuándo cambiarse.
+        self._source_active: bool = False
 
+        # Secciones colapsables registradas (header, title_key, content).
+        self._collapsibles: list = []
+
+        # v0.7.7: TODO el contenido va dentro de un QScrollArea. Antes el
+        # layout se ponía directo sobre el panel; al expandir varias secciones
+        # el contenido excedía la altura de la ventana y Qt COMPRIMÍA los
+        # widgets por debajo de su tamaño natural → las cabeceras de las
+        # secciones colapsables salían recortadas. Con scroll, si sobra altura
+        # aparece una barra y no se recorta nada.
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.viewport().setStyleSheet("background: transparent;")
+        outer.addWidget(scroll)
+
+        content = QWidget()
+        content.setStyleSheet("background: transparent;")
+        scroll.setWidget(content)
+
+        # Construir la interfaz por secciones (dentro del contenido scrollable)
+        root = QVBoxLayout(content)
+        root.setContentsMargins(12, 12, 12, 12)
+        root.setSpacing(12)
+
+        # Conexión + estación: SIEMPRE visibles (el flujo principal).
         root.addLayout(self._build_station_section(config.stations))
         root.addLayout(self._build_connection_section())
-        root.addLayout(self._build_filter_section(config.filt))
-        root.addLayout(self._build_trigger_section(config.trigger))
-        root.addLayout(self._build_sound_section(config.stream.sample_rate_hz))
+        # Filtro / detector / sonido: colapsables (v0.7.7) para que el panel
+        # no crezca sin límite. Sonido va colapsado por defecto (degradado:
+        # es una función de divulgación, no de análisis).
+        root.addWidget(self._collapsible(
+            "controls.section.filter",
+            self._wrap(self._build_filter_section(config.filt)),
+            collapsed=False))
+        root.addWidget(self._collapsible(
+            "controls.section.trigger",
+            self._wrap(self._build_trigger_section(config.trigger)),
+            collapsed=True))
+        root.addWidget(self._collapsible(
+            "controls.section.sound",
+            self._wrap(self._build_sound_section(config.stream.sample_rate_hz)),
+            collapsed=True))
         root.addStretch(1)
 
         # Aplicar textos traducidos + suscribirse a cambios de idioma
         self._retranslate()
-        LocaleService.language_changed_signal().connect(self._retranslate)
+        subscribe(self, LocaleService.language_changed_signal(),
+                  self._retranslate)  # v0.7.7 (B1)
 
     # ------------------------------------------------------------------
     # Construcción de secciones
@@ -145,33 +190,106 @@ class ControlPanel(QFrame):
 
         # Suscripción al store: cambios externos (Settings → My Shakes,
         # otra ventana, etc.) deben reflejarse aquí inmediatamente.
-        ShakePresetStore.changed_signal().connect(self._refresh_lan_shakes_from_store)
+        subscribe(self, ShakePresetStore.changed_signal(),
+                  self._refresh_lan_shakes_from_store)  # v0.7.7 (B1)
 
         return layout
 
-    def _build_connection_section(self) -> QHBoxLayout:
-        """Botones de conexión/desconexión."""
+    # Marcos del spinner de conexión (braille — gira suave, sin assets).
+    _SPINNER_FRAMES: str = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
-        layout = QHBoxLayout()
-        layout.setSpacing(6)
+    def _build_connection_section(self) -> QVBoxLayout:
+        """Botones de conexión/desconexión + fila de progreso en vivo."""
 
+        outer = QVBoxLayout()
+        outer.setSpacing(6)
+
+        buttons = QHBoxLayout()
+        buttons.setSpacing(6)
         self.connect_button = QPushButton()
         self.connect_button.clicked.connect(self.connect_clicked.emit)
-        layout.addWidget(self.connect_button)
+        buttons.addWidget(self.connect_button)
 
         self.disconnect_button = QPushButton()
         self.disconnect_button.clicked.connect(self.disconnect_clicked.emit)
-        layout.addWidget(self.disconnect_button)
+        buttons.addWidget(self.disconnect_button)
+        outer.addLayout(buttons)
 
-        return layout
+        # v0.7.7: fila de progreso de conexión (spinner + estado en vivo).
+        # Oculta mientras estamos desconectados; el WorkbenchController la
+        # alimenta con los mensajes de estado de la fuente (DNS, handshake,
+        # SELECT, esperando datos, streaming…).
+        self._conn_row = QWidget()
+        row = QHBoxLayout(self._conn_row)
+        row.setContentsMargins(0, 2, 0, 0)
+        row.setSpacing(6)
+        self._conn_spinner = QLabel(self._SPINNER_FRAMES[0])
+        self._conn_spinner.setObjectName("ConnSpinner")
+        self._conn_spinner.setFixedWidth(14)
+        self._conn_spinner.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
+        row.addWidget(self._conn_spinner)
+        self._conn_status = QLabel("")
+        self._conn_status.setObjectName("StatusValue")
+        self._conn_status.setWordWrap(True)
+        row.addWidget(self._conn_status, stretch=1)
+        self._conn_row.setVisible(False)
+        outer.addWidget(self._conn_row)
+
+        # Temporizador del spinner.
+        self._spinner_idx = 0
+        self._conn_spinner_timer = QTimer(self)
+        self._conn_spinner_timer.setInterval(90)
+        self._conn_spinner_timer.timeout.connect(self._tick_spinner)
+
+        return outer
+
+    # ------------------------------------------------------------------
+    # Visualización del progreso de conexión (v0.7.7)
+    # ------------------------------------------------------------------
+    def _tick_spinner(self) -> None:
+        self._spinner_idx = (self._spinner_idx + 1) % len(self._SPINNER_FRAMES)
+        self._conn_spinner.setText(self._SPINNER_FRAMES[self._spinner_idx])
+
+    def set_connection_status(self, text: str, busy: bool = True) -> None:
+        """Muestra ``text`` en la fila de progreso.
+
+        ``busy=True`` anima el spinner (conectando / esperando datos);
+        ``busy=False`` lo detiene y oculta (estado estable: streaming,
+        error) dejando el texto visible.
+        """
+
+        self._conn_status.setText(text)
+        self._conn_row.setVisible(True)
+        if busy:
+            self._conn_spinner.setVisible(True)
+            if not self._conn_spinner_timer.isActive():
+                self._conn_spinner_timer.start()
+        else:
+            self._conn_spinner_timer.stop()
+            self._conn_spinner.setVisible(False)
+
+    def set_source_active(self, active: bool) -> None:
+        """El controlador informa si hay una fuente activa.
+
+        Cuando hay una fuente activa, ``append_dynamic_station`` agrega la
+        estación a la lista pero NO cambia la selección, para no interrumpir
+        ni reconectar el stream en curso (ver la nota en ``__init__``).
+        """
+
+        self._source_active = bool(active)
+
+    def clear_connection_status(self) -> None:
+        """Oculta la fila de progreso (al desconectar)."""
+
+        self._conn_spinner_timer.stop()
+        self._conn_status.clear()
+        self._conn_row.setVisible(False)
 
     def _build_filter_section(self, filt: FilterConfig) -> QVBoxLayout:
         """Controles del filtro Butterworth pasa banda."""
 
         layout = QVBoxLayout()
         layout.setSpacing(6)
-        self._filter_section_title = self._section_title("")
-        layout.addWidget(self._filter_section_title)
 
         # Casilla de habilitación (bypass cuando está desmarcada)
         self.filter_enabled_check = QCheckBox()
@@ -214,18 +332,66 @@ class ControlPanel(QFrame):
 
         layout.addLayout(grid)
 
+        # ── Presets de banda (un clic) ───────────────────────────────
+        # Bandas sísmicas típicas: cuerpo P/S, superficiales, regional.
+        # Pulsar uno ajusta lowcut/highcut + activa el filtro y reemite.
+        self._lbl_filter_presets = QLabel()
+        self._lbl_filter_presets.setObjectName("Caption")
+        layout.addWidget(self._lbl_filter_presets)
+
+        preset_row = QHBoxLayout()
+        preset_row.setSpacing(4)
+        self._filter_preset_buttons: list[tuple[QPushButton, str]] = []
+        # (clave i18n, lowcut, highcut)  — "off" desactiva el filtro.
+        for key, low, high in (
+            ("controls.filter.preset_body", 1.0, 10.0),
+            ("controls.filter.preset_surface", 0.02, 0.1),
+            ("controls.filter.preset_regional", 2.0, 8.0),
+            ("controls.filter.preset_off", 0.0, 0.0),
+        ):
+            btn = QPushButton()
+            btn.setObjectName("ToolbarButton")
+            btn.setMinimumWidth(44)
+            if key == "controls.filter.preset_off":
+                btn.clicked.connect(self._on_filter_preset_off)
+            else:
+                btn.setToolTip(f"{low:g}–{high:g} Hz")
+                btn.clicked.connect(
+                    lambda _=False, lo=low, hi=high: self._apply_filter_preset(lo, hi))
+            preset_row.addWidget(btn)
+            self._filter_preset_buttons.append((btn, key))
+        preset_row.addStretch(1)
+        layout.addLayout(preset_row)
+
         # Reflejar el estado inicial en los controles dependientes
         self._apply_filter_enabled(filt.enabled)
 
         return layout
+
+    def _apply_filter_preset(self, low: float, high: float) -> None:
+        """Aplica una banda preestablecida: activa el filtro, fija cortes y
+        reemite una sola vez."""
+
+        for w in (self.filter_enabled_check, self.lowcut_spin, self.highcut_spin):
+            w.blockSignals(True)
+        self.filter_enabled_check.setChecked(True)
+        self._apply_filter_enabled(True)
+        self.lowcut_spin.setValue(low)
+        self.highcut_spin.setValue(high)
+        for w in (self.filter_enabled_check, self.lowcut_spin, self.highcut_spin):
+            w.blockSignals(False)
+        self._emit_filter_changed()
+
+    def _on_filter_preset_off(self) -> None:
+        """Desactiva el filtro (bypass) — equivale a desmarcar la casilla."""
+
+        self.filter_enabled_check.setChecked(False)  # dispara _on_filter_toggled
 
     def _build_trigger_section(self, trig: TriggerConfig) -> QVBoxLayout:
         """Controles del detector STA/LTA."""
 
         layout = QVBoxLayout()
         layout.setSpacing(6)
-        self._trigger_section_title = self._section_title("")
-        layout.addWidget(self._trigger_section_title)
 
         # Etiqueta + valor numérico del umbral
         threshold_row = QHBoxLayout()
@@ -281,8 +447,6 @@ class ControlPanel(QFrame):
 
         layout = QVBoxLayout()
         layout.setSpacing(6)
-        self._sound_section_title = self._section_title("")
-        layout.addWidget(self._sound_section_title)
 
         # Botón principal
         self.listen_button = QPushButton()
@@ -335,9 +499,9 @@ class ControlPanel(QFrame):
         """Re-aplica los textos traducidos sin reconstruir widgets."""
 
         self._station_section_title.setText(t("controls.section.station"))
-        self._filter_section_title.setText(t("controls.section.filter"))
-        self._trigger_section_title.setText(t("controls.section.trigger"))
-        self._sound_section_title.setText(t("controls.section.sound"))
+        # Cabeceras de las secciones colapsables (título + chevron).
+        for header, title_key, content in self._collapsibles:
+            self._apply_collapsible_text(header, title_key, content.isVisible())
 
         # Re-etiquetar el item sentinela ("+ Add LAN Shake...") tras
         # cambio de idioma. Localizarlo por userData en lugar de índice.
@@ -353,6 +517,9 @@ class ControlPanel(QFrame):
         self._lowcut_label.setText(t("controls.filter.lowcut"))
         self._highcut_label.setText(t("controls.filter.highcut"))
         self._order_label.setText(t("controls.filter.order"))
+        self._lbl_filter_presets.setText(t("controls.filter.presets"))
+        for btn, key in self._filter_preset_buttons:
+            btn.setText(t(key))
 
         self._threshold_label.setText(t("controls.trigger.threshold"))
         self._sta_label.setText(t("controls.trigger.sta"))
@@ -400,7 +567,10 @@ class ControlPanel(QFrame):
             if (existing.network == preset.network
                     and existing.station == preset.station
                     and existing.location == preset.location):
-                self.station_combo.setCurrentIndex(i)
+                # Solo cambiamos de selección si NO hay un stream activo:
+                # si lo hay, no interrumpimos la conexión en curso.
+                if not self._source_active:
+                    self.station_combo.setCurrentIndex(i)
                 return False
 
         # FIFO sobre las dinámicas
@@ -418,7 +588,14 @@ class ControlPanel(QFrame):
         insert_idx = sentinel_idx if sentinel_idx >= 0 else self.station_combo.count()
         self.station_combo.insertItem(insert_idx, preset.label, userData=preset)
         self._dynamic_stations.append(preset)
-        self.station_combo.setCurrentIndex(insert_idx)
+        # Con un stream activo NO auto-seleccionamos la estación nueva: eso
+        # dispararía ``station_changed`` → reconexión y cortaría el stream en
+        # curso. La estación queda en la lista; el usuario se cambia a ella
+        # manualmente cuando quiera (coherente con "pulsa Conectar para
+        # empezar" del diálogo de añadir). Sin stream activo sí la dejamos
+        # seleccionada para que el próximo Conectar la use.
+        if not self._source_active:
+            self.station_combo.setCurrentIndex(insert_idx)
         return True
 
     def _sentinel_index(self) -> int:
@@ -445,6 +622,53 @@ class ControlPanel(QFrame):
         label.setObjectName("SectionTitle")
         return label
 
+    # ------------------------------------------------------------------
+    # Secciones colapsables (v0.7.7)
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _wrap(layout) -> QWidget:
+        """Envuelve un layout en un QWidget (para poder ocultarlo entero)."""
+
+        w = QWidget()
+        w.setLayout(layout)
+        return w
+
+    def _collapsible(self, title_key: str, content: QWidget,
+                     collapsed: bool = False) -> QWidget:
+        """Crea una sección con cabecera clicable que muestra/oculta ``content``."""
+
+        box = QWidget()
+        v = QVBoxLayout(box)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(4)
+
+        header = QPushButton()
+        header.setObjectName("SectionHeader")
+        header.setCheckable(True)
+        header.setChecked(not collapsed)
+        header.setCursor(Qt.PointingHandCursor)
+        header.toggled.connect(
+            lambda on, c=content, h=header, k=title_key:
+            self._on_collapse(on, c, h, k))
+        v.addWidget(header)
+        v.addWidget(content)
+
+        content.setVisible(not collapsed)
+        self._apply_collapsible_text(header, title_key, not collapsed)
+        self._collapsibles.append((header, title_key, content))
+        return box
+
+    def _on_collapse(self, expanded: bool, content: QWidget,
+                     header: QPushButton, title_key: str) -> None:
+        content.setVisible(expanded)
+        self._apply_collapsible_text(header, title_key, expanded)
+
+    @staticmethod
+    def _apply_collapsible_text(header: QPushButton, title_key: str,
+                                expanded: bool) -> None:
+        chevron = "▾" if expanded else "▸"
+        header.setText(f"{chevron}  {t(title_key)}")
+
     def _refresh_station_detail(self) -> None:
         """Actualiza el texto descriptivo del preset seleccionado.
 
@@ -461,6 +685,16 @@ class ControlPanel(QFrame):
             f"{preset.network}.{preset.station}."
             f"{preset.location or '--'}.{preset.channel}"
         )
+
+    def current_station(self) -> Optional[StationPreset]:
+        """Devuelve el ``StationPreset`` actualmente seleccionado (o None).
+
+        Lo usa el panel de Replay para reflejar la estación elegida en la
+        barra lateral sin que el usuario tenga que volver a teclear N.S.L.C.
+        """
+
+        data = self.station_combo.currentData()
+        return data if isinstance(data, StationPreset) else None
 
     # ------------------------------------------------------------------
     # Manejadores de señales internas

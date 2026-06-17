@@ -59,10 +59,19 @@
   // un primer flash en UTC mientras se carga el primer payload.
   let userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
+  // ─── Idioma de la app para formatear fechas ───
+  // v0.7.7 fix: antes formatLocalDateTime usaba ``undefined`` como locale,
+  // que Intl resuelve al idioma del SISTEMA (no al de la app). Resultado:
+  // los nombres de mes/día en los tooltips del timeline seguían en chino
+  // aunque el usuario cambiara el idioma de la app. Ahora usamos el código
+  // de idioma que envía Python (``lang`` en el payload / setI18n).
+  // ``null`` → fallback al locale del navegador hasta el primer payload.
+  let userLocale = null;
+
   function formatLocalDateTime(ts_ms, opts) {
-    // ts_ms: epoch milliseconds. Usa userTimezone + opciones del caller.
+    // ts_ms: epoch milliseconds. Usa userLocale + userTimezone + opciones.
     try {
-      const fmt = new Intl.DateTimeFormat(undefined, {
+      const fmt = new Intl.DateTimeFormat(userLocale || undefined, {
         timeZone: userTimezone,
         ...opts,
       });
@@ -638,10 +647,27 @@
         i18nTable = p.i18n;
         applyStaticI18n();
       }
+      if (p && p.lang) {
+        userLocale = p.lang;
+      }
       if (p && p.timezone) {
         userTimezone = p.timezone;
       }
       _renderAll(p || {});
+    },
+    // v0.7.7 fix: cambio de idioma en caliente (espejo de globe.setI18n).
+    // Python lo llama al cambiar LocaleService, así el dashboard re-traduce
+    // textos estáticos, fechas (Intl con el locale de la app) y re-pinta
+    // las gráficas SIN esperar al próximo refresco de datos.
+    setI18n(table, lang) {
+      const t2 = (typeof table === "string") ? JSON.parse(table) : table;
+      if (t2) { i18nTable = t2; applyStaticI18n(); }
+      if (lang) { userLocale = lang; }
+      if (lastPayload) {
+        if (t2) lastPayload.i18n = t2;
+        if (lang) lastPayload.lang = lang;
+        _renderAll(lastPayload);
+      }
     },
     // v0.6 Phase 11: cambio de tema en caliente. Acepta "dark" | "light".
     // Llamado desde Python al cambiar ThemeManager. Re-pinta TODAS las

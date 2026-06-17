@@ -53,6 +53,7 @@ from PySide6.QtWidgets import (
 
 from shakevision.i18n import LocaleService, t
 from shakevision.ui.icons import logo_pixmap
+from shakevision.ui.signal_safety import subscribe
 
 
 logger = logging.getLogger(__name__)
@@ -167,12 +168,10 @@ class OnboardingWizard(QDialog):
         # conexión vivía DESPUÉS de las páginas y se perdía la primera
         # emisión, dejando el wizard con QSS de un tema y MainWindow
         # con QSS del otro.
-        try:
-            from shakevision.ui.theme_manager import ThemeManager
-            ThemeManager.changed_signal().connect(
-                lambda _t: self.setStyleSheet(self._build_qss()))
-        except Exception:  # noqa: BLE001
-            pass
+        # v0.7.7 (B1): subscribe() — disconnect en destroyed + guarda.
+        from shakevision.ui.theme_manager import ThemeManager
+        subscribe(self, ThemeManager.changed_signal(),
+                  lambda _t: self.setStyleSheet(self._build_qss()))
 
         # ── Construcción de las 6 páginas ──
         self._stack.addWidget(self._build_welcome_page())
@@ -203,12 +202,8 @@ class OnboardingWizard(QDialog):
         # cambia idioma en vivo, así que necesita escuchar su propia
         # señal).
         self._retranslate()
-        try:
-            LocaleService.language_changed_signal().connect(
-                lambda _l: self._retranslate()
-            )
-        except Exception:  # noqa: BLE001
-            pass
+        subscribe(self, LocaleService.language_changed_signal(),
+                  self._retranslate)  # v0.7.7 (B1)
 
         # v0.7.6 fix: reaplicar QSS al final del __init__ por si la
         # construcción de las páginas disparó algún cambio de tema que

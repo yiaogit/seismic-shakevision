@@ -777,6 +777,17 @@
       state.visualTheme = theme;
     }
     const fresh = buildGlobeBase(mode);
+    // v0.7.7 fix: buildGlobeBase() siempre pone autoRotate:true, pero un
+    // cambio de modo visual (tema claro/oscuro, Standard/Pro) NO debe
+    // reanudar la rotación si el usuario la pausó (ni si estamos en zoom).
+    // Antes, pulsar cualquier botón que dispare applyVisualMode reiniciaba
+    // el giro pisando la intención del usuario.
+    if (fresh.viewControl) {
+      const willRotate = !userPausedRotation && !zoomedIn;
+      fresh.viewControl.autoRotate = willRotate;
+      rotating = willRotate;
+      syncRotateBtnUI(willRotate);
+    }
     safeSetOption({ globe: fresh });
     // v0.6 E: re-pintar series para meter/quitar fronteras según modo
     applyActiveLayer();
@@ -1391,17 +1402,23 @@
   // sea false). Solo se usa para sincronizar la UI.
   let rotating = true;
   rotateBtn.addEventListener("click", () => {
-    // El botón conmuta la INTENCIÓN del usuario, no el estado
-    // instantáneo. La aplicamos siempre, salvo cuando estamos en
-    // ZOOMED-IN (en cuyo caso solo se guarda la preferencia y se
-    // aplicará al salir del zoom).
+    // v0.7.7 fix: ignorar clics mientras hay una animación de cámara en
+    // curso (zoom in/out). Antes, pulsar durante la animación encadenaba
+    // varios setOption sobre ECharts-GL y provocaba tirones / crash.
+    if (suppressWheelExit) {
+      return;
+    }
     userPausedRotation = !userPausedRotation;
     if (zoomedIn) {
-      // En zoom el botón solo guarda la preferencia futura.
-      // Visualmente sigue mostrando "▶" (pausado) porque la cámara
-      // está realmente parada por el zoom; no la cambiamos para no
-      // confundir al usuario.
-      syncRotateBtnUI(false);
+      // v0.7.7 fix: estando en ZOOM, si el usuario quiere ROTAR (no
+      // pausar), salimos del zoom y empezamos a girar — antes el botón
+      // "no hacía nada" (confuso: parecía que no respondía). resetView()
+      // aplica autoRotate = !userPausedRotation, que ya es true aquí.
+      if (!userPausedRotation) {
+        resetView();
+      } else {
+        syncRotateBtnUI(false);
+      }
       return;
     }
     // En vista mundial: aplicar inmediatamente.

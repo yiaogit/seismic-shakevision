@@ -135,10 +135,15 @@ def _stream_to_channels(stream) -> tuple[
     n_samples = int(ref.stats.npts)
     duration_s = n_samples / max(1, sample_rate)
 
+    # Mapa de componente SEED → canal lógico. Las estaciones GSN/IU de
+    # banda ancha nombran las HORIZONTALES como BH1/BH2 (no BHN/BHE); sin
+    # este mapeo se descartaban y solo quedaba la vertical (Z). Igual que en
+    # SeedLinkSource: 1→N, 2→E. ("3" es raramente vertical → lo ignoramos.)
+    comp_map = {"Z": "Z", "N": "N", "E": "E", "1": "N", "2": "E"}
     channels: dict[str, Optional[np.ndarray]] = {"Z": None, "N": None, "E": None}
     for tr in stream:
-        ch = str(tr.stats.channel)[-1].upper()
-        if ch not in channels:
+        comp = comp_map.get(str(tr.stats.channel)[-1].upper())
+        if comp is None:
             continue
         # Recorta / rellena para alinear con la longitud de referencia.
         data = np.asarray(tr.data, dtype=np.float32)
@@ -148,7 +153,7 @@ def _stream_to_channels(stream) -> tuple[
             data = padded
         elif data.size > n_samples:
             data = data[:n_samples]
-        channels[ch] = data
+        channels[comp] = data
 
     return (channels["Z"], channels["N"], channels["E"],
             start_ts, sample_rate, duration_s)

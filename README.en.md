@@ -4,12 +4,19 @@
 
 [简体中文](README.md) · **English** · [Español](README.es.md) · [Français](README.fr.md)
 
-> Formerly **ShakeVision OpenData Monitor**. v0.7.0 ships the SeismicGuard
-> rebrand, a macOS-Sonoma-style theming overhaul, full 4-language i18n,
-> an onboarding wizard, a Profile activity timeline, IP-based location
-> detection, and many quality-of-life improvements. The original v0.1.x
-> binaries remain available on the Releases page under the legacy
-> `ShakeVision-*` name.
+> Formerly **ShakeVision OpenData Monitor**. **v0.8.0** reorganizes the app
+> around an *event → review → personal collection* flow and rewrites
+> **Replay** into a professional waveform browser (zoom/pan, absolute UTC
+> axis, band selection, instrument-response removal to VEL/DISP/ACC,
+> ZNE→ZRT rotation, theoretical P/S arrivals via TauP, dB spectrogram, PSD,
+> and PNG/CSV/QuakeML export). It adds a top-level **Event Center** (quake
+> table + nearby stations) and a **"My Collection"** tab (favorite quakes/
+> stations + recordings/review catalog, with reopening of saved reviews and
+> "Open folder" export). Earlier, v0.7.0 shipped the SeismicGuard rebrand, a
+> macOS-Sonoma-style theming overhaul, full 4-language i18n, an onboarding
+> wizard, a Profile activity timeline, and IP-based location detection. The
+> original v0.1.x binaries remain available on the Releases page under the
+> legacy `ShakeVision-*` name.
 
 **Open-source desktop seismic monitoring workstation**
 *Cross-platform desktop seismic monitoring workbench*
@@ -38,7 +45,10 @@ analysis into a single desktop app.
 |----------------------------|------------------------------------------------------------------------------------------------------------------------------------|
 | 🌍 **3D Globe**            | ECharts-GL real-time Earth rendering, 600+ Raspberry Shake citizen stations + 400+ USGS / IRIS backbone stations, magnitude-coloured quakes, click-to-zoom + add to Pro workbench |
 | 📊 **Data Dashboard**      | 7 linked ECharts: top countries, magnitude / depth histograms, 24h timeline (density bubbles), PAGER radar (region filter), period-adaptive buckets, depth × magnitude scatter |
-| 🔬 **Pro Workbench**       | Floating window: 3-channel waveform + spectrogram + 24h helicorder + N-E particle motion + STA/LTA triggered recording + MMI intensity card |
+| 🗂 **Event Center**        | Top-level page: quake table (double-click to review) + **nearby major stations** (Δ°/km/distance category); double-click uses the nearest station; ☆ favorite quakes/stations in one click |
+| ⭐ **"My Collection"**     | Top-level page: favorite **quakes / stations** + records (STA/LTA recordings — shown only if any + **review catalog** QuakeML); double-click a catalog row to **reopen a saved review** (restores P/S markers); "Open folder" exports MiniSEED/QuakeML to ObsPy/SeisComP/SAC |
+| 🔬 **Pro Workbench**       | Floating window: 3-channel waveform + spectrogram (toggle) + 24h helicorder + N-E particle motion (polarization azimuth) + STA/LTA triggered recording + MMI intensity card |
+| ⏪ **Replay (rewritten)**  | Professional waveform browser: zoom/pan + absolute UTC axis + band selection + instrument-response removal (VEL/DISP/ACC) + ZNE→ZRT rotation + theoretical P/S via TauP + dB spectrogram + PSD + region cursor measurements + PNG/CSV/QuakeML export |
 | 🔊 **Sonification**        | Play the last 60 seconds of ground motion as audible audio at 1× – 60× speed                                                       |
 | 🌐 **i18n**                | Full 4-language stack (EN / ES / 简中 / FR) with instant switching, including web views, chart internals, tooltips, HTML reports   |
 | 🕒 **Timezone-aware**      | System timezone auto-detect + manual override; all timestamps render consistently in the user's zone                               |
@@ -564,7 +574,7 @@ seismic-shakevision/
 │   │
 │   ├── i18n/                             # ── Internationalisation ──
 │   │   ├── service.py                    # LocaleService + t() + language_changed_signal
-│   │   └── locales/{en,zh,es,fr}.json    # 4 aligned dictionaries, **444 keys each**
+│   │   └── locales/{en,zh,es,fr}.json    # 4 aligned dictionaries, **559 keys each**
 │   │
 │   ├── web/                              # ── Embedded web views (loaded by QWebEngineView) ──
 │   │   ├── globe/                        # ECharts-GL 3D earth (index.html + globe.js + styles.css + lib/)
@@ -711,8 +721,8 @@ sizes, etc.) live in [`packaging/README.md`](packaging/README.md).
 - [x] **v0.2.0** — historical replay: download MiniSEED from IRIS FDSN dataselect with adjustable speed
 - [x] **v0.3.0** — custom LAN Raspberry Shake UI ("➕ Add LAN Shake…" dropdown + "My Shakes" tab in Settings)
 - [x] **v0.7.0** — rebrand to SeismicGuard, macOS-Sonoma theming, onboarding wizard, profile + activity timeline, IP geolocation, PDF overflow fix
-- [ ] **v0.8.0** — globe favourite-quake UX (button-based, replacing the postponed right-click attempt)
-- [ ] **v1.0.0** — code signing (Windows EV cert + macOS Developer ID + notarisation); eliminate SmartScreen / Gatekeeper warnings entirely
+- [x] **v0.8.0** — Replay rewritten as a professional waveform browser (response removal/rotation/TauP/PSD/export); top-level Event Center + nearby stations; "My Collection" hub (favorites + recordings + review catalog with reopen & export); button-based favorite entry points; particle-motion stabilization + polarization azimuth
+- [ ] **v1.0.0** — code signing (Windows EV cert + macOS Developer ID + notarisation); eliminate SmartScreen / Gatekeeper warnings entirely; auto-update
 
 ---
 

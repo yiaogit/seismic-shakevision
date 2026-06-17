@@ -34,6 +34,7 @@ from PySide6.QtWidgets import QFrame, QLabel, QSizePolicy, QVBoxLayout, QWidget
 from shakevision.i18n import LocaleService, t
 from shakevision.services.data_models import Earthquake, ShakeStation
 from shakevision.ui.loading_overlay import LoadingOverlay
+from shakevision.ui.signal_safety import subscribe
 from shakevision.ui.theme import (
     COLOR_PANEL,
     COLOR_PANEL_BORDER,
@@ -772,13 +773,17 @@ class DashboardPanel(QFrame):
         # v0.6 Phase 11: empujar el tema actual + suscribirse a cambios
         # para que las gráficas ECharts respondan al toggle dark/light.
         self._push_theme()
-        try:
-            from shakevision.ui.theme_manager import ThemeManager
-            ThemeManager.changed_signal().connect(
-                lambda _t: self._push_theme()
-            )
-        except Exception:  # noqa: BLE001
-            pass
+        # v0.7.7 (B1): subscribe() — disconnect en destroyed + guarda.
+        from shakevision.ui.theme_manager import ThemeManager
+        subscribe(self, ThemeManager.changed_signal(), self._push_theme)
+
+        # v0.7.7 fix: re-traducir el dashboard al cambiar idioma (espejo del
+        # globo). Sin esto, al cambiar idioma el dashboard se quedaba con la
+        # tabla i18n y el locale de fechas antiguos hasta el próximo refresco
+        # de datos (los tooltips del timeline seguían en chino).
+        self.push_i18n()
+        subscribe(self, LocaleService.language_changed_signal(),
+                  self.push_i18n)
 
     def _push_theme(self) -> None:
         """Envía el tema Qt actual al JS del dashboard.
@@ -797,6 +802,29 @@ class DashboardPanel(QFrame):
         js = (
             "window.shakevisionDashboard.setTheme("
             f"{json.dumps(theme)});"
+        )
+        self._view.page().runJavaScript(js)
+
+    def push_i18n(self) -> None:
+        """Envía la tabla i18n + idioma actual al JS del dashboard.
+
+        El JS re-traduce textos estáticos, re-formatea fechas (Intl con el
+        locale de la app, no el del sistema) y re-pinta las gráficas con el
+        payload cacheado, sin esperar al próximo refresco de datos. Espejo
+        de ``GlobePanel.push_i18n()``.
+        """
+
+        if self._view is None or not self._ready:
+            return
+        try:
+            table = LocaleService.current_table()
+            lang = LocaleService.current_language()
+        except Exception:  # noqa: BLE001
+            table = {}
+            lang = "en"
+        js = (
+            "window.shakevisionDashboard.setI18n("
+            f"{json.dumps(table)}, {json.dumps(lang)});"
         )
         self._view.page().runJavaScript(js)
 

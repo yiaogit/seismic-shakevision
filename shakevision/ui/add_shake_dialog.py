@@ -42,6 +42,7 @@ from PySide6.QtWidgets import (
 
 from shakevision.i18n import LocaleService, t
 from shakevision.services.shake_presets import DEFAULT_PORT, LanShakePreset
+from shakevision.ui.signal_safety import subscribe
 
 
 # ============================================================
@@ -149,7 +150,8 @@ class AddShakeDialog(QDialog):
         root.addWidget(self.buttons)
 
         self._retranslate()
-        LocaleService.language_changed_signal().connect(self._retranslate)
+        subscribe(self, LocaleService.language_changed_signal(),
+                  self._retranslate)  # v0.7.7 (B1)
         self._revalidate()
 
     # ------------------------------------------------------------------

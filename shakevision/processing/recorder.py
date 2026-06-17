@@ -151,6 +151,58 @@ class EventRecorder:
 
 
 # ============================================================
+# Listado de grabaciones locales (para la pestaña "Local")
+# ============================================================
+@dataclass(frozen=True)
+class RecordingInfo:
+    """Metadatos de una grabación local, derivados del nombre de fichero."""
+
+    path: Path
+    time_unix: float
+    network: str
+    station: str
+
+
+def parse_recording_name(name: str):
+    """``20260617T020258_IU_KONO.mseed`` → ``(time_unix, net, sta)`` o None.
+
+    Pura (sin ObsPy): la hora se interpreta como UTC. Robusta a códigos de
+    estación con guiones bajos (la red es el primer campo, la estación el
+    resto antes de ``.mseed``).
+    """
+
+    import re
+    from datetime import datetime, timezone
+
+    m = re.match(r"(\d{8}T\d{6})_([A-Za-z0-9]+)_(.+)\.mseed$", name)
+    if not m:
+        return None
+    try:
+        dt = datetime.strptime(m.group(1), "%Y%m%dT%H%M%S").replace(
+            tzinfo=timezone.utc)
+    except ValueError:
+        return None
+    return dt.timestamp(), m.group(2), m.group(3)
+
+
+def list_recordings(recordings_dir: Optional[Path] = None) -> list:
+    """Lista las grabaciones ``.mseed`` (recientes primero) del directorio."""
+
+    d = Path(recordings_dir or DEFAULT_RECORDINGS_DIR)
+    if not d.exists():
+        return []
+    out: list = []
+    for p in d.glob("*.mseed"):
+        parsed = parse_recording_name(p.name)
+        if parsed:
+            ts, net, sta = parsed
+            out.append(RecordingInfo(path=p, time_unix=ts,
+                                     network=net, station=sta))
+    out.sort(key=lambda r: r.time_unix, reverse=True)
+    return out
+
+
+# ============================================================
 # Helper público
 # ============================================================
 def build_event_filename(

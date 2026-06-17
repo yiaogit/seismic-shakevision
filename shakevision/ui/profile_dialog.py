@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
 
 from shakevision.i18n import LocaleService, t
 from shakevision.ui.profile_view import ProfileView
+from shakevision.ui.signal_safety import subscribe
 
 
 class ProfileDialog(QDialog):
@@ -94,12 +95,10 @@ class ProfileDialog(QDialog):
         # con el tema activo. v0.6 Phase 14-fix: ahora se re-aplica al
         # cambiar tema (suscripción a ThemeManager.changed_signal abajo).
         self._refresh_themed_qss()
-        try:
-            from shakevision.ui.theme_manager import ThemeManager
-            ThemeManager.changed_signal().connect(
-                lambda _t: self._refresh_themed_qss())
-        except Exception:  # noqa: BLE001
-            pass
+        # v0.7.7 (B1): subscribe() — disconnect en destroyed + guarda.
+        from shakevision.ui.theme_manager import ThemeManager
+        subscribe(self, ThemeManager.changed_signal(),
+                  self._refresh_themed_qss)
         # v0.6: aplicar micro-animación al botón principal (hover/press
         # con fade ~150 ms estilo macOS, no el chasquido inmediato de QSS)
         try:
@@ -109,11 +108,8 @@ class ProfileDialog(QDialog):
             pass
 
         self._retranslate()
-        try:
-            LocaleService.language_changed_signal().connect(
-                lambda _l: self._retranslate())
-        except Exception:  # noqa: BLE001
-            pass
+        subscribe(self, LocaleService.language_changed_signal(),
+                  self._retranslate)  # v0.7.7 (B1)
 
     def _retranslate(self) -> None:
         self.setWindowTitle(t("profile.dialog_title"))

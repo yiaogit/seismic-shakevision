@@ -70,7 +70,8 @@ MAX_EVENTS:   int = 200
 
 
 def _now_iso_utc() -> str:
-    return _dt.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    return _dt.datetime.now(_dt.timezone.utc).replace(
+        tzinfo=None, microsecond=0).isoformat() + "Z"
 
 
 # ============================================================
@@ -99,12 +100,20 @@ class FavoriteStation:
 
 @dataclass(frozen=True)
 class FavoriteEvent:
-    """Un sismo (USGS event) marcado como favorito."""
+    """Un sismo (USGS event) marcado como favorito.
+
+    v0.7.7: guarda también lat/lon/depth para que el favorito sea
+    auto-suficiente y se pueda **revisar** (estación cercana + TauP) aunque
+    ya no esté en el feed actual. Los favoritos antiguos traen 0.0.
+    """
 
     id: str
     magnitude: float
     place: str
     timestamp_unix: float
+    latitude: float = 0.0
+    longitude: float = 0.0
+    depth_km: float = 0.0
     added_at_iso: str = field(default_factory=_now_iso_utc)
 
 
@@ -183,6 +192,9 @@ class _Store(QObject):
                     magnitude=float(entry.get("magnitude", 0.0)),
                     place=str(entry.get("place", "")),
                     timestamp_unix=float(entry.get("timestamp_unix", 0.0)),
+                    latitude=float(entry.get("latitude", 0.0)),
+                    longitude=float(entry.get("longitude", 0.0)),
+                    depth_km=float(entry.get("depth_km", 0.0)),
                     added_at_iso=str(entry.get("added_at_iso", _now_iso_utc())),
                 ))
             except Exception as exc:  # noqa: BLE001
@@ -256,7 +268,8 @@ class _Store(QObject):
 
     # ── Eventos ──────────────────────────────────────────────
     def add_event(self, id: str, magnitude: float, place: str,
-                  timestamp_unix: float) -> bool:
+                  timestamp_unix: float, latitude: float = 0.0,
+                  longitude: float = 0.0, depth_km: float = 0.0) -> bool:
         if not id:
             return False
         with self._lock:
@@ -266,6 +279,8 @@ class _Store(QObject):
             new = FavoriteEvent(
                 id=id, magnitude=float(magnitude),
                 place=place or "", timestamp_unix=float(timestamp_unix),
+                latitude=float(latitude), longitude=float(longitude),
+                depth_km=float(depth_km),
             )
             self._events.append(new)
             if len(self._events) > MAX_EVENTS:
@@ -411,8 +426,11 @@ class FavoritesStore:
     # ── Eventos ──
     @staticmethod
     def add_event(id: str, magnitude: float, place: str,
-                  timestamp_unix: float) -> bool:
-        return _get_instance().add_event(id, magnitude, place, timestamp_unix)
+                  timestamp_unix: float, latitude: float = 0.0,
+                  longitude: float = 0.0, depth_km: float = 0.0) -> bool:
+        return _get_instance().add_event(
+            id, magnitude, place, timestamp_unix,
+            latitude=latitude, longitude=longitude, depth_km=depth_km)
 
     @staticmethod
     def remove_event(id: str) -> bool:

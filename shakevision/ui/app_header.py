@@ -42,15 +42,13 @@ from shakevision.i18n import LocaleService, t
 from shakevision.ui.animations import clear_opacity_effect, make_pulse_opacity
 from shakevision.ui.icons import clear_icon_cache, get_icon, logo_pixmap
 from shakevision.ui.layer_mode_manager import LayerModeManager
+from shakevision.ui.signal_safety import subscribe
 # Las 5 constantes COLOR_ACCENT / COLOR_PANEL / COLOR_PANEL_BORDER /
 # COLOR_TEXT_PRIMARY / COLOR_TEXT_SECONDARY se re-importan dentro de
 # ``_build_qss`` vía ``from shakevision.ui import theme as _t`` porque
 # necesitan leerse en cada cambio de tema (no se cachean al import).
 # Solo dejamos arriba las que sí se usan a nivel módulo.
 from shakevision.ui.theme import (
-    COLOR_ACCENT_WARM,
-    COLOR_OK,
-    COLOR_TEXT_MUTED,
     FONT_STACK_MONO,
     FONT_STACK_SANS,
 )
@@ -88,12 +86,22 @@ class ConnectionState(Enum):
 
 # Color asociado a cada estado. El texto se obtiene de i18n en runtime
 # para que cambie con el idioma sin recargar la app.
-_STATE_COLORS: dict[ConnectionState, str] = {
-    ConnectionState.DISCONNECTED: COLOR_TEXT_MUTED,
-    ConnectionState.CONNECTING:   COLOR_ACCENT_WARM,
-    ConnectionState.CONNECTED:    COLOR_OK,
-    ConnectionState.ERROR:        "#ef4444",
-}
+#
+# v0.7.7 (B2): el color del LED se resuelve **en tiempo de ejecución**
+# leyendo ``theme as _t`` en cada llamada, no al importar el módulo.
+# Antes ``_STATE_COLORS`` cacheaba ``COLOR_*`` al import → el LED se
+# quedaba con la paleta del arranque y no cambiaba al alternar tema
+# (ver CLAUDE.md §4 "leer COLOR_* en paint time, no al import").
+def _state_color(state: ConnectionState) -> str:
+    """Color del LED para ``state`` leído del tema activo en runtime."""
+
+    from shakevision.ui import theme as _t
+    return {
+        ConnectionState.DISCONNECTED: _t.COLOR_TEXT_MUTED,
+        ConnectionState.CONNECTING:   _t.COLOR_ACCENT_WARM,
+        ConnectionState.CONNECTED:    _t.COLOR_OK,
+        ConnectionState.ERROR:        "#ef4444",
+    }[state]
 
 _STATE_I18N_KEYS: dict[ConnectionState, str] = {
     ConnectionState.DISCONNECTED: "header.status.disconnected",
@@ -162,7 +170,8 @@ class AppHeader(QFrame):
 
         # Aplicar traducciones iniciales + suscribirse a cambios de idioma
         self._retranslate()
-        LocaleService.language_changed_signal().connect(self._retranslate)
+        subscribe(self, LocaleService.language_changed_signal(),
+                  self._retranslate)  # v0.7.7 (B1)
 
     # ------------------------------------------------------------------
     # API pública
@@ -176,7 +185,7 @@ class AppHeader(QFrame):
         """Cambia el LED y el texto del estado de conexión."""
 
         self._connection_state = state
-        color = _STATE_COLORS[state]
+        color = _state_color(state)
         self._connection_text.setText(t(_STATE_I18N_KEYS[state]))
         # Reescribir solo la regla del LED para no rebuild todo el QSS
         self._led.setStyleSheet(
@@ -261,8 +270,10 @@ class AppHeader(QFrame):
         layout.addWidget(self._version_label)
 
         # Re-pintar logo + iconos al cambiar tema en caliente
+        # v0.7.7 (B1): subscribe() en vez de lambda — desconecta en
+        # destroyed y no mantiene vivo el widget.
         from shakevision.ui.theme_manager import ThemeManager as _TM
-        _TM.changed_signal().connect(lambda _t: self._refresh_themed_assets())
+        subscribe(self, _TM.changed_signal(), self._refresh_themed_assets)
 
         return layout
 
@@ -296,6 +307,11 @@ class AppHeader(QFrame):
 
         self._refresh_brand_logo()
         self._refresh_button_icons()
+        # v0.7.7 (B2): re-pintar el LED de conexión con la paleta nueva.
+        # Su color se resuelve en runtime, pero hay que re-aplicar el QSS
+        # del LED para que el cambio sea visible sin esperar al próximo
+        # cambio de estado de conexión.
+        self.set_connection_state(self._connection_state)
         self.setStyleSheet(self._build_qss())
 
     def _build_status_section(self) -> QHBoxLayout:
@@ -398,7 +414,8 @@ class AppHeader(QFrame):
         layout.addWidget(self._mode_segment)
         # Mantener el botón sincronizado si LayerModeManager cambia
         # desde otro lugar (p. ej. onboarding wizard).
-        LayerModeManager.changed_signal().connect(self._on_layer_mode_changed)
+        subscribe(self, LayerModeManager.changed_signal(),
+                  self._on_layer_mode_changed)  # v0.7.7 (B1)
 
         # Separador visual sutil entre acciones de capa y acciones globales
         sep = QFrame()
@@ -420,9 +437,8 @@ class AppHeader(QFrame):
         layout.addWidget(self._theme_button)
         # Refresca el botón cuando el tema cambia desde otro lugar
         # (timer auto, onboarding, etc.).
-        ThemeManager.changed_signal().connect(
-            lambda _theme: self._refresh_theme_button()
-        )
+        subscribe(self, ThemeManager.changed_signal(),
+                  self._refresh_theme_button)  # v0.7.7 (B1)
 
         # Settings — abre el diálogo de preferencias.
         # Antes era el emoji "⚙"; ahora se usa el PNG rebranded vía

@@ -352,6 +352,46 @@ def _build_qss(p: dict[str, str]) -> str:
         background-color: {p["accent_glow"]};
     }}
 
+    /* ── Cabecera de sección colapsable (v0.7.7) ───────── */
+    QPushButton#SectionHeader {{
+        background-color: transparent;
+        color: {p["text_muted"]};
+        border: none;
+        border-radius: 0px;
+        padding: 4px 2px;
+        text-align: left;
+        font-size: 11px;
+        font-weight: 600;
+        min-height: 0px;
+    }}
+    QPushButton#SectionHeader:hover {{
+        color: {p["text_primary"]};
+    }}
+    QPushButton#SectionHeader:focus {{
+        border: none;
+        padding: 4px 2px;
+    }}
+
+    /* ── Toolbar de análisis del oscilograma (v0.7.7) ──── */
+    QPushButton#ToolbarButton {{
+        background-color: transparent;
+        color: {p["text_secondary"]};
+        border: 1px solid {p["panel_border"]};
+        border-radius: 6px;
+        padding: 2px 9px;
+        font-weight: 500;
+        min-height: 0px;
+    }}
+    QPushButton#ToolbarButton:hover {{
+        background-color: {p["panel_elevated"]};
+        color: {p["text_primary"]};
+    }}
+    QPushButton#ToolbarButton:checked {{
+        background-color: {p["accent"]};
+        color: white;
+        border-color: {p["accent"]};
+    }}
+
     /* ── SLIDERS (iOS-style) ───────────────────────────── */
     QSlider::groove:horizontal {{
         height: 4px;

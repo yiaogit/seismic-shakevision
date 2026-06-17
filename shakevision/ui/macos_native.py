@@ -123,6 +123,52 @@ def _apply_native_titlebar(window: QMainWindow) -> str:
     return "native_full"
 
 
+def disable_native_fullscreen(window: QMainWindow) -> bool:
+    """Hace que el botón verde haga ZOOM (maximizar en sitio) en vez de
+    entrar a un *Space* de pantalla completa nativo.
+
+    Motivo: en macOS, una ventana auxiliar (el Workbench) que entra en
+    pantalla completa abre su propio Space; al cerrarla (ocultarla) ese Space
+    queda como una página NEGRA durante la animación de salida. Además, un
+    Space a pantalla completa secuestra todo un monitor, lo que choca con el
+    diseño multiventana/multimonitor de la app. Con ``FullScreenAuxiliary`` el
+    semáforo verde pasa a hacer *zoom* (llena la pantalla en el mismo Space),
+    sin esos problemas.
+
+    Devuelve ``True`` si se aplicó (macOS + pyobjc), ``False`` si no (no-op
+    seguro en otros sistemas o sin pyobjc).
+    """
+
+    if not is_macos():
+        return False
+    try:
+        import objc  # type: ignore[import-not-found]
+        from AppKit import (  # type: ignore[import-not-found]
+            NSWindowCollectionBehaviorFullScreenAuxiliary,
+            NSWindowCollectionBehaviorFullScreenPrimary,
+        )
+
+        ptr = window.winId()
+        if not ptr:
+            return False
+        ns_view = objc.objc_object(c_void_p=int(ptr))
+        ns_window = ns_view.window()
+        if ns_window is None:
+            return False
+        behavior = ns_window.collectionBehavior()
+        behavior &= ~NSWindowCollectionBehaviorFullScreenPrimary
+        behavior |= NSWindowCollectionBehaviorFullScreenAuxiliary
+        ns_window.setCollectionBehavior_(behavior)
+        return True
+    except ImportError:
+        logger.info("pyobjc no disponible; el Workbench mantiene el "
+                    "fullscreen nativo (se aplica el fallback en closeEvent).")
+        return False
+    except Exception as exc:  # pragma: no cover - red de seguridad
+        logger.warning("disable_native_fullscreen falló: %s", exc)
+        return False
+
+
 def title_bar_inset_pixels() -> int:
     """Píxeles que ocupa la barra de título nativa de macOS.
 

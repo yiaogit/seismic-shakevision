@@ -227,7 +227,7 @@ def fetch_asset(key: str, *, force: bool = False) -> bool:
                   f"({_human_size(dest.stat().st_size)})  — saltando")
             return True
         else:
-            print(f"  ! existe pero está dañado/incompleto — re-descargando")
+            print("  ! existe pero está dañado/incompleto — re-descargando")
             dest.unlink(missing_ok=True)
 
     # Intentar mirrors en orden

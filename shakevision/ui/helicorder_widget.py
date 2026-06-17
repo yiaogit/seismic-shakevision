@@ -30,6 +30,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
 from shakevision.i18n import LocaleService, t
+from shakevision.ui.signal_safety import subscribe
 from shakevision.ui.theme import (
     COLOR_BACKGROUND,
     WAVEFORM_COLORS,
@@ -177,7 +178,8 @@ class HelicorderPanel(QFrame):
         subscribe_pg_plot(self._plot)
         layout.addWidget(self._plot, stretch=1)
 
-        LocaleService.language_changed_signal().connect(self._retranslate)
+        subscribe(self, LocaleService.language_changed_signal(),
+                  self._retranslate)  # v0.7.7 (B1)
 
         # Una pareja (low, high) FillBetween por fila — eso da el aspecto
         # de "tira de tinta" típica del helicorder.

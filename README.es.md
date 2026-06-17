@@ -4,12 +4,20 @@
 
 [简体中文](README.md) · [English](README.en.md) · **Español** · [Français](README.fr.md)
 
-> Antes conocido como **ShakeVision OpenData Monitor**. La v0.7.0 incorpora
-> el rebrand a SeismicGuard, un rediseño de tema al estilo macOS Sonoma,
-> i18n completo en 4 idiomas, asistente de incorporación, página de perfil
-> con línea de tiempo de actividad, detección de ubicación por IP y muchas
-> mejoras de usabilidad. Las versiones binarias antiguas (v0.1.x) siguen
-> en la página de Releases bajo el nombre `ShakeVision-*`.
+> Antes conocido como **ShakeVision OpenData Monitor**. La **v0.8.0**
+> reorganiza la app en torno al flujo *evento → revisión → colección
+> personal* y reescribe **Replay** como un navegador de formas de onda
+> profesional (zoom/pan, eje UTC absoluto, selección de banda, eliminación de
+> respuesta a VEL/DISP/ACC, rotación ZNE→ZRT, llegadas teóricas P/S con TauP,
+> espectrograma en dB, PSD y exportación PNG/CSV/QuakeML). Añade un **Centro
+> de eventos** de nivel superior (tabla de sismos + estaciones cercanas) y una
+> pestaña **"Mi colección"** (sismos/estaciones favoritos + grabaciones/
+> catálogo de revisión, con reapertura de revisiones guardadas y "Abrir
+> carpeta"). Antes, la v0.7.0 incorporó el rebrand a SeismicGuard, el tema
+> estilo macOS Sonoma, i18n completo en 4 idiomas, asistente de incorporación,
+> perfil con línea de tiempo de actividad y detección de ubicación por IP. Las
+> versiones binarias antiguas (v0.1.x) siguen en la página de Releases bajo el
+> nombre `ShakeVision-*`.
 
 **Estación de monitoreo sísmico de escritorio, código abierto**
 *Cross-platform desktop seismic monitoring workbench*
@@ -38,7 +46,10 @@ disparo en una sola aplicación de escritorio.
 |----------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
 | 🌍 **Globo 3D**            | Renderizado en tiempo real con ECharts-GL, 600+ estaciones ciudadanas Raspberry Shake + 400+ estaciones de la red dorsal USGS / IRIS, sismos coloreados por magnitud, click-zoom + añadir al banco Pro |
 | 📊 **Panel de datos**      | 7 gráficas ECharts enlazadas: top países, histogramas magnitud / profundidad, línea temporal 24 h (burbujas de densidad), radar PAGER (filtro por región), buckets autoadaptativos, dispersión profundidad × magnitud |
-| 🔬 **Banco Pro**           | Ventana flotante: forma de onda 3 canales + espectrograma + helicórder 24 h + movimiento de partícula N-E + grabación STA/LTA + tarjeta de intensidad MMI |
+| 🗂 **Centro de eventos**   | Página de nivel superior: tabla de sismos (doble clic revisa) + **estaciones grandes cercanas** (Δ°/km/categoría); doble clic usa la más cercana; ☆ favoritea sismos/estaciones en un clic |
+| ⭐ **"Mi colección"**      | Página de nivel superior: **sismos / estaciones** favoritos + registros (grabaciones STA/LTA — solo si hay + **catálogo de revisión** QuakeML); doble clic en el catálogo **reabre una revisión guardada** (restaura picks P/S); "Abrir carpeta" exporta MiniSEED/QuakeML a ObsPy/SeisComP/SAC |
+| 🔬 **Banco Pro**           | Ventana flotante: forma de onda 3 canales + espectrograma (conmutable) + helicórder 24 h + movimiento de partícula N-E (azimut de polarización) + grabación STA/LTA + tarjeta de intensidad MMI |
+| ⏪ **Replay (reescrito)**  | Navegador de formas de onda profesional: zoom/pan + eje UTC absoluto + selección de banda + eliminación de respuesta (VEL/DISP/ACC) + rotación ZNE→ZRT + P/S teóricas con TauP + espectrograma en dB + PSD + medidas con cursor de región + exportación PNG/CSV/QuakeML |
 | 🔊 **Sonificación**        | Reproduce los últimos 60 segundos del movimiento del suelo como audio audible a velocidad 1× – 60×                                |
 | 🌐 **i18n**                | Pila completa de 4 idiomas (EN / ES / 简中 / FR) con cambio instantáneo, incluidas vistas web, internos de gráficas, tooltips y reportes HTML |
 | 🕒 **Conciencia de zona**  | Auto-detección de zona horaria del sistema + override manual; todas las marcas de tiempo se renderizan en la zona del usuario     |
@@ -566,7 +577,7 @@ seismic-shakevision/
 │   │
 │   ├── i18n/                             # ── Internacionalización ──
 │   │   ├── service.py                    # LocaleService + t() + language_changed_signal
-│   │   └── locales/{en,zh,es,fr}.json    # 4 diccionarios alineados, **444 keys cada uno**
+│   │   └── locales/{en,zh,es,fr}.json    # 4 diccionarios alineados, **559 keys cada uno**
 │   │
 │   ├── web/                              # ── Vistas web embebidas (cargadas por QWebEngineView) ──
 │   │   ├── globe/                        # Globo 3D ECharts-GL (index.html + globe.js + styles.css + lib/)
@@ -714,8 +725,8 @@ del macOS dual-arch, tamaños, etc.) en
 - [x] **v0.2.0** — replay histórico: descarga MiniSEED desde IRIS FDSN dataselect con velocidad ajustable
 - [x] **v0.3.0** — UI Raspberry Shake LAN personalizado ("➕ Add LAN Shake…" + pestaña "My Shakes")
 - [x] **v0.7.0** — rebrand a SeismicGuard, theming macOS-Sonoma, asistente, perfil + actividad, geolocalización IP, fix de overflow en PDF
-- [ ] **v0.8.0** — UX de sismo favorito en el globo (basada en botón, reemplaza el right-click pospuesto)
-- [ ] **v1.0.0** — firma de código (Windows EV cert + macOS Developer ID + notarización); elimina por completo los avisos SmartScreen / Gatekeeper
+- [x] **v0.8.0** — Replay reescrito como navegador de formas de onda profesional (respuesta/rotación/TauP/PSD/exportación); Centro de eventos + estaciones cercanas; "Mi colección" (favoritos + grabaciones + catálogo de revisión con reapertura y exportación); entradas de favorito con botón; estabilización del hodograma + azimut de polarización
+- [ ] **v1.0.0** — firma de código (Windows EV cert + macOS Developer ID + notarización); elimina por completo los avisos SmartScreen / Gatekeeper; auto-actualización
 
 ---
 

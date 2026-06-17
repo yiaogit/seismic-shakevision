@@ -92,6 +92,18 @@ hiddenimports = [
     "PySide6.QtPositioning",
 ]
 
+# macOS — pyobjc se importa de forma PEREZOSA dentro de funciones en
+# ui/macos_native.py (barra de título translúcida + botón verde = zoom en
+# lugar de Space a pantalla completa). Al ser imports tardíos y solo-darwin,
+# el análisis estático de PyInstaller no los ve → hay que declararlos a mano.
+# (Requiere que pyobjc esté instalado en el runner de build; ver release.yml.)
+if sys.platform == "darwin":
+    hiddenimports += [
+        "objc",
+        "AppKit",
+        "Foundation",
+    ]
+
 # ------------------------------------------------------------
 # Módulos que NO queremos arrastrar (recorta ~150 MB en Linux)
 # ------------------------------------------------------------
@@ -198,12 +210,12 @@ if sys.platform == "darwin":
         name="ShakeVision.app",
         icon=ICON_PATH,
         bundle_identifier="org.shakevision.app",
-        version="0.7.6.1",
+        version="0.8.0.0",
         info_plist={
             "CFBundleName": "ShakeVision",
             "CFBundleDisplayName": "ShakeVision",
-            "CFBundleShortVersionString": "0.7.6.1",
-            "CFBundleVersion": "0.7.6.1",
+            "CFBundleShortVersionString": "0.8.0.0",
+            "CFBundleVersion": "0.8.0.0",
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "11.0",
             "NSHumanReadableCopyright": "© 2025 ShakeVision contributors — MIT License",

@@ -23,6 +23,7 @@ from PySide6.QtWidgets import QFrame, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
 from shakevision.i18n import LocaleService, t
 from shakevision.processing.spectrum import SpectrumResult
+from shakevision.ui.signal_safety import subscribe
 from shakevision.ui.theme import (
     COLOR_BACKGROUND,
 )
@@ -40,6 +41,9 @@ class SpectrogramPanel(QFrame):
         super().__init__(parent)
         self.setObjectName("WaveformPanel")  # Reutiliza el estilo del panel de ondas
         self.setFrameShape(QFrame.NoFrame)
+        # v0.7.7: altura mínima para que el splitter NO lo aplaste a una
+        # franja donde no se ven los ticks de frecuencia.
+        self.setMinimumHeight(140)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
@@ -63,7 +67,8 @@ class SpectrogramPanel(QFrame):
         subscribe_pg_plot(self._plot)
         layout.addWidget(self._plot, stretch=1)
 
-        LocaleService.language_changed_signal().connect(self._retranslate)
+        subscribe(self, LocaleService.language_changed_signal(),
+                  self._retranslate)  # v0.7.7 (B1)
 
         # ImageItem que muestra la matriz de potencia
         self._image = pg.ImageItem()
@@ -72,13 +77,26 @@ class SpectrogramPanel(QFrame):
         self._image.setOpts(axisOrder="row-major")
 
         # Aplicar el colormap "viridis" como lookup table
-        cmap = pg.colormap.get("viridis")
-        self._image.setLookupTable(cmap.getLookupTable())
+        self._cmap = pg.colormap.get("viridis")
+        self._image.setLookupTable(self._cmap.getLookupTable())
 
         # Rango dinámico inicial (dB)
         self._image.setLevels((DEFAULT_DB_MIN, DEFAULT_DB_MAX))
 
         self._plot.addItem(self._image)
+
+        # v0.7.7: barra de color a la derecha = leyenda de potencia (dB) +
+        # CONTRASTE ajustable (se arrastra para mover los niveles). Defensivo:
+        # si la versión de pyqtgraph no soporta ColorBarItem, se omite.
+        self._colorbar = None
+        try:
+            self._colorbar = pg.ColorBarItem(
+                values=(DEFAULT_DB_MIN, DEFAULT_DB_MAX),
+                colorMap=self._cmap, label="dB", interactive=True)
+            self._colorbar.setImageItem(
+                self._image, insert_in=self._plot.getPlotItem())
+        except Exception:  # noqa: BLE001
+            self._colorbar = None
 
     # ------------------------------------------------------------------
     # API pública
@@ -125,3 +143,8 @@ class SpectrogramPanel(QFrame):
         if db_min >= db_max:
             return
         self._image.setLevels((db_min, db_max))
+        if self._colorbar is not None:
+            try:
+                self._colorbar.setLevels((db_min, db_max))
+            except Exception:  # noqa: BLE001
+                pass
