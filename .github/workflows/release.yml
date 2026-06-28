@@ -217,9 +217,12 @@ jobs:
         run: |
           TAG="${GITHUB_REF##*/}"           # vX.Y.Z
           VERSION="${TAG#v}"                # X.Y.Z
-          # Sección [X.Y.Z] hasta el siguiente [ o EOF
-          awk -v ver="[$VERSION]" '
-            $0 ~ "^## "ver { capture=1; next }
+          # Sección "## [X.Y.Z]" hasta el siguiente "## [" o EOF.
+          # OJO: match LITERAL con index() — usar la versión como regex rompía
+          # porque "[0.8.3.0]" se interpreta como clase de caracteres y nunca
+          # casa con la cabecera "## [X.Y.Z]" (notas quedaban como placeholder).
+          awk -v hdr="## [$VERSION]" '
+            index($0, hdr) == 1 { capture=1; next }
             capture && /^## \[/ { exit }
             capture { print }
           ' CHANGELOG.md > release_notes.md
