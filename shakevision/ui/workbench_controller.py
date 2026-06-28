@@ -44,7 +44,7 @@ from shakevision.processing.intensity import (
 from shakevision.processing.recorder import EventRecorder
 from shakevision.processing.sonifier import sonify
 from shakevision.processing.spectrum import SpectrumComputer
-from shakevision.sources import DataSource, MockSource, SampleBatch, SeedLinkSource
+from shakevision.sources import DataSource, SampleBatch, SeedLinkSource
 from shakevision.ui.animations import make_breathing_glow
 from shakevision.ui.audio_player import AudioPlayer
 from shakevision.ui.theme import COLOR_ALERT
@@ -302,13 +302,10 @@ class WorkbenchController(QObject):
         # SIEMPRE detener audio primero (idempotente).
         self._audio_player.stop()
 
-        # v0.7.7: al pulsar Detener, limpiar también la traza histórica
-        # cargada en la pestaña Replay (el usuario lo pidió: "detener" = borrón
-        # y cuenta nueva de TODO lo cargado, no solo del stream en vivo).
-        try:
-            self._view.replay_panel.clear_loaded()
-        except (RuntimeError, AttributeError):
-            pass
+        # v0.8.0: Detener el stream en vivo YA NO limpia la traza histórica de
+        # Replay. Replay es independiente de la conexión en vivo: tiene su
+        # propio botón "Limpiar". Antes (v0.7.7) Detener borraba TODO, lo que
+        # obligaba a re-descargar el histórico tras una desconexión accidental.
 
         if self._source is None:
             self.status_message.emit(t("status.no_source_active"), 2500)
@@ -353,12 +350,6 @@ class WorkbenchController(QObject):
             return
 
         st = self._current_station
-        # La estación Demo (XX.MOCK) es sintética: no tiene respuesta
-        # instrumental real → m/s no aplica. Avisar y revertir.
-        if st.network == "XX":
-            self._apply_sensitivity(None)
-            return
-
         from shakevision.config import (
             seedlink_channels_for,
             seedlink_location_for,
@@ -398,43 +389,38 @@ class WorkbenchController(QObject):
     def _start_source_for(self, preset: "StationPreset") -> None:
         """Crea e inicia la fuente apropiada para el preset dado."""
 
-        # Estación simulada: fuente local sin red
-        if preset.network == "XX" and preset.station == "MOCK":
-            source: DataSource = MockSource(
-                sample_rate_hz=self._config.stream.sample_rate_hz,
-                station_label=preset.label,
-            )
+        # v0.8.0: se eliminó la estación Demo (XX.MOCK) y su MockSource del
+        # flujo en vivo; toda conexión va por SeedLink real.
+        from shakevision.config import (
+            seedlink_channels_for,
+            seedlink_location_for,
+            seedlink_server_for,
+        )
+
+        if preset.seedlink_host and preset.seedlink_port:
+            host, port = preset.seedlink_host, preset.seedlink_port
+        elif preset.network == "AM":
+            host = self._config.seedlink_host
+            port = self._config.seedlink_port
         else:
-            from shakevision.config import (
-                seedlink_channels_for,
-                seedlink_location_for,
-                seedlink_server_for,
-            )
+            host, port = seedlink_server_for(preset.network)
 
-            if preset.seedlink_host and preset.seedlink_port:
-                host, port = preset.seedlink_host, preset.seedlink_port
-            elif preset.network == "AM":
-                host = self._config.seedlink_host
-                port = self._config.seedlink_port
-            else:
-                host, port = seedlink_server_for(preset.network)
+        channels = seedlink_channels_for(preset.network)
 
-            channels = seedlink_channels_for(preset.network)
+        loc = (preset.location or "").strip()
+        if loc in ("", "*", "--"):
+            loc = seedlink_location_for(preset.network)
 
-            loc = (preset.location or "").strip()
-            if loc in ("", "*", "--"):
-                loc = seedlink_location_for(preset.network)
-
-            source = SeedLinkSource(
-                host=host,
-                port=port,
-                network=preset.network,
-                station=preset.station,
-                location=loc,
-                channels=channels,
-                sample_rate_hz=self._config.stream.sample_rate_hz,
-                station_label=preset.label,
-            )
+        source: DataSource = SeedLinkSource(
+            host=host,
+            port=port,
+            network=preset.network,
+            station=preset.station,
+            location=loc,
+            channels=channels,
+            sample_rate_hz=self._config.stream.sample_rate_hz,
+            station_label=preset.label,
+        )
 
         # Conectar señales antes de arrancar para no perder el primer batch
         source.data_ready.connect(self._on_data_ready)
@@ -442,7 +428,7 @@ class WorkbenchController(QObject):
 
         self._source = source
         # v0.7.7: etiquetas del eje izquierdo según la banda REAL de la
-        # estación (antes "EH" fijo). El Mock cae en el default BHZ/BHN/BHE.
+        # estación (antes "EH" fijo).
         try:
             from shakevision.config import seedlink_channels_for as _chs
             zc, nc, ec = _chs(preset.network)

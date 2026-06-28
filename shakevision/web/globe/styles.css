@@ -107,6 +107,25 @@ html, body {
   box-shadow: 0 0 16px rgba(59, 130, 246, 0.45);
 }
 
+/* Iconos vectoriales de capa (sustituyen a los emoji). Se pintan con
+   `mask` + `currentColor`, así el icono toma el MISMO color que el texto del
+   botón → blanco cuando está activo, gris (--muted) cuando no, sin recolorear
+   nada a mano. Sobreviven a `data-i18n` (que solo cambia el texto). */
+.seg-btn[data-layer]::before {
+  content: "";
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-right: 6px;
+  vertical-align: -2px;
+  background-color: currentColor;
+  -webkit-mask: var(--seg-ico) center / contain no-repeat;
+  mask: var(--seg-ico) center / contain no-repeat;
+}
+.seg-btn[data-layer="devices"] { --seg-ico: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%2712%27%20r%3D%271.8%27%2F%3E%3Cpath%20d%3D%27M8%208a5.5%205.5%200%200%200%200%208M16%208a5.5%205.5%200%200%201%200%208M5%205a10%2010%200%200%200%200%2014M19%205a10%2010%200%200%201%200%2014%27%2F%3E%3C%2Fsvg%3E"); }
+.seg-btn[data-layer="quakes"] { --seg-ico: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M2%2012h3l1.6-6%202.6%2013%202-9%201.4%204%201.4-2h6%27%2F%3E%3C%2Fsvg%3E"); }
+.seg-btn[data-layer="both"] { --seg-ico: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M12%203%203%208l9%205%209-5-9-5z%27%2F%3E%3Cpath%20d%3D%27M3%2012.5l9%205%209-5%27%2F%3E%3C%2Fsvg%3E"); }
+
 /* ============================================================
    Selector de periodo (más compacto que el de capa)
    ============================================================ */
@@ -250,3 +269,49 @@ html, body {
   color: var(--text);
   font-weight: 500;
 }
+
+/* ============================================================
+   Iconos vectoriales (sustituyen a los emoji). Todos se pintan con
+   `mask` + `currentColor`, así toman el color del texto del elemento.
+   ============================================================ */
+:root {
+  --ico-devices: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%2712%27%20r%3D%271.8%27%2F%3E%3Cpath%20d%3D%27M8%208a5.5%205.5%200%200%200%200%208M16%208a5.5%205.5%200%200%201%200%208M5%205a10%2010%200%200%200%200%2014M19%205a10%2010%200%200%201%200%2014%27%2F%3E%3C%2Fsvg%3E");
+  --ico-quakes: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M2%2012h3l1.6-6%202.6%2013%202-9%201.4%204%201.4-2h6%27%2F%3E%3C%2Fsvg%3E");
+  --ico-both: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M12%203%203%208l9%205%209-5-9-5z%27%2F%3E%3Cpath%20d%3D%27M3%2012.5l9%205%209-5%27%2F%3E%3C%2Fsvg%3E");
+  --ico-zoom-in: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Ccircle%20cx%3D%2711%27%20cy%3D%2711%27%20r%3D%277%27%2F%3E%3Cpath%20d%3D%27M20.5%2020.5l-4-4M11%208v6M8%2011h6%27%2F%3E%3C%2Fsvg%3E");
+  --ico-zoom-out: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Ccircle%20cx%3D%2711%27%20cy%3D%2711%27%20r%3D%277%27%2F%3E%3Cpath%20d%3D%27M20.5%2020.5l-4-4M8%2011h6%27%2F%3E%3C%2Fsvg%3E");
+  --ico-reset: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M20%2011a8%208%200%201%200-2.4%205.8%27%2F%3E%3Cpath%20d%3D%27M20%204v6h-6%27%2F%3E%3C%2Fsvg%3E");
+  --ico-pause: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27%23000%27%3E%3Crect%20x%3D%276%27%20y%3D%275%27%20width%3D%274%27%20height%3D%2714%27%20rx%3D%271%27%2F%3E%3Crect%20x%3D%2714%27%20y%3D%275%27%20width%3D%274%27%20height%3D%2714%27%20rx%3D%271%27%2F%3E%3C%2Fsvg%3E");
+  --ico-play: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27%23000%27%3E%3Cpath%20d%3D%27M7%205v14l12-7z%27%2F%3E%3C%2Fsvg%3E");
+  --ico-loading: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%2712%27%20r%3D%278%27%2F%3E%3Cpath%20d%3D%27M12%208v4l2.5%202%27%2F%3E%3C%2Fsvg%3E");
+}
+
+/* Botones de cámara: icono mask centrado (sin glifos de texto). */
+.cam-btn { display: inline-flex; align-items: center; justify-content: center; }
+.cam-btn::before {
+  content: "";
+  width: 17px;
+  height: 17px;
+  background-color: currentColor;
+  -webkit-mask: var(--cam-ico) center / contain no-repeat;
+  mask: var(--cam-ico) center / contain no-repeat;
+}
+#cam-zoom-in  { --cam-ico: var(--ico-zoom-in); }
+#cam-zoom-out { --cam-ico: var(--ico-zoom-out); }
+#cam-reset    { --cam-ico: var(--ico-reset); }
+#cam-rotate   { --cam-ico: var(--ico-pause); }       /* rotando → pausar */
+#cam-rotate.paused { --cam-ico: var(--ico-play); }   /* pausado → reanudar */
+
+/* Icono del contador (estado/capa). Por defecto: cargando. */
+#counter-icon {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  vertical-align: -2px;
+  background-color: currentColor;
+  -webkit-mask: var(--ci, var(--ico-loading)) center / contain no-repeat;
+  mask: var(--ci, var(--ico-loading)) center / contain no-repeat;
+}
+#counter-icon[data-layer="devices"] { --ci: var(--ico-devices); }
+#counter-icon[data-layer="quakes"]  { --ci: var(--ico-quakes); }
+#counter-icon[data-layer="both"]    { --ci: var(--ico-both); }

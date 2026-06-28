@@ -112,6 +112,24 @@ def test_add_event_dedup_and_list() -> None:
     assert len(FavoritesStore.list_events()) == 1
 
 
+def test_event_bound_station_add_and_rebind() -> None:
+    from shakevision.services.favorites_store import FavoritesStore
+
+    FavoritesStore.add_event(
+        "us1", 5.0, "X", 1.0, network="iu", station="dav")
+    ev = FavoritesStore.list_events()[0]
+    # add_event normaliza a mayúsculas.
+    assert (ev.network, ev.station) == ("IU", "DAV")
+
+    # Re-bind a otra estación (al revisar con una cercana distinta).
+    assert FavoritesStore.set_event_station("us1", "us", "ANMO") is True
+    ev = FavoritesStore.list_events()[0]
+    assert (ev.network, ev.station) == ("US", "ANMO")
+
+    # Evento inexistente → False.
+    assert FavoritesStore.set_event_station("nope", "x", "y") is False
+
+
 def test_remove_event() -> None:
     from shakevision.services.favorites_store import FavoritesStore
 

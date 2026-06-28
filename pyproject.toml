@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shakevision"
-version = "0.8.0.0"
+version = "0.8.3.0"
 description = "SeismicGuard (formerly ShakeVision) — desktop seismic monitoring workbench powered by open data from USGS, IRIS and Raspberry Shake."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -48,6 +48,16 @@ dependencies = [
     # pueda llamar a collect_data_files("certifi") sin depender de
     # qué resolución venga del lockfile.
     "certifi>=2023.7.22",
+    # v0.8.x — búsqueda multilingüe de eventos (ver
+    # docs/events-i18n-timezone.md):
+    #   * babel: nombres de país localizados (es/fr/zh) desde CLDR, sin
+    #     traducción manual. Trae datos locale → el spec de PyInstaller debe
+    #     hacer collect_data_files("babel").
+    #   * reverse_geocoder: lat/lon → ISO de país offline (DB de ciudades
+    #     empaquetada) → el spec debe incluir su CSV de ciudades.
+    # Ambas se aíslan en services/geo_region.py con fallback a None.
+    "babel>=2.12",
+    "reverse_geocoder>=1.5.1",
 ]
 
 [project.optional-dependencies]

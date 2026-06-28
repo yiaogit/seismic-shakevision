@@ -12,6 +12,7 @@
     <header class="report-header">
       <h1>{{H1}}</h1>
       <div class="subtitle">{{SUBTITLE}}</div>
+      {{REPORT_CONTEXT}}
       <div class="meta">
         <span><strong>{{META_GENERATED}}</strong> <span class="mono">{{GENERATED_AT}}</span></span>
         <span><strong>{{META_STATION}}</strong> <span class="mono">{{STATION_LABEL}}</span></span>
@@ -21,6 +22,11 @@
 
     <section class="kpi-row">
       {{KPI_CARDS}}
+    </section>
+
+    <section>
+      <h2>{{SECTION_SUMMARY}}</h2>
+      {{LIVE_SUMMARY}}
     </section>
 
     <section>
@@ -48,11 +54,17 @@
     <section>
       <h2>{{SECTION_TIMELINE}}</h2>
       {{TIMELINE_SVG}}
+      <p class="fig-cap">{{CAP_TIMELINE}}</p>
     </section>
 
     <section>
       <h2>{{SECTION_EVENTS}}</h2>
       {{EVENT_TABLE}}
+    </section>
+
+    <section class="methods-section">
+      <h2>{{SECTION_NOTES}}</h2>
+      {{NOTES_BLOCK}}
     </section>
 
     <footer class="report-footer">

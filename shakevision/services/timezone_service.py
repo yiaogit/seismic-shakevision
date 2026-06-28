@@ -229,6 +229,27 @@ class _Singleton(QObject):
         dt = _dt.datetime.fromtimestamp(timestamp_unix, tz=self.current_zone())
         return dt.isoformat()
 
+    def format_utc(
+        self,
+        timestamp_unix: float,
+        fmt: str = "%Y-%m-%d %H:%M:%S UTC",
+    ) -> str:
+        """Formatea un timestamp UNIX en UTC, SIEMPRE etiquetado.
+
+        Úsese en superficies profesionales (Workbench, Replay, ejes de
+        forma de onda, sección técnica del reporte). El sufijo ``UTC`` es
+        literal — no depende de ``%Z`` (que en algunas plataformas
+        devuelve cadena vacía para UTC)."""
+
+        dt = _dt.datetime.fromtimestamp(timestamp_unix, tz=_dt.timezone.utc)
+        return dt.strftime(fmt)
+
+    def to_iso_utc(self, timestamp_unix: float) -> str:
+        """ISO 8601 en UTC con sufijo ``Z`` (p. ej. ``2026-06-22T03:14:00Z``)."""
+
+        dt = _dt.datetime.fromtimestamp(timestamp_unix, tz=_dt.timezone.utc)
+        return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
     # ------------------------------------------------------------------
     # Persistencia
     # ------------------------------------------------------------------
@@ -314,6 +335,14 @@ class TimezoneService:
     @staticmethod
     def to_iso_local(ts: float) -> str:
         return _get_instance().to_iso_local(ts)
+
+    @staticmethod
+    def format_utc(ts: float, fmt: str = "%Y-%m-%d %H:%M:%S UTC") -> str:
+        return _get_instance().format_utc(ts, fmt)
+
+    @staticmethod
+    def to_iso_utc(ts: float) -> str:
+        return _get_instance().to_iso_utc(ts)
 
     @staticmethod
     def timezone_changed_signal():

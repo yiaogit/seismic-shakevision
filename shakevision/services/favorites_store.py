@@ -48,7 +48,7 @@ import datetime as _dt
 import json
 import logging
 import threading
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from typing import Optional
 
 from PySide6.QtCore import QObject, Signal
@@ -114,6 +114,10 @@ class FavoriteEvent:
     latitude: float = 0.0
     longitude: float = 0.0
     depth_km: float = 0.0
+    # v0.8.0: estación ENLAZADA al evento (la cercana con la que se revisa).
+    # Permite reabrir el favorito con ESA estación, de forma determinista.
+    network: str = ""
+    station: str = ""
     added_at_iso: str = field(default_factory=_now_iso_utc)
 
 
@@ -195,6 +199,8 @@ class _Store(QObject):
                     latitude=float(entry.get("latitude", 0.0)),
                     longitude=float(entry.get("longitude", 0.0)),
                     depth_km=float(entry.get("depth_km", 0.0)),
+                    network=str(entry.get("network", "")),
+                    station=str(entry.get("station", "")),
                     added_at_iso=str(entry.get("added_at_iso", _now_iso_utc())),
                 ))
             except Exception as exc:  # noqa: BLE001
@@ -269,7 +275,8 @@ class _Store(QObject):
     # ── Eventos ──────────────────────────────────────────────
     def add_event(self, id: str, magnitude: float, place: str,
                   timestamp_unix: float, latitude: float = 0.0,
-                  longitude: float = 0.0, depth_km: float = 0.0) -> bool:
+                  longitude: float = 0.0, depth_km: float = 0.0,
+                  network: str = "", station: str = "") -> bool:
         if not id:
             return False
         with self._lock:
@@ -281,10 +288,32 @@ class _Store(QObject):
                 place=place or "", timestamp_unix=float(timestamp_unix),
                 latitude=float(latitude), longitude=float(longitude),
                 depth_km=float(depth_km),
+                network=(network or "").upper(), station=(station or "").upper(),
             )
             self._events.append(new)
             if len(self._events) > MAX_EVENTS:
                 self._events = self._events[-MAX_EVENTS:]
+            self._persist_events()
+        self.changed.emit()
+        return True
+
+    def set_event_station(self, id: str, network: str, station: str) -> bool:
+        """Actualiza la estación ENLAZADA de un evento favorito (re-bind al
+        revisar). Devuelve ``False`` si el evento no existe."""
+
+        net = (network or "").upper()
+        sta = (station or "").upper()
+        with self._lock:
+            found = False
+            new_events = []
+            for e in self._events:
+                if e.id == id:
+                    e = replace(e, network=net, station=sta)
+                    found = True
+                new_events.append(e)
+            if not found:
+                return False
+            self._events = new_events
             self._persist_events()
         self.changed.emit()
         return True
@@ -367,6 +396,8 @@ class _Store(QObject):
                         magnitude=float(entry.get("magnitude", 0.0)),
                         place=str(entry.get("place", "")),
                         timestamp_unix=float(entry.get("timestamp_unix", 0.0)),
+                        network=str(entry.get("network", "")),
+                        station=str(entry.get("station", "")),
                         added_at_iso=str(entry.get(
                             "added_at_iso", _now_iso_utc())),
                     ))
@@ -427,10 +458,16 @@ class FavoritesStore:
     @staticmethod
     def add_event(id: str, magnitude: float, place: str,
                   timestamp_unix: float, latitude: float = 0.0,
-                  longitude: float = 0.0, depth_km: float = 0.0) -> bool:
+                  longitude: float = 0.0, depth_km: float = 0.0,
+                  network: str = "", station: str = "") -> bool:
         return _get_instance().add_event(
             id, magnitude, place, timestamp_unix,
-            latitude=latitude, longitude=longitude, depth_km=depth_km)
+            latitude=latitude, longitude=longitude, depth_km=depth_km,
+            network=network, station=station)
+
+    @staticmethod
+    def set_event_station(id: str, network: str, station: str) -> bool:
+        return _get_instance().set_event_station(id, network, station)
 
     @staticmethod
     def remove_event(id: str) -> bool:

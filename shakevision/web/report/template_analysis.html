@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="{{LANG}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{HTML_TITLE}}</title>
+  <style>{{INLINE_STYLES}}</style>
+</head>
+<body>
+  <div class="container">
+
+    <header class="report-header">
+      <h1>{{H1}}</h1>
+      <div class="subtitle">{{SUBTITLE}}</div>
+      {{REPORT_CONTEXT}}
+      <div class="meta">
+        <span><strong>{{META_GENERATED}}</strong> <span class="mono">{{GENERATED_AT}}</span></span>
+        <span><strong>{{META_SOURCE}}</strong> <span class="mono">{{SOURCE_LABEL}}</span></span>
+        <span><strong>{{META_VERSION}}</strong> <span class="mono">v{{VERSION}}</span></span>
+      </div>
+    </header>
+
+    <section>
+      <h2>{{SECTION_SUMMARY}}</h2>
+      {{STATS_KPIS}}
+    </section>
+
+    <section>
+      <h2>{{SECTION_FINDINGS}}</h2>
+      {{FINDINGS}}
+    </section>
+
+    <section class="pro-section">
+      <h2>{{SECTION_CHARTS}}</h2>
+      <div class="fig-grid">
+        <figure class="fig-card"><figcaption>{{TITLE_GR}}</figcaption>{{GR_SVG}}<p class="fig-cap">{{CAP_GR}}</p></figure>
+        <figure class="fig-card"><figcaption>{{TITLE_ENERGY}}</figcaption>{{ENERGY_SVG}}<p class="fig-cap">{{CAP_ENERGY}}</p></figure>
+        <figure class="fig-card"><figcaption>{{TITLE_MCB}}</figcaption>{{MCB_SVG}}<p class="fig-cap">{{CAP_MCB}}</p></figure>
+        <figure class="fig-card"><figcaption>{{TITLE_SPATIAL}}</figcaption>{{SPATIAL_SVG}}<p class="fig-cap">{{CAP_SPATIAL}}</p></figure>
+        <figure class="fig-card"><figcaption>{{TITLE_DEPTH}}</figcaption>{{DEPTH_HIST_SVG}}<p class="fig-cap">{{CAP_DEPTH}}</p></figure>
+        <figure class="fig-card"><figcaption>{{TITLE_SECTION}}</figcaption>{{SECTION_SVG}}<p class="fig-cap">{{CAP_SECTION}}</p></figure>
+        <figure class="fig-card"><figcaption>{{TITLE_INTEREVENT}}</figcaption>{{INTEREVENT_SVG}}<p class="fig-cap">{{CAP_INTEREVENT}}</p></figure>
+      </div>
+    </section>
+
+    <section>
+      <h2>{{SECTION_EVENTS}}</h2>
+      {{EVENT_TABLE}}
+    </section>
+
+    <section class="methods-section">
+      <h2>{{SECTION_METHODS}}</h2>
+      {{METHODS_BLOCK}}
+    </section>
+
+    <footer class="report-footer">
+      <span>{{FOOTER_SOURCES}}</span>
+      <span>SeismicGuard v{{VERSION}} · MIT License</span>
+    </footer>
+
+  </div>
+</body>
+</html>

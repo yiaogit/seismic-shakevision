@@ -59,6 +59,24 @@ def test_english_is_canonical_reference() -> None:
         assert not extras, f"{code} tiene claves no presentes en inglés: {extras}"
 
 
+def test_all_translations_covers_every_language() -> None:
+    """all_translations() devuelve el valor de la clave en los 4 idiomas.
+
+    Sirve para dimensionar combos al texto más largo entre idiomas. Para una
+    clave traducida distinta en cada lengua debe devolver tantas variantes como
+    idiomas haya (sin vacíos)."""
+
+    vals = LocaleService.all_translations("events.filter_mag_any")
+    assert len(vals) >= 1
+    assert all(isinstance(v, str) and v for v in vals)
+    # "全部" (zh) debe estar presente entre las variantes medidas.
+    assert any("全" in v for v in vals)
+
+
+def test_all_translations_missing_key_is_empty() -> None:
+    assert LocaleService.all_translations("nope.not.a.key") == []
+
+
 # ============================================================
 # Carga + lookup básico
 # ============================================================

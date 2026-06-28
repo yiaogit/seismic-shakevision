@@ -213,6 +213,32 @@ html, body {
   grid-template-columns: 1.1fr 1.4fr 1fr;
 }
 
+.charts-grid-2 {
+  grid-template-columns: 1fr 1fr;
+}
+
+/* Cabecera plegable del análisis profesional (opt-in). */
+.pro-toggle {
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.pro-toggle:hover { color: #0a84ff; }
+.pro-chevron {
+  display: inline-block;
+  font-size: 9px;
+  transition: transform 160ms ease;
+}
+.pro-toggle[aria-expanded="true"] .pro-chevron { transform: rotate(90deg); }
+
 .chart-card {
   background: var(--panel-solid);
   border: 1px solid var(--border);

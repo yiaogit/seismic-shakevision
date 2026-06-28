@@ -95,8 +95,8 @@ def test_config_presets_never_evicted(panel) -> None:
 
     from shakevision.config import StationPreset as _SP
 
-    # AppConfig() trae Demo (XX.MOCK) y LAN Shake (AM.LOCAL) por defecto.
-    # Contamos solo presets reales (no el sentinel "➕ Add LAN Shake…").
+    # AppConfig() trae LAN Shake (AM.LOCAL) por defecto (v0.8.0: ya NO trae
+    # la estación Demo XX.MOCK). Contamos solo presets reales (no el sentinel).
     initial_real_count = sum(
         1 for i in range(panel.station_combo.count())
         if isinstance(panel.station_combo.itemData(i), _SP)
@@ -104,14 +104,13 @@ def test_config_presets_never_evicted(panel) -> None:
     for i in range(panel.MAX_DYNAMIC_STATIONS + 5):
         panel.append_dynamic_station(_preset("IU", f"X{i:03d}"))
 
-    # Los XX.MOCK y AM.LOCAL deben seguir ahí
+    # AM.LOCAL (preset estático) debe seguir ahí pese al FIFO.
     presets_in_combo = [
         panel.station_combo.itemData(i)
         for i in range(panel.station_combo.count())
         if isinstance(panel.station_combo.itemData(i), _SP)
     ]
     nslc = {(p.network, p.station) for p in presets_in_combo}
-    assert ("XX", "MOCK") in nslc, "Demo no debe ser desalojada"
     assert ("AM", "LOCAL") in nslc, "LAN Shake no debe ser desalojada"
     # Total presets reales = presets fijos iniciales + MAX_DYNAMIC_STATIONS
     assert len(presets_in_combo) == initial_real_count + panel.MAX_DYNAMIC_STATIONS

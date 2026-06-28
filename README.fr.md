@@ -4,7 +4,20 @@
 
 [简体中文](README.md) · [English](README.en.md) · [Español](README.es.md) · **Français**
 
-> Anciennement **ShakeVision OpenData Monitor**. La **v0.8.0** réorganise
+> Anciennement **ShakeVision OpenData Monitor**. L'amélioration phare de la
+> **v0.8.3** est un **catalogue historique de séismes + recherche d'événements
+> multilingue** : le Centre d'événements gagne un commutateur Direct/Historique
+> qui interroge le catalogue complet USGS **fdsnws-event** ANSS (~1900→aujourd'hui),
+> et la recherche fonctionne d'une langue à l'autre (tapez `日本` en chinois pour
+> trouver le Japon ; régions Flinn–Engdahl hors-ligne + noms de pays localisés).
+> Là-dessus : le **Panneau de données** se scinde en pages **Direct | Analyse**
+> (Analyse exécute des **statistiques sismiques professionnelles** sur le catalogue
+> historique — valeur b/GR, Mc/b dans le temps, énergie, densité spatiale, coupe
+> de profondeur) ; l'**export de rapports** arrive en deux mises en page selon le
+> mode (**surveillance / statistique**) ; la sélection du temps utilise un
+> **curseur de plage glissant** et les listes déroulantes se dimensionnent dans
+> toutes les langues. Auparavant, la
+> **v0.8.0** réorganise
 > l'application autour du flux *événement → examen → collection personnelle*
 > et réécrit **Replay** en navigateur de formes d'onde professionnel (zoom/
 > pan, axe UTC absolu, sélection de bande, déconvolution de réponse vers
@@ -45,7 +58,7 @@ spectrogramme / déclenchement dans une seule application desktop.
 | Module                     | Description                                                                                                                       |
 |----------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
 | 🌍 **Globe 3D**            | Rendu temps réel ECharts-GL, 600+ stations citoyennes Raspberry Shake + 400+ stations dorsales USGS / IRIS, séismes colorés par magnitude, click-zoom + ajout au banc Pro |
-| 📊 **Tableau de bord**     | 7 graphiques ECharts liés : top pays, histogrammes magnitude / profondeur, timeline 24 h (bulles de densité), radar PAGER (filtre régional), buckets adaptatifs, dispersion profondeur × magnitude |
+| 📊 **Panneau de données (Direct \| Analyse)** | **Deux pages indépendantes.** **Direct** : top pays, histogrammes magnitude / profondeur, timeline, taux d'événements, épicentres (lon × lat), avec sélecteur de région (le Top-10 reste global). **Analyse** : interroge le **catalogue historique USGS fdsnws-event** (région + fenêtre + magnitude min., pré-vérif `/count`) et produit des stats pro : **valeur b (GR), Mc/b dans le temps, libération d'énergie, densité spatiale, coupe/distribution de profondeur, magnitude-temps, intervalles entre événements**. La fenêtre utilise un **curseur de plage glissant** |
 | 🗂 **Centre d'événements** | Page de premier niveau : table de séismes (double-clic examine) + **grandes stations proches** (Δ°/km/catégorie) ; double-clic utilise la plus proche ; ☆ favori séismes/stations en un clic |
 | ⭐ **« Ma collection »**   | Page de premier niveau : **séismes / stations** favoris + enregistrements (STA/LTA — seulement s'il y en a + **catalogue d'examen** QuakeML) ; double-clic sur le catalogue **rouvre un examen enregistré** (restaure les pointés P/S) ; « Ouvrir le dossier » exporte MiniSEED/QuakeML vers ObsPy/SeisComP/SAC |
 | 🔬 **Banc Pro**            | Fenêtre flottante : formes d'onde 3 canaux + spectrogramme (commutable) + héliographe 24 h + mouvement de particule N-E (azimut de polarisation) + enregistrement STA/LTA + carte d'intensité MMI |
@@ -53,7 +66,7 @@ spectrogramme / déclenchement dans une seule application desktop.
 | 🔊 **Sonification**        | Joue les 60 dernières secondes du mouvement du sol en audio audible à vitesse 1× – 60×                                            |
 | 🌐 **i18n**                | Stack complète en 4 langues (EN / ES / 简中 / FR) avec changement instantané, y compris vues web, intérieurs de graphiques, tooltips et rapports HTML |
 | 🕒 **Fuseau horaire**      | Auto-détection du fuseau système + override manuel ; tous les timestamps affichés dans le fuseau de l'utilisateur                 |
-| 📄 **Rapports**            | Export en un clic vers un fichier HTML autonome (avec timeline SVG) + export PDF via `QWebEngine.printToPdf`                      |
+| 📄 **Rapports (deux mises en page)** | HTML + PDF en un seul fichier, **selon le mode** : **Direct** = rapport de surveillance (résumé de situation + classement des pays + timeline + notes sources/données préliminaires) ; **Analyse** = **rapport statistique** (7 graphiques SVG avec axes : GR / énergie / Mc-b / densité spatiale / coupe de profondeur / distribution de profondeur / intervalles + KPIs + **constats** auto-générés + méthodes/provenance/mises en garde + tableau d'événements avec lat/lon et ID). SVG inline pur, sans JS |
 | ⚡ **SeedLink en direct**  | Connexion directe à IRIS `rtserve.iris.washington.edu:18000`, routage automatique IU/US/II/IC, statut de connexion par étapes, annulable à tout moment |
 | 👤 **Profil**              | OAuth GitHub (Device Flow), statistiques d'usage, **timeline d'activité récente** (50 derniers événements avec timestamps relatifs, stockés localement) |
 | 📍 **Localisation**        | Géolocalisation par IP (un clic, jamais en arrière-plan) suggère les stations proches et met à jour le fuseau horaire             |
@@ -177,7 +190,7 @@ Lancer → entre par défaut dans la vue 🌍 Globe (séismes + stations en dire
 
 Fenêtre principale — 4 onglets de premier niveau :
   ├── 🌍 Globe    Clic sur un point séisme/station → Examiner / ☆Favori / Ajouter au Workbench
-  ├── 📊 Data     7 graphiques liés + filtres période / région
+  ├── 📊 Data     Pages Direct | Analyse (monitoring + stats du catalogue historique)
   ├── 🗂 Events   Table de séismes ; en sélectionner un liste les "grandes stations proches" (Δ°/km/catégorie)
   │               └── Double-clic sur un événement → l'examiner avec la station la plus proche dans Replay
   └── ⭐ Ma col.  Séismes/stations favoris + enregistrements (captures / catalogue d'examen)
@@ -235,7 +248,7 @@ graph TB
 
     subgraph services[" ⚙ services/ — I/O asynchrone"]
         Worker[Worker QObject<br/>rafraîchissement 30 s]
-        Clients[usgs · iris · shakenet · dataselect]
+        Clients[usgs · iris · shakenet<br/>dataselect · fdsn_event catalogue historique]
         Cache[cache.py<br/>cache fichier, TTL 5 min]
         Auth[github_auth<br/>Device Flow]
         TZ[timezone_service]
@@ -498,7 +511,7 @@ stateDiagram-v2
 | **Framework UI** | PySide6 ≥ 6.6                                       | **LGPL** permet le lien statique sans contamination GPL (PyQt6 est GPL) ; usage commercial possible |
 | **Rendu web**    | QWebEngineView                                      | Chromium embarqué sans moteur navigateur tiers ; le flux OAuth réutilise le même moteur |
 | **Globe 3D**     | [ECharts-GL](https://github.com/ecomfe/echarts-gl)  | Migré depuis Globe.gl + Three.js en v0.5 : une lib couvre 2D + 3D, bundle ~600 KB vs ~3 MB |
-| **Charts 2D**    | [Apache ECharts](https://echarts.apache.org/) 5.4   | Les 7 charts du dashboard partagent une API, interaction/tooltip/thème unifiés |
+| **Charts 2D**    | [Apache ECharts](https://echarts.apache.org/) 5.4   | Les charts du dashboard partagent une API, interaction/tooltip/thème unifiés |
 | **DSP**          | NumPy + SciPy                                       | Butterworth standard industrie + FFT scipy.signal.spectrogram |
 | **Sismologie**   | [ObsPy](https://www.obspy.org/) ≥ 1.4               | Client SeedLink + lecture/écriture MiniSEED ; standard académique |
 | **Waveform**     | [pyqtgraph](https://www.pyqtgraph.org/) 0.13        | Accéléré GPU, 60 FPS stables                                 |
@@ -624,7 +637,7 @@ seismic-shakevision/
 │   │
 │   ├── web/                              # ── Vues web embarquées (chargées par QWebEngineView) ──
 │   │   ├── globe/                        # Globe 3D ECharts-GL (index.html + globe.js + styles.css + lib/)
-│   │   ├── dashboard/                    # 7 charts ECharts du dashboard (index.html + dashboard.js + ...)
+│   │   ├── dashboard/                    # ECharts du dashboard : pages Direct | Analyse (index.html + dashboard.js + ...)
 │   │   └── report/                       # Template de rapport HTML
 │   │
 │   ├── assets/                           # ── Ressources ──

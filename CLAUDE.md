@@ -36,6 +36,22 @@ License: MIT.
 
 ## 2. Current state (read this first)
 
+> ⏭️ **PLANNED NEXT WORK — remind the user at the start of the next session.**
+> The user explicitly parked these two for "next conversation":
+> 1. **数据板块的验证优化 (Data panel: validate + optimize).** Validate on a real
+>    machine all the recent dashboard work that the sandbox can't run — two-mode
+>    live/analysis, the analysis date-range selector + `fdsnws/count` pre-check,
+>    the pro charts (GR/b · energy · Mc(t) · Omori · cross-section), region
+>    display `ISO · name`, event-rate chart — then optimize from findings. Also
+>    finish the paused structural pieces: **two truly-independent sub-pages**
+>    (实时 | 分析, no shared charts) and the **live-page region selector**
+>    (Top-10 stays global) + declutter (drop period-distribution, move depth
+>    scatter to analysis). See `docs/dashboard-pro.md`.
+> 2. **时间选择器改造 → 现代化拖动选择器 (Time selector → modern draggable range
+>    slider).** Replace the calendar/date-edit time pickers with a draggable
+>    range slider (brush-style timeline) for choosing the analysis window —
+>    more modern/intuitive than from/to calendars.
+
 | Item | Value |
 |---|---|
 | Current version (4 files, see §5) | **0.8.0.0** (prepared, not yet committed/tagged) |
@@ -328,3 +344,4 @@ See `CHANGELOG.md` for the source-of-truth detail.
 | Adjust the theme palette | `ui/theme.py` (`LIGHT_PALETTE` / `DARK_PALETTE`) |
 | Add Windows / macOS metadata | `packaging/windows/version_info.txt` / `packaging/shakevision.spec` |
 | Inspect what got released | `curl -s https://api.github.com/repos/yiaogit/seismic-shakevision/releases` |
+| **Workbench station/event flow & 2-mode restructure** | **`docs/workbench-restructure.md`** — source of truth for how stations/events route into Live vs Replay; read BEFORE changing `pro_window` / `control_panel` / `replay_panel` station wiring |

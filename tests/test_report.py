@@ -22,10 +22,13 @@ pytest.importorskip("PySide6.QtCore", reason="PySide6 no instalado")
 from shakevision.services.data_models import Earthquake, PagerLevel  # noqa: E402
 from shakevision.services.report import (  # noqa: E402
     ReportGenerator,
+    _humanize_window,
     _render_country_bars,
     _render_depth_bars,
     _render_event_table,
     _render_kpi_cards,
+    _render_live_notes,
+    _render_live_summary,
     _render_magnitude_bars,
     _render_timeline_svg,
 )
@@ -136,6 +139,44 @@ def test_timeline_svg_with_events_contains_circles() -> None:
 def test_timeline_svg_empty_returns_placeholder() -> None:
     out = _render_timeline_svg([], now=0.0)
     assert "Sin eventos" in out
+
+
+# ============================================================
+# Reporte EN VIVO: resumen situacional + notas (rutas puras)
+# ============================================================
+def test_humanize_window() -> None:
+    assert _humanize_window(24 * 3600) == "1 d"
+    assert _humanize_window(7 * 86400) == "7 d"
+    assert _humanize_window(6 * 3600) == "6 h"
+
+
+def test_live_summary_empty() -> None:
+    out = _render_live_summary([], [], 86400, now=1700000000.0)
+    assert "findings" in out
+    # "Sin sismos registrados…"
+    assert "Sin sismos" in out
+
+
+def test_live_summary_with_events() -> None:
+    now = 1700000000.0
+    quakes = [_q(6.4, place="Santiago, Chile", ts=now - 1800),
+              _q(3.2, place="Tokyo, Japan", ts=now - 3600)]
+    countries = [{"name": "Chile", "count": 5}]
+    out = _render_live_summary(quakes, countries, 86400, now=now)
+    assert "M6.4" in out            # mayor evento
+    assert "Santiago, Chile" in out
+    assert "Chile" in out           # región más activa
+    assert "significativos" in out  # M≥4.5
+
+
+def test_live_notes_has_provenance_and_caveats() -> None:
+    out = _render_live_notes(1700000000.0, 86400, station_label="AM.MOCK")
+    assert "warn-box" in out                  # advertencia de datos preliminares
+    assert "preliminares" in out
+    assert "params-table" in out              # procedencia
+    assert "AM.MOCK" in out
+    # El monitoreo en vivo ya no incluye la capa estadística pro.
+    assert "methods-list" not in out
 
 
 # ============================================================

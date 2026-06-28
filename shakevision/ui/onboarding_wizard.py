@@ -315,6 +315,8 @@ class OnboardingWizard(QDialog):
         self._tz_combo.setEditable(True)   # permite type-to-search
         for tz in available_timezones():
             self._tz_combo.addItem(tz)
+        from shakevision.ui.combo_utils import fit_combo
+        fit_combo(self._tz_combo)
         current = TimezoneService.current_iana()
         idx = self._tz_combo.findText(current)
         if idx >= 0:

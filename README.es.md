@@ -4,7 +4,19 @@
 
 [简体中文](README.md) · [English](README.en.md) · **Español** · [Français](README.fr.md)
 
-> Antes conocido como **ShakeVision OpenData Monitor**. La **v0.8.0**
+> Antes conocido como **ShakeVision OpenData Monitor**. La mejora estrella de la
+> **v0.8.3** es un **catálogo histórico de sismos + búsqueda multilingüe de
+> eventos**: el Centro de eventos suma un conmutador En vivo/Histórico que
+> consulta el catálogo completo USGS **fdsnws-event** ANSS (~1900→hoy), y la
+> búsqueda funciona entre idiomas (escribe `日本` en chino y encuentra Japón;
+> regiones Flinn–Engdahl offline + nombres de país localizados). Sobre eso: el
+> **Panel de datos** se divide en páginas **En vivo | Análisis** (Análisis corre
+> **estadística sísmica profesional** sobre el catálogo histórico — valor b/GR,
+> Mc/b en el tiempo, energía, densidad espacial, sección de profundidad); la
+> **exportación de reportes** llega en dos diseños según el modo (**monitoreo /
+> estadístico**); la selección de tiempo usa un **deslizador de rango arrastrable**
+> y los desplegables se dimensionan en todos los idiomas.
+> Antes, la **v0.8.0**
 > reorganiza la app en torno al flujo *evento → revisión → colección
 > personal* y reescribe **Replay** como un navegador de formas de onda
 > profesional (zoom/pan, eje UTC absoluto, selección de banda, eliminación de
@@ -45,7 +57,7 @@ disparo en una sola aplicación de escritorio.
 | Módulo                     | Descripción                                                                                                                       |
 |----------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
 | 🌍 **Globo 3D**            | Renderizado en tiempo real con ECharts-GL, 600+ estaciones ciudadanas Raspberry Shake + 400+ estaciones de la red dorsal USGS / IRIS, sismos coloreados por magnitud, click-zoom + añadir al banco Pro |
-| 📊 **Panel de datos**      | 7 gráficas ECharts enlazadas: top países, histogramas magnitud / profundidad, línea temporal 24 h (burbujas de densidad), radar PAGER (filtro por región), buckets autoadaptativos, dispersión profundidad × magnitud |
+| 📊 **Panel de datos (En vivo \| Análisis)** | **Dos páginas independientes.** **En vivo**: top países, histogramas magnitud / profundidad, línea temporal, tasa de eventos, epicentros (lon × lat), con selector de región (el Top-10 sigue global). **Análisis**: consulta el **catálogo histórico USGS fdsnws-event** (región + ventana + magnitud mínima, pre-chequeo `/count`) y produce estadística pro: **valor b (GR), Mc/b en el tiempo, liberación de energía, densidad espacial, sección/distribución de profundidad, magnitud-tiempo, intervalos entre eventos**. La ventana usa un **deslizador de rango arrastrable** |
 | 🗂 **Centro de eventos**   | Página de nivel superior: tabla de sismos (doble clic revisa) + **estaciones grandes cercanas** (Δ°/km/categoría); doble clic usa la más cercana; ☆ favoritea sismos/estaciones en un clic |
 | ⭐ **"Mi colección"**      | Página de nivel superior: **sismos / estaciones** favoritos + registros (grabaciones STA/LTA — solo si hay + **catálogo de revisión** QuakeML); doble clic en el catálogo **reabre una revisión guardada** (restaura picks P/S); "Abrir carpeta" exporta MiniSEED/QuakeML a ObsPy/SeisComP/SAC |
 | 🔬 **Banco Pro**           | Ventana flotante: forma de onda 3 canales + espectrograma (conmutable) + helicórder 24 h + movimiento de partícula N-E (azimut de polarización) + grabación STA/LTA + tarjeta de intensidad MMI |
@@ -53,7 +65,7 @@ disparo en una sola aplicación de escritorio.
 | 🔊 **Sonificación**        | Reproduce los últimos 60 segundos del movimiento del suelo como audio audible a velocidad 1× – 60×                                |
 | 🌐 **i18n**                | Pila completa de 4 idiomas (EN / ES / 简中 / FR) con cambio instantáneo, incluidas vistas web, internos de gráficas, tooltips y reportes HTML |
 | 🕒 **Conciencia de zona**  | Auto-detección de zona horaria del sistema + override manual; todas las marcas de tiempo se renderizan en la zona del usuario     |
-| 📄 **Reportes**            | Exportación a un único archivo HTML (con línea de tiempo SVG) + exportación PDF vía `QWebEngine.printToPdf`                       |
+| 📄 **Reportes (dos diseños)** | HTML + PDF de un único archivo, **según el modo**: **En vivo** = reporte de monitoreo (resumen de situación + ranking de países + línea temporal + notas de fuentes/datos preliminares); **Análisis** = **reporte estadístico** (7 gráficas SVG con ejes: GR / energía / Mc-b / densidad espacial / sección de profundidad / distribución de profundidad / intervalos + KPIs + **hallazgos** autogenerados + métodos/procedencia/advertencias + tabla de eventos con lat/lon e ID). SVG inline puro, sin JS |
 | ⚡ **SeedLink en vivo**    | Conexión directa a IRIS `rtserve.iris.washington.edu:18000`, enrutamiento automático IU/US/II/IC, estado de conexión por fases, cancelable en cualquier momento |
 | 👤 **Perfil**              | OAuth GitHub (Device Flow), estadísticas de uso, **línea de tiempo de actividad reciente** (últimos 50 eventos con timestamps relativos, almacenados localmente) |
 | 📍 **Ubicación**           | Geolocalización por IP (un click, nunca en segundo plano) que sugiere estaciones cercanas y actualiza la zona horaria             |
@@ -180,7 +192,7 @@ Lanzar → entra por defecto a la vista 🌍 Globo (sismos + estaciones en vivo)
 
 Ventana principal — 4 pestañas de nivel superior:
   ├── 🌍 Globo    Click en un punto de sismo/estación → Revisar / ☆Favorito / Añadir al Workbench
-  ├── 📊 Datos    7 gráficas enlazadas + filtros de periodo / región
+  ├── 📊 Datos    Páginas En vivo | Análisis (monitoreo + stats del catálogo histórico)
   ├── 🗂 Eventos  Tabla de sismos; al seleccionar uno lista "estaciones grandes cercanas" (Δ°/km/categoría)
   │               └── Doble clic en un evento → revísalo con la estación más cercana en Replay
   └── ⭐ Mi col.  Sismos/estaciones favoritos + registros (grabaciones / catálogo de revisión)
@@ -238,7 +250,7 @@ graph TB
 
     subgraph services[" ⚙ services/ — I/O asíncrona"]
         Worker[Worker QObject<br/>refresco 30 s]
-        Clients[usgs · iris · shakenet · dataselect]
+        Clients[usgs · iris · shakenet<br/>dataselect · fdsn_event catálogo histórico]
         Cache[cache.py<br/>caché archivo, TTL 5 min]
         Auth[github_auth<br/>Device Flow]
         TZ[timezone_service]
@@ -500,7 +512,7 @@ stateDiagram-v2
 | **UI**           | PySide6 ≥ 6.6                                       | **LGPL** permite enlace estático sin contaminación GPL (PyQt6 es GPL); apto comercial |
 | **Web**          | QWebEngineView                                      | Chromium embebido sin tercer motor; el flujo OAuth reutiliza el mismo motor |
 | **Globo 3D**     | [ECharts-GL](https://github.com/ecomfe/echarts-gl)  | En v0.5 se cambió desde Globe.gl + Three.js: una librería cubre 2D + 3D, bundle ~600 KB vs ~3 MB |
-| **Charts 2D**    | [Apache ECharts](https://echarts.apache.org/) 5.4   | Los 7 charts del dashboard comparten una API, interacción/tooltip/tema unificados |
+| **Charts 2D**    | [Apache ECharts](https://echarts.apache.org/) 5.4   | Los charts del dashboard comparten una API, interacción/tooltip/tema unificados |
 | **DSP**          | NumPy + SciPy                                       | Butterworth estándar de la industria + FFT scipy.signal.spectrogram |
 | **Sismología**   | [ObsPy](https://www.obspy.org/) ≥ 1.4               | Cliente SeedLink + lectura/escritura MiniSEED; estándar académico |
 | **Waveform**     | [pyqtgraph](https://www.pyqtgraph.org/) 0.13        | Acelerado por GPU, 60 FPS estables                           |
@@ -535,7 +547,7 @@ stateDiagram-v2
 | Conexión SeedLink            | 3–8 s típico                          | TCP + SELECT + primer paquete                     |
 | Refresco feed USGS           | intervalo 30 s, < 200 KB              | GeoJSON, caché archivo TTL 5 min                  |
 | Redibujado del Globo         | < 200 ms                              | M1 con 1000 puntos                                |
-| Refresco dashboard (7 charts)| < 100 ms                              | hash de entrada evita redibujados nulos           |
+| Refresco del dashboard       | < 100 ms                              | hash de entrada evita redibujados nulos           |
 | Chunk de sonificación        | 22050 samples / 0.5 s audio           | Float32 → int16 PCM                              |
 | Startup hasta Globo interactivo | ~3 s (macOS arm64)                | Splash oculta el warmup de QtWebEngine            |
 | Memoria pico                 | ~450 MB                               | con QtWebEngine + buffer 60s + tres ventanas      |
@@ -626,7 +638,7 @@ seismic-shakevision/
 │   │
 │   ├── web/                              # ── Vistas web embebidas (cargadas por QWebEngineView) ──
 │   │   ├── globe/                        # Globo 3D ECharts-GL (index.html + globe.js + styles.css + lib/)
-│   │   ├── dashboard/                    # 7 charts ECharts del dashboard (index.html + dashboard.js + ...)
+│   │   ├── dashboard/                    # ECharts del dashboard: páginas En vivo | Análisis (index.html + dashboard.js + ...)
 │   │   └── report/                       # Plantilla de reporte HTML
 │   │
 │   ├── assets/                           # ── Recursos ──

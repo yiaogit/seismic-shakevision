@@ -57,6 +57,7 @@ from shakevision.config import AppConfig, StationPreset
 from shakevision.i18n import LocaleService, t
 from shakevision.ui.control_panel import ControlPanel
 from shakevision.ui.helicorder_widget import HelicorderPanel
+from shakevision.ui.icons import get_icon
 from shakevision.ui.intensity_card import IntensityCard
 from shakevision.ui.particle_motion_widget import ParticleMotionPanel
 from shakevision.ui.replay_panel import ReplayPanel
@@ -65,11 +66,17 @@ from shakevision.ui.signal_safety import subscribe
 from shakevision.ui.waveform_widget import WaveformPanel
 
 
-# Índices de sub-pestañas dentro de Pro (constantes internas)
+# v0.8.0 reestructuración a DOS MODOS de nivel superior:
+#   * MODE_LIVE     → contiene las 3 sub-pestañas en vivo (abajo).
+#   * MODE_REPLAY   → análisis histórico (ReplayPanel), autocontenido.
+# Ver docs/workbench-restructure.md.
+MODE_LIVE: int = 0
+MODE_REPLAY: int = 1
+
+# Índices de sub-pestañas DENTRO del modo "En vivo" (waveform/24h/hodograma).
 PRO_LIVE: int = 0
 PRO_HELICORDER: int = 1
 PRO_PARTICLE: int = 2
-PRO_REPLAY: int = 3
 
 # Tamaño por defecto la primera vez que se abre la ventana
 _DEFAULT_WIDTH: int = 1200
@@ -95,12 +102,12 @@ class ProWindow(QMainWindow):
     disconnect_clicked = Signal()
     listen_clicked = Signal(int, int)       # (seconds, speed_factor)
 
-    # Sub-pestaña actualmente visible (0/1/2/3). MainWindow lo lee para
-    # decidir si refrescar oscilograma/espectrograma o no.
+    # Constantes expuestas (MainWindow / controller las leen).
+    MODE_LIVE: int = MODE_LIVE
+    MODE_REPLAY: int = MODE_REPLAY
     PRO_LIVE: int = PRO_LIVE
     PRO_HELICORDER: int = PRO_HELICORDER
     PRO_PARTICLE: int = PRO_PARTICLE
-    PRO_REPLAY: int = PRO_REPLAY
 
     def __init__(
         self,
@@ -131,25 +138,33 @@ class ProWindow(QMainWindow):
         self.control_panel = ControlPanel(config=config, parent=central)
         root.addWidget(self.control_panel)
 
-        # Columna derecha: MMI arriba + sub-pestañas debajo
+        # Columna derecha: conmutador de MODO (En vivo / Histórico) — v0.8.0.
         right = QWidget(central)
         right_layout = QVBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(8)
 
-        self.intensity_card = IntensityCard(parent=right)
-        right_layout.addWidget(self.intensity_card)
+        self.mode_tabs = QTabWidget(parent=right)
+        self.mode_tabs.setDocumentMode(True)
 
-        self.subtabs = QTabWidget(parent=right)
+        # ════════ MODO "En vivo" ════════
+        # MMI arriba + sub-pestañas (waveform / 24h / hodograma) abajo.
+        live_mode = QWidget()
+        live_mode_l = QVBoxLayout(live_mode)
+        live_mode_l.setContentsMargins(0, 0, 0, 0)
+        live_mode_l.setSpacing(8)
+
+        self.intensity_card = IntensityCard(parent=live_mode)
+        live_mode_l.addWidget(self.intensity_card)
+
+        self.subtabs = QTabWidget(parent=live_mode)
         self.subtabs.setDocumentMode(True)
 
-        # ── Sub-tab "En vivo" ──
+        # ── Sub-tab "En vivo" (waveform + espectrograma) ──
         live_container = QWidget()
         live_layout = QVBoxLayout(live_container)
         live_layout.setContentsMargins(0, 0, 0, 0)
         live_layout.setSpacing(4)
-        # Pequeña barra: conmutador para mostrar/ocultar el espectrograma
-        # (la traza siempre visible) — consistente con Replay, libera alto.
         live_bar = QHBoxLayout()
         live_bar.addStretch(1)
         self.live_spec_toggle = QPushButton(t("replay.toggle_spectrogram"))
@@ -183,38 +198,43 @@ class ProWindow(QMainWindow):
         )
         self.subtabs.addTab(self.particle_panel, t("pro.subtab.particle"))
 
-        # ── Sub-tab "Replay" (descarga IRIS + reproducción histórica) ──
-        # Tiene su propio buffer/processor; no comparte estado con el live.
-        self.replay_panel = ReplayPanel(config=config, parent=self.subtabs)
-        self.subtabs.addTab(self.replay_panel, t("pro.subtab.replay"))
+        live_mode_l.addWidget(self.subtabs, stretch=1)
+        self.mode_tabs.addTab(live_mode, t("pro.mode.live"))
 
-        # v0.7.7 (UX): "Eventos" y "Local" del Workbench se eliminaron — viven
-        # ahora en el nivel superior (Eventos = centro de eventos; grabaciones +
-        # catálogo = pestaña "Mi colección"). El Workbench queda enfocado en
-        # análisis (4 sub-pestañas).
+        # ════════ MODO "Análisis histórico" (autocontenido) ════════
+        # Descarga IRIS + reproducción; propio buffer/processor, no comparte
+        # estado con el live. v0.8.0: pasa a ser un MODO de nivel superior.
+        self.replay_panel = ReplayPanel(config=config, parent=self.mode_tabs)
+        self.mode_tabs.addTab(self.replay_panel, t("pro.mode.replay"))
 
-        right_layout.addWidget(self.subtabs, stretch=1)
+        right_layout.addWidget(self.mode_tabs, stretch=1)
         root.addWidget(right, stretch=1)
 
-        # v0.7.7 (UX): la tarjeta de intensidad (MMI en tiempo real) solo tiene
-        # sentido en "En vivo"; ocultarla en Replay/Eventos/Local/etc. evita
-        # mostrar un valor obsoleto y da más espacio a esas vistas.
+        # La tarjeta MMI (tiempo real) solo en la sub-pestaña "En vivo"; al
+        # cambiar de modo a Histórico, todo el contenedor live se oculta solo.
         self.subtabs.currentChanged.connect(self._on_subtab_changed)
+        self.mode_tabs.currentChanged.connect(self._on_mode_changed)
         self._on_subtab_changed(self.subtabs.currentIndex())
+        self._on_mode_changed(self.mode_tabs.currentIndex())
+
+        # v0.8.0: iconos vectoriales en los tabs (sustituyen a los emoji).
+        self._apply_tab_icons()
+        from shakevision.ui.theme_manager import ThemeManager as _TM
+        subscribe(self, _TM.changed_signal(), self._apply_tab_icons)
 
         # ─── Conectar las 6 señales del ControlPanel a las que
         #     reemitimos hacia afuera ───
         self.control_panel.station_changed.connect(self.station_changed)
-        # v0.7.7: el panel de Replay refleja la estación seleccionada en la
-        # barra lateral (N.S.L.C. de solo lectura) en lugar de tener sus
-        # propios campos de texto desacoplados.
+        # v0.8.0: la estación del combo EN VIVO se AÑADE a Replay como opción
+        # (soft bridge); ``set_station`` solo la SELECCIONA si Replay aún no
+        # tenía ninguna (default inicial). Replay tiene su propio selector y NO
+        # es secuestrado por cambios del combo en vivo.
         self.control_panel.station_changed.connect(self.replay_panel.set_station)
         self.replay_panel.set_station(self.control_panel.current_station())
         self.control_panel.filter_changed.connect(self.filter_changed)
-        # v0.7.7: el filtro también re-filtra la traza histórica YA cargada
-        # en Replay (sin re-descargar).
-        self.control_panel.filter_changed.connect(
-            self.replay_panel.on_filter_changed)
+        # v0.8.0: el filtro de la barra lateral YA NO toca Replay — el modo
+        # histórico tiene su propio paso de banda (independiente). Ver
+        # docs/workbench-restructure.md.
         self.control_panel.trigger_changed.connect(self.trigger_changed)
         self.control_panel.connect_clicked.connect(self.connect_clicked)
         self.control_panel.disconnect_clicked.connect(self.disconnect_clicked)
@@ -227,14 +247,33 @@ class ProWindow(QMainWindow):
         subscribe(self, LocaleService.language_changed_signal(),
                   self._retranslate)  # v0.7.7 (B1)
 
+    def _apply_tab_icons(self) -> None:
+        """Pone los iconos vectoriales (recoloreados al tema) en los tabs."""
+
+        from shakevision.ui.theme_manager import ThemeManager as _TM
+        try:
+            th = _TM.current_theme()
+        except Exception:  # noqa: BLE001
+            th = "dark"
+        try:
+            self.mode_tabs.setTabIcon(MODE_LIVE, get_icon("mode_live", theme=th))
+            self.mode_tabs.setTabIcon(MODE_REPLAY,
+                                      get_icon("mode_replay", theme=th))
+            self.subtabs.setTabIcon(PRO_LIVE, get_icon("mode_live", theme=th))
+            self.subtabs.setTabIcon(PRO_HELICORDER, get_icon("heli", theme=th))
+            self.subtabs.setTabIcon(PRO_PARTICLE, get_icon("particle", theme=th))
+        except (RuntimeError, AttributeError):
+            pass
+
     def _retranslate(self) -> None:
         """Re-aplica el título de la ventana y las etiquetas de sub-pestañas."""
 
         self.setWindowTitle(t("pro.window_title"))
+        self.mode_tabs.setTabText(MODE_LIVE, t("pro.mode.live"))
+        self.mode_tabs.setTabText(MODE_REPLAY, t("pro.mode.replay"))
         self.subtabs.setTabText(PRO_LIVE, t("pro.subtab.live"))
         self.subtabs.setTabText(PRO_HELICORDER, t("pro.subtab.helicorder"))
         self.subtabs.setTabText(PRO_PARTICLE, t("pro.subtab.particle"))
-        self.subtabs.setTabText(PRO_REPLAY, t("pro.subtab.replay"))
         if hasattr(self, "live_spec_toggle"):
             self.live_spec_toggle.setText(t("replay.toggle_spectrogram"))
 
@@ -296,23 +335,48 @@ class ProWindow(QMainWindow):
             pass
 
     def _on_subtab_changed(self, index: int) -> None:
-        """Tarjeta de intensidad solo en 'En vivo'; re-escanear 'Local' al
-        entrar (para que aparezcan las grabaciones nuevas sin pulsar Refrescar)."""
+        """Tarjeta de intensidad (MMI) solo en la sub-pestaña 'En vivo'."""
 
         try:
             self.intensity_card.setVisible(index == PRO_LIVE)
         except (RuntimeError, AttributeError):
             pass
 
-    def is_live_subtab_visible(self) -> bool:
-        """¿Es la sub-pestaña "En vivo" la actualmente seleccionada?"""
+    def _on_mode_changed(self, index: int) -> None:
+        """Cambio de modo: el ControlPanel lateral (台站/连接/滤波/STA-LTA/声音)
+        es **solo del modo En vivo**. En modo Histórico se oculta — Replay es
+        autocontenido (tiene su propio selector de estación + filtro), así que
+        gana todo el ancho. Ver docs/workbench-restructure.md."""
 
-        return self.subtabs.currentIndex() == PRO_LIVE
+        try:
+            self.control_panel.setVisible(index == MODE_LIVE)
+        except (RuntimeError, AttributeError):
+            pass
+
+    def show_replay(self) -> None:
+        """Cambia al modo Análisis histórico (lo usa MainWindow al revisar)."""
+
+        self.mode_tabs.setCurrentIndex(MODE_REPLAY)
+
+    def show_live(self) -> None:
+        """Cambia al modo En vivo."""
+
+        self.mode_tabs.setCurrentIndex(MODE_LIVE)
+
+    def is_live_subtab_visible(self) -> bool:
+        """¿Está visible la vista de oscilograma EN VIVO? (modo En vivo +
+        sub-pestaña 'En vivo'). El controller lo usa para no refrescar trazas
+        ocultas."""
+
+        return (self.mode_tabs.currentIndex() == MODE_LIVE
+                and self.subtabs.currentIndex() == PRO_LIVE)
 
     def is_particle_subtab_visible(self) -> bool:
-        """¿Es la sub-pestaña "Hodograma" la actualmente seleccionada?"""
+        """¿Está visible el hodograma EN VIVO? (modo En vivo + sub-pestaña
+        'Hodograma')."""
 
-        return self.subtabs.currentIndex() == PRO_PARTICLE
+        return (self.mode_tabs.currentIndex() == MODE_LIVE
+                and self.subtabs.currentIndex() == PRO_PARTICLE)
 
     def add_station(self, preset: StationPreset) -> bool:
         """Añade una estación al desplegable del ControlPanel.

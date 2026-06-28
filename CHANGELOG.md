@@ -6,6 +6,464 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ---
 
+## [Unreleased]
+
+## [0.8.3.0] - 2026-06-28
+
+### Added
+- **Reporte PDF/HTML — sección de análisis profesional (snapshot estadístico).**
+  El reporte añade un bloque con parámetros (**N · b ± err · Mc · rango de
+  magnitud · energía total**) y dos gráficas **SVG inline** (sin JS): diagrama
+  **Gutenberg–Richter** con recta de ajuste b, e **histograma de profundidad**.
+  Calculado con `seismic_stats` sobre todo el catálogo del reporte. Claves i18n
+  `report.pro.*` ×4.
+- **Panel de datos — modo Análisis (región + ventana histórica).** Barra
+  superior con preset de **región** + **ventana** (1 / 5 / 10 años) + magnitud
+  mínima → consulta el catálogo `fdsnws-event` en un hilo y reconstruye TODO el
+  panel (incluida la capa profesional) sobre ese catálogo histórico, no solo el
+  feed en vivo. Botón **En vivo** para volver. Reusa `region_presets` +
+  `fdsn_worker`. Claves i18n `dashboard.*` ×4.
+- **Panel de datos — capa de análisis profesional** (opt-in, plegable; no estorba
+  al resumen divulgativo). Cuatro gráficas alimentadas por el núcleo de
+  estadística: **Gutenberg–Richter + valor b** (con Mc y ajuste), **liberación de
+  energía** (nº y energía acumulados en el tiempo), **decaimiento de réplicas
+  (Omori)** con ajuste `K/(t+c)^p`, y **sección profundidad × latitud**. El
+  cálculo va en Python (`build_pro_stats` en `dashboard_view.py`) y se pinta con
+  ECharts. Claves i18n `web.dashboard.*` ×4. (Validar el render en máquina.)
+- **Núcleo de estadística sísmica** (`processing/seismic_stats.py`, base de la
+  profesionalización del panel de datos — ver `docs/dashboard-pro.md`). Funciones
+  puras y testeadas: magnitud de completitud Mc (máxima curvatura), **b-value /
+  a-value** (Aki–Utsu MLE + incertidumbre Shi & Bolt), distribución
+  magnitud-frecuencia (GR), momento sísmico y energía, series acumuladas
+  (nº + momento/energía), ajuste de réplicas **Omori** `K/(t+c)^p` y estadística
+  de profundidad. (Las capas de gráficos ECharts / fuente de datos / PDF quedan
+  para las siguientes etapas.)
+- **Catálogo histórico de sismos (USGS fdsnws-event)** — el Centro de eventos
+  estrena un conmutador **En vivo / Histórico**. En modo Histórico se consulta
+  el catálogo ANSS completo (~1900→hoy), no solo el último mes de los *summary
+  feeds*. (Ver `docs/events-i18n-timezone.md`.)
+  - `services/fdsn_event.py`: construcción de consulta (tiempo / magnitud / caja
+    geográfica / orden / paginación / eventid) + cliente con caché; reutiliza el
+    parser GeoJSON. Modela el tope de 20 000 eventos del servicio
+    (`FDSNTooManyError` → aviso de acotar).
+  - `services/fdsn_worker.py`: ejecuta la consulta en un `QThread` (las
+    históricas grandes tardan), sin congelar la UI.
+  - `services/region_presets.py`: presets de país/región (ISO→caja, nombres vía
+    Babel) + opción Global, para acotar la búsqueda histórica.
+  - `ui/historical_search_bar.py`: formulario (rango temporal con años pasados ·
+    magnitud mín/máx · región · orden · límite) que dispara la consulta y
+    rellena la misma tabla coloreada.
+  - **Refinado cliente consistente entre vivo e histórico**: la barra de filtro
+    (búsqueda por palabra clave · magnitud · profundidad) ahora está visible en
+    AMBOS modos. El histórico gana así **búsqueda por texto** (lugar / región /
+    país / id / año) sobre los resultados, igual que en vivo; la barra histórica
+    define QUÉ se descarga del servidor y la de filtro REFINA en local.
+  - Estilo QSS de control segmentado (`QPushButton#SegmentButton`): el modo
+    activo se rellena con accent estilo macOS; reactivo a tema claro/oscuro.
+- **Columna "Distancia" en la tabla de eventos** — categoría de distancia a la
+  estación más cercana (local / regional / telesismo) por evento, ordenable por
+  Δ°. Se rellena cuando el catálogo de estaciones está disponible. Clave i18n
+  `events.col_nearest`.
+- **Evaluación por color de magnitud** (`processing/magnitude_color.py`):
+  degradado verde→rojo por tramos sísmicos; la celda de magnitud en la tabla de
+  eventos se colorea y resalta. Claves i18n `mag.scale.*` + leyenda.
+- **Búsqueda por ID / magnitud / año / profundidad**
+  (`event_filter.structured_tokens`): el cuadro de búsqueda confirma un evento
+  por su ID USGS, magnitud, año o profundidad (`"japan 6"`, `"us7000abcd"`,
+  `"2011"`), no solo por lugar.
+- **Búsqueda multilingüe de eventos** (ver `docs/events-i18n-timezone.md`).
+  El cuadro de búsqueda del Centro de eventos ya no es un substring sobre el
+  texto inglés de USGS: ahora compara la consulta —con plegado de acentos
+  (`"espana"` encuentra `"España"`) y tokens AND— contra **lugar EN + región
+  Flinn–Engdahl + nombre de país localizado**. Así un usuario en 中文 puede
+  buscar `日本` y encontrar sismos en Japón.
+  - Nuevo `services/geo_region.py`: enriquecimiento geográfico **offline** con
+    dependencias aisladas (fallback a `None` si faltan): `obspy` FlinnEngdahl
+    (lat/lon → región sísmica, cubre océanos), `reverse_geocoder` (lat/lon →
+    ISO de país) y `babel`/CLDR (ISO → nombre de país localizado, autoritativo,
+    sin traducción manual).
+  - Nuevas deps: `babel`, `reverse_geocoder` (+ datos empaquetados en el spec
+    de PyInstaller). **Validar en un build real** — el sandbox no las ejecuta.
+- **Filtro de profundidad** en la barra de eventos: cualquiera / somero
+  (<70 km) / intermedio (70–300) / profundo (>300). Categorías sísmicas
+  estándar. Claves i18n `events.filter_depth*` en las 4 locales.
+- **`TimezoneService.format_utc()` / `to_iso_utc()`** — formateadores UTC
+  siempre etiquetados, para estandarizar las superficies profesionales.
+
+### Changed
+- **Selector de rango temporal por arrastre (RangeSlider).** Nuevo widget de
+  doble manija estilo *brush* (`ui/range_slider.py`) — se arrastra cada manija o
+  la ventana entera. **Eje lineal** (la posición es proporcional al tiempo, las
+  marcas se ven a escala); los presets **encuadran** el slider en la ventana
+  elegida (`set_window`) para que lo reciente no quede apretado en un eje
+  1900-hoy; etiquetas adaptativas (año / año-mes). Reemplaza los calendarios en
+  el **análisis del panel de datos** y en el **Centro de eventos** (filtro
+  temporal + barra de búsqueda histórica). Pendiente: Replay (instante único,
+  requiere precisión). El mapeo valor↔fracción es puro y testeado.
+- **Análisis: selector de tiempo real + pre-chequeo del tope.** El combo crudo
+  1/5/10 años se reemplaza por **rango de fechas** (calendarios acotados a
+  1900–ahora) con presets (1 a / 5 a / 10 a / Todo) + personalizado. Antes de
+  descargar se consulta `fdsnws/count` y se muestra **"≈ N eventos"**; si supera
+  20 000 se avisa de acotar **sin descargar en balde**. (`fdsn_event` estrena
+  `build_count_url` + `count()`; `fdsn_worker` el canal `counted`.)
+- **Análisis: rigor estadístico (correcciones de método + 2 gráficas pro).**
+    - **Omori solo cuando aplica.** Antes se ajustaba `K/(t+c)^p` a CUALQUIER
+      catálogo (incl. regionales multianuales sin un mainshock), dando un p
+      espurio. Ahora `omori_fit` exige un **mainshock dominante** (≥0.8 sobre el
+      2.º mayor, ~Båth) y que las réplicas sean mayoría; si no, no se ajusta.
+    - **Nueva gráfica "Calidad del catálogo" (Mc / b en el tiempo)**: Mc y
+      b-value en ventanas de igual nº de eventos — para juzgar completitud y
+      estabilidad del b (lo primero que mira un sismólogo antes de creerse un b).
+    - **Sección transversal real (Wadati–Benioff)**: los epicentros se proyectan
+      sobre el eje **perpendicular a la fosa** (PCA) → "distancia a través de la
+      fosa" vs profundidad, en vez de la simplificación latitud-profundidad
+      (que solo valía con fosas N-S). `seismic_stats` estrena `mc_b_timeseries`
+      y `cross_section`.
+- **Modo En vivo: selector de región + menos ruido.** El modo en vivo estrena
+  un **selector de región** que acota KPIs / línea temporal / tasa / magnitud /
+  profundidad a la región elegida, mientras el **Top-10 sigue siendo global**
+  (ancla "qué pasa en el mundo"). El Top-10 deja de filtrarse por M≥3 (vista
+  general sin filtrar). Se quita la "Distribución por periodo" del modo en vivo
+  (redundante con la línea temporal y la tasa) — pasa a Análisis.
+- **Panel de datos: DOS páginas independientes (En vivo / Análisis).** Ya no es
+  un toggle que oculta/muestra el mismo set de gráficas: la web tiene dos
+  contenedores (`#page-live` / `#page-analysis`), cada gráfica pertenece a UNA
+  sola página y cambiar de modo solo muestra su contenedor. El análisis enseña
+  sus gráficas profesionales directamente (sin plegado). Conmutador **segmentado**
+  (En vivo | Análisis) prominente. Cada página muestra SOLO sus controles y
+  gráficas:
+    - **En vivo** → selector de periodo (1 h–30 d) + KPIs, Top países, magnitud,
+      profundidad, línea temporal, **tasa de eventos** y distribución por periodo.
+    - **Análisis** → controles de región + ventana (oculta el selector de
+      periodo) + profundidad × magnitud y la capa profesional (b-value / energía
+      / Omori / sección). La web reparte las gráficas vía `setDashboardMode()`.
+- **PAGER → "Tasa de eventos".** El radar PAGER (casi siempre vacío y con un
+  selector de región confuso) se reemplaza por un área-línea de eventos por bin
+  temporal. Eliminado el desplegable de región del PAGER.
+- **Selector de región profesional**: el desplegable muestra **`ISO · nombre`**
+  (`CL · Chile`, `JP · 日本`) en vez del código ISO crudo, con nombres
+  localizados **built-in** (no depende de babel en runtime). `region_presets`
+  estrena `display_label` y tabla `LOCAL_NAMES`.
+- **Globo sin emoji: todo el chrome usa iconos vectoriales.** Además del
+  selector "Mostrar" (台站/地震/全部 → SVG), se reemplazan los emoji restantes por
+  iconos `mask`+`currentColor`: botones de cámara (＋ − ⟲ → lupa+/lupa−/recargar),
+  pausa/play de rotación (⏸▶), icono del contador (📡🌋✨/⏳ → vía `data-layer`),
+  cabecera del tooltip de estación (📡) y la pantalla de error (🛰️ → globo).
+- **Selector de capa del globo: nombre más claro.** La etiqueta "Capa/图层"
+  (término GIS poco intuitivo) pasa a **"Mostrar/显示"**.
+- **Centro de eventos: fuera el botón "Restablecer", el histórico estrena
+  "Limpiar".** El reset (que volvía al estado inicial y recargaba) se elimina del
+  filtro en vivo. En modo Histórico, un botón **"Limpiar/清除"** vacía los
+  resultados y los filtros cliente dejando la vista lista para una nueva
+  búsqueda (el formulario de consulta se conserva).
+- **Selectores de fecha/hora acotados y modernizados** (todos los buscadores
+  temporales). Nuevo helper compartido `ui/date_picker.py`:
+  - `make_datetime_edit()` fija UTC + popup de calendario + límites
+    **[1900, ahora]**; el calendario **deshabilita (gris) las fechas futuras /
+    sin datos**. Aplicado al filtro en vivo (`event_filter_bar`), la búsqueda
+    histórica (`historical_search_bar`) y el inicio de replay (`replay_panel`).
+    El tope "ahora" se refresca al mostrar/activar el control para no quedar
+    obsoleto en sesiones largas.
+  - `QuickRangeBar`: chips de rango relativo (24 h / 7 d / 30 d / 1 a / 5 a)
+    que rellenan el rango histórico de una vez (estilo Grafana / GA). Estilo
+    QSS `#ChipButton` (pill compacto, reactivo a tema). Claves i18n
+    `daterange.*` en las 4 locales.
+
+### Fixed
+- **Cuelgues/cierres al alternar modo durante una consulta histórica larga.**
+  Si la consulta tardaba (muchos eventos) y el usuario pasaba a "En vivo" y
+  volvía, un resultado tardío sobrescribía la vista, re-bloqueaba el modo y podía
+  colgar/cerrar la app. Ahora los resultados/conteos tardíos se **ignoran si ya
+  no estás en análisis**, `build_payload` va protegido, y el timeout de descarga
+  sube de 15 s a **90 s** (las descargas grandes daban "no se pudo acceder" en
+  falso). El min-magnitud del análisis baja a **1.0–5.0 (def. 3.0)**: para
+  b-value/Mc hay que bajar cerca de Mc, no M≥4.
+
+### Fixed (UI)
+- **Popups de los `QComboBox` ya no recortan el texto.** El popup tomaba el
+  ancho del control, así que un ítem traducido más largo que la selección (p.
+  ej. "全部" en el selector de magnitud mínima del Centro de eventos) se
+  cortaba. Nuevo helper `ui/combo_utils.fit_combo`: mide el texto **más largo
+  entre los 4 idiomas** (vía `LocaleService.all_translations`) y fija con él el
+  ancho del combo y de su popup, de modo que cambiar de idioma nunca recorta.
+  Aplicado a TODOS los combos del proyecto: filtros de eventos (mag/prof),
+  análisis del panel de datos (región/ventana/mag), Centro de eventos
+  (periodo), búsqueda histórica (región/orden/límite), Workbench/replay
+  (estación/banda/salida), panel de control (estación) y ajustes/onboarding
+  (idioma/zona horaria).
+
+### Fixed (reporte en vivo)
+- **Estados de EE. UU. ya no se cuentan como países (códigos Y nombres).**
+  `extract_country` tenía solo ~28 nombres completos de estado y NINGÚN código
+  USPS de 2 letras; USGS usa ambos en el `place` ("…, CA" pero también
+  "…, New Hampshire") → "CA", "New Hampshire", "Maryland", "Pennsylvania"… se
+  contaban como "países" aparte de "United States". Ahora la lista incluye los
+  **50 estados completos + 50 códigos + DC + territorios**. (También corrige el
+  Top-10 del panel en pantalla.) *Pendiente menor:* códigos de países vecinos
+  como "MX" aún aparecen sueltos en reportes acotados a EE. UU. (solape de bbox).
+- **Top-10 de países del panel vuelve a filtrar micro-sismos por defecto
+  (M≥3.0).** `build_payload` había quedado con `country_min_magnitude` en 0.0
+  (deriva; el docstring decía 3.0), dejando que regiones con redes densas
+  (Alaska/California) coparan el ranking con eventos imperceptibles. Restaurado a
+  3.0; tests de `build_payload` actualizados (claves nuevas + filtro micro).
+- **El reporte en vivo se acota al PERIODO seleccionado.** El feed en vivo
+  siempre trae ~30 d (all_month) y el selector de periodo solo reetiquetaba: un
+  reporte de "1 d" mostraba 30 d de datos (resumen "en el último 1 d: 10660
+  sismos" con el mayor evento de hace 20 días). Ahora `report_context` filtra el
+  catálogo del reporte por ``now − periodo`` (además de por región), así el
+  conteo, el ranking, el resumen y las etiquetas de ventana coinciden con el
+  periodo del encabezado.
+- **El reporte en vivo se acota a la región elegida + muestra "Global".** Antes:
+  con "Global" no se mostraba ninguna región en la cabecera; con una región
+  (p. ej. China) se mostraba la etiqueta pero los datos seguían siendo globales
+  (el "más activo" salía EE. UU. en un reporte de China). Ahora `report_context`
+  filtra el catálogo del reporte por el bbox de la región (el Top-10 en pantalla
+  sigue global por diseño) y **siempre** etiqueta la región — "全球(不限地区)"
+  cuando es global.
+- **Resumen de situación coherente con su ventana.** Usaba el conteo de 24 h
+  pero lo etiquetaba con la ventana seleccionada (decía "en los últimos 30 d:
+  203" cuando 203 era de 24 h) y mezclaba el "más activo" de otra ventana. Ahora
+  describe la **ventana seleccionada** completa (conteo, mayor evento,
+  significativos, región más activa coherentes con el ranking).
+- **Etiquetas de ventana dinámicas.** El subtítulo ("…+ ranking 30 días") y el
+  título del ranking ("Top países (30 días)") estaban cableados a 30 días aunque
+  se eligiera 7 d / 24 h; ahora usan la ventana real (`{window}`).
+
+### Changed (reporte en vivo)
+- **Reporte en vivo = monitoreo puro.** Se **retira la sección "Análisis
+  profesional"** (GR/b, Mc, energía, histograma) del reporte en vivo: se
+  calculaba sobre el feed GLOBAL de ventana corta (mezcla de regímenes
+  tectónicos, magnitudes preliminares y de tipo mixto) → un b-value poco
+  interpretable. La estadística vive ahora SOLO en el reporte de análisis
+  (catálogo acotado a región + periodo). El reporte en vivo gana en cambio:
+  **resumen de situación** (párrafo auto-generado: nº de sismos en la ventana,
+  mayor evento + lugar + hace cuánto, nº significativos M≥4.5, región más
+  activa), **pie de figura** en la línea temporal, y una sección **"Fuentes y
+  notas"**: advertencia de datos en tiempo real **preliminares/revisables** +
+  tabla de procedencia (fuente de feeds, ventana, generado, estación). 12
+  claves i18n `report.live.*` en las 4 locales.
+- **Fix:** el KPI "Más reciente" usaba el reloj real (`time.time()`) en vez del
+  `now` del reporte → "hace miles de horas" con `now_unix` fijado; corregido.
+
+### Added (reporte)
+- **Reporte de exportación rediseñado: dos layouts según el modo.** El reporte
+  (HTML/PDF) deja de estar cableado a la historia de monitoreo 24 h:
+    - **En vivo** → reporte de monitoreo (KPIs 24 h, Top-10 países, magnitud/
+      profundidad, línea temporal, tabla de eventos) — sin cambios.
+    - **Análisis** → nuevo reporte **estadístico** del catálogo histórico
+      seleccionado: bloque de contexto (región · rango · M mín), KPIs (N, b±err,
+      Mc, energía total, rango de magnitud, periodo) y **siete gráficas SVG**
+      (Gutenberg–Richter, liberación de energía, Mc/b en el tiempo, densidad
+      espacial lon × lat, distribución de profundidad, sección de profundidad,
+      intervalos entre eventos) + tabla de los eventos mayores. `render()` elige
+      el layout por `context["mode"]`; la ruta de análisis es **pura** (no
+      importa Qt) → totalmente testeable. Plantilla nueva
+      `web/report/template_analysis.html`; renderers SVG puros
+      (`_render_energy_svg` / `_mcb_svg` / `_spatial_svg` / `_cross_section_svg`
+      / `_inter_event_svg`); 16 claves i18n `report.an.*` en las 4 locales.
+- **Rigor de reporte científico (análisis).** Tres añadidos para que el reporte
+  sea defendible, no solo un "snapshot":
+    - **Hallazgos** — párrafo interpretativo auto-generado (N/rango/periodo,
+      b±err vs b≈1, dominancia energética del mayor evento, estabilidad de
+      Mc/b, agrupamiento espacial, profundidad mediana + % someros).
+    - **Métodos y procedencia** — caja de **advertencias** (b poco fiable si el
+      catálogo está truncado cerca de Mc o el rango es estrecho; tipo de
+      magnitud sin verificar; energía dominada por los mayores), lista de
+      **métodos** (Mc MAXC+0.2, b Aki–Utsu MLE, fórmulas de energía/momento,
+      PCA de la sección, rejilla espacial) y tabla de **parámetros de consulta**
+      (región, rango UTC, M mín, extensión de datos, catálogo, generado, tipo
+      de magnitud).
+    - **Tabla con coordenadas (lat/lon) e ID de evento**; GR con línea de Mc +
+      anotación b/a; banda ±1σ en b(t); pies de figura en cada gráfica. ~42
+      claves i18n `report.an.*`/`report.table.*` en las 4 locales.
+- **Maquetado profesional del reporte de análisis.** Las gráficas pasan de
+  "blobs" sin ejes a **tarjetas de figura** con borde, título dentro y
+  `page-break-inside: avoid` (el título nunca se separa de su gráfica al partir
+  página). Cada SVG lleva ahora **ejes, rejilla, ticks y etiquetas**: energía y
+  Mc/b con **doble eje Y** (N/J, b/Mc), densidad espacial con ejes lon/lat y
+  **leyenda de color** (conteo), sección con profundidad hacia abajo en km,
+  intervalos con eje log (17m/4h/3d…). KPIs en rejilla fija 3×. Colores de eje
+  legibles en pantalla (oscuro) e impreso (blanco). Helpers SVG puros
+  `_plot_frame` / `_time_ticks` / `_lin_ticks`.
+
+### Changed (panel de datos)
+- **Omori → densidad espacial (lon × lat).** La gráfica de decaimiento de
+  réplicas (Omori) se sustituye por un mapa de **densidad espacial**: rejilla
+  lon × lat cuyas celdas se colorean por nº de eventos (azul→rojo) — responde
+  "¿dónde se concentra la actividad?", la pregunta natural de un panorama de
+  gran área y larga ventana (justo lo que usa el panel). Omori solo aplica a
+  una secuencia principal-réplicas aislada y casi siempre salía "no aplicable";
+  un diagrama espacio-tiempo (probado primero) solo lee bien sobre una
+  estructura lineal. Núcleo puro y testeado `spatial_density`. El `omori_fit`
+  (y sus tests) se conserva. i18n: `web.dashboard.chart.spatial` (se retiran
+  `chart.omori` / `pro.omori_p` / `pro.omori_na`).
+
+### Added (panel de datos)
+- **Análisis: rejilla equilibrada + dos gráficas nuevas.** Se rellenan los dos
+  huecos de la página de Análisis (ambas rejillas quedan pares, sin celdas
+  vacías): **distribución de profundidad** (histograma del catálogo de la
+  ventana) e **intervalos entre eventos** (distribución log de tiempos entre
+  sismos consecutivos — distingue catálogos ~Poissonianos de agrupados por
+  réplicas/enjambre). Núcleo puro y testeado `inter_event_times`. Claves i18n
+  `web.dashboard.chart.depthdist/interevent`, `axis.count/gap`, `pro.median_gap`.
+- **Dos gráficas nuevas:** **epicentros (lon × lat)** en la página En vivo
+  (dispersión geográfica coloreada por magnitud) y **magnitud vs tiempo** en
+  Análisis (secuencia de eventos de la ventana).
+- **Reporte con contexto:** el PDF/HTML encabeza con el modo (**En vivo /
+  Análisis**), la **región** y el **rango** seleccionados, y usa el catálogo
+  correspondiente (el histórico si estás en análisis). Claves i18n `report.ctx.*`.
+
+### Fixed
+- **Centro de eventos: tres regresiones del modo histórico.**
+    - **Aparecían estaciones al entrar en histórico sin buscar**: el panel de
+      cercanas conservaba la selección del último evento en vivo. Cambiar de
+      modo ahora descarta la selección y vacía ese panel.
+    - **"Limpiar" no limpiaba del todo**: ahora también olvida la selección y
+      vacía el panel de estaciones cercanas (además de resultados y filtros).
+    - **Desaparecía el botón de favoritear evento** en histórico: vivía en la
+      barra "en vivo" (oculta en histórico); se movió junto al conmutador de
+      modo, visible en ambos.
+- **Consulta histórica fallaba con "File name too long".** La clave de caché de
+  `fdsnws-event` era la URL entera URL-encoded; como nombre de fichero rebasaba
+  el límite de 255 bytes del SO. Ahora la clave es un **hash SHA-256** de la URL
+  (`cache_key_for_url`), de longitud fija.
+- **El botón "Restablecer" del filtro en vivo congelaba la app.** Causa raíz:
+  al limpiar el filtro se pasaba a mostrar TODOS los eventos y `QTableWidget`
+  (no virtualizado) intentaba pintar los ~miles del feed `all_month` (decenas de
+  miles de items) de golpe. Arreglos:
+    - **Tope de pintado de 2000 filas** (las más recientes) con aviso "mostrando
+      N de M — refina"; cualquier render es ya instantáneo.
+    - **Restablecer = volver al estado INICIAL de la página** (a petición del
+      usuario): modo En vivo + periodo por defecto ("día", el feed más pequeño)
+      + filtros limpios. Nunca se queda mostrando miles de filas.
+    - La categoría de distancia se **cachea por id** (se invalida al cambiar de
+      estaciones), usa el **mínimo O(M)** en vez de ordenar y solo se calcula
+      para las filas pintadas; el índice de búsqueda localizado solo se
+      construye para datasets ≤ 2500 eventos (por encima, búsqueda por `place`).
+- **Los eventos HISTÓRICOS no se podían revisar.** Al hacer doble clic (o elegir
+  estación) sobre un evento del catálogo histórico, no se abría nada: la señal
+  `review_requested` enviaba solo el `id` y `main_window._find_quake` lo buscaba
+  en el feed EN VIVO, donde un evento histórico no existe → `None`. Ahora la
+  señal lleva el `Earthquake` completo y la revisión funciona para eventos en
+  vivo e históricos por igual.
+- **Replay: el campo de inicio ahora ES UTC de verdad.** Antes el control era
+  LocalTime pero estaba etiquetado 'UTC'; al leerlo con `.toUTC()` el instante
+  de consulta salía bien, pero la **entrada manual** se interpretaba en hora
+  local y se desfasaba en silencio respecto a la etiqueta. Ahora el campo usa
+  `TimeSpec.UTC`: la entrada y la visualización coinciden con 'UTC' (el instante
+  consultado no cambia; ese `.toUTC()` pasa a ser no-op).
+- **Motor de filtrado de eventos** (`processing/event_filter.py`) reescrito:
+  multi-campo, tokens AND, plegado de acentos (Unicode NFKD) e intervalo de
+  profundidad `[min,max]`; sigue puro (sin Qt) y con tests. Retrocompatible.
+- **Política de zona horaria documentada y consistente**: superficies
+  analíticas (tablas de eventos / Replay / formas de onda / reporte técnico) en
+  **UTC etiquetado**; el dashboard en **hora local del usuario** (zona de
+  `TimezoneService`, etiquetada). Auditoría confirma que el código ya cumple;
+  se añaden helpers UTC para que el futuro trabajo no reintroduzca tiempos sin
+  etiqueta. (`docs/events-i18n-timezone.md`.)
+- **Emojis de UI reemplazados por iconos vectoriales profesionales.**
+  Los controles persistentes (pestañas de modo / sub-pestañas del Workbench,
+  botón de tema del header, botones de favorito ☆/★, refrescar, añadir,
+  escuchar, exportar, abrir-en-carpeta) ahora usan iconos PNG monocromos
+  recoloreados según el tema (`assets/icons/*.png` vía `ui/icons.get_icon`),
+  en lugar de glifos emoji. Cobertura: pro_window (modo/sub-pestañas), app_header
+  (sol/luna), event_center (refrescar + favoritos), my_data (refrescar),
+  replay (exportar), control_panel (escuchar + centinela "Añadir LAN Shake"),
+  diálogos de favorito del globo (evento + estación).
+- **Limpieza ligera de emojis en mensajes de estado (clase B).** En el texto
+  de estado transitorio: `✅→✓` y `❌→✗` (símbolo limpio en vez de emoji
+  coloreado) y se eliminan emojis decorativos de inicio de línea
+  (🌐 🔍 🤝 📈 ⚡ ★ 📍). Se **conservan** los símbolos de estado funcionales
+  universales (✓ ✗ ⚠ ▶ ⏸ ⏹) por su valor de lectura inmediata. 96 cadenas i18n
+  actualizadas en las 4 locales (siguen alineadas: 578 claves c/u).
+- **Workbench reestructurado en DOS MODOS de nivel superior** (ver
+  `docs/workbench-restructure.md`). Antes el Workbench era un panel con una
+  barra lateral que servía a la vez para En vivo y para Replay, lo que mezclaba
+  controles (estación, filtro, STA/LTA, sonido) que solo aplican a unos u otros.
+  Ahora:
+    - **📡 Monitoreo en vivo** — barra lateral (estación / conectar·detener /
+      filtro / STA-LTA / sonido) + sub-pestañas En vivo / 24h / Hodograma. Todo
+      son vistas en tiempo real de UNA estación.
+    - **⏪ Análisis histórico** — autocontenido: **selector de estación propio**
+      (desplegable, no editable) + **filtro independiente** (paso de banda
+      propio) + ventana + cargar/limpiar + export. La barra lateral se oculta en
+      este modo (Replay gana todo el ancho).
+  Replay ya **no es secuestrado** por el combo en vivo: cambiar la estación en
+  vivo solo la AÑADE como opción en Replay (soft bridge), no fuerza su selección.
+- **"Añadir estación al Workbench" ahora pregunta la INTENCIÓN.** El diálogo de
+  estación (globo / "Mi colección") ofrece **Monitorizar en vivo** (→ combo en
+  vivo, modo En vivo) o **Ver histórico** (→ selector de Replay, modo Histórico).
+- **Revisar un evento va SIEMPRE al modo Histórico** y fija la estación en el
+  selector de Replay; ya no escribe en el combo en vivo (evento e historia
+  quedan separados de la monitorización en vivo).
+
+### Fixed
+- **Replay: el espectrograma mostraba "EHZ" y segundos relativos.** (1) El canal
+  estaba HARDCODEADO en la cadena i18n del título ("Espectrograma (EHZ)"), erróneo
+  para estaciones de banda ancha; ahora el canal se fija dinámicamente (p. ej.
+  ``BHZ``). (2) El eje X usaba segundos relativos NEGATIVOS (convención del modo
+  en vivo), incoherente con el oscilograma; en Replay ahora usa **hora UTC
+  absoluta**, alineada con la traza. (En vivo sigue con segundos relativos.)
+- **Revisar un evento ahora también añade su estación al combo del Workbench.**
+  Antes la estación con la que se revisaba no aparecía en el selector, lo que
+  causaba confusión de "qué estación/fecha estoy mirando". Ahora se añade a la
+  lista (se selecciona si no hay stream en vivo; si lo hay, se añade sin
+  interrumpir la conexión). Evento y estación quedan vinculados también en la UI.
+- **El popup de calendario del selector de fecha se rompía** (días desalineados,
+  faltaba el "10", cabecera de semana mal). Causa: las reglas QSS de tabla
+  recién añadidas usaban el selector genérico ``QTableView``, que la vista
+  interna del ``QCalendarWidget`` heredaba. Ahora las reglas de tabla se limitan
+  a ``QTableWidget`` y el calendario tiene su propio estilo temático.
+- **Replay: tras revisar un evento, cambiar la fecha a mano seguía mostrando
+  el banner "revisando evento".** Ahora un cambio MANUAL de la fecha de inicio
+  pasa a **modo búsqueda histórica independiente**: se limpia el contexto de
+  evento (banner + llegadas TauP). Los ajustes programáticos de ventana
+  (prefill / catálogo / sugerir-ventana) van protegidos y no lo disparan.
+
+### Added
+- **Centro de eventos: barra de filtros con selector de rango temporal.** Nueva
+  fila de filtros (``EventFilterBar``) sobre la tabla de sismos: **rango temporal
+  UTC con calendario emergente** (activable), **magnitud mínima** (Any/≥2…≥6),
+  **búsqueda por lugar** y contador "mostrando X / Y" + reset. Filtra en local el
+  catálogo ya descargado (no re-consulta la red; el periodo día/semana/mes sigue
+  controlando la descarga). Lógica de filtrado pura en
+  ``processing/event_filter.py`` (testeable sin Qt).
+- **"Mi colección": filtro por rango temporal + búsqueda.** Reutiliza
+  ``EventFilterBar`` (sin magnitud) para filtrar a la vez sismos/estaciones
+  favoritos, grabaciones y catálogo; contador global. Las secciones siguen
+  ocultándose solo si NO hay datos en absoluto (filtrar a 0 deja la tabla vacía,
+  no oculta la sección).
+
+### Changed
+- **Selector de estación al revisar un evento (globo + "Mi colección").** Al
+  mandar a revisar un sismo aparece un **selector de las estaciones más
+  cercanas** (la enlazada/cercana pre-seleccionada). Antes solo lo tenía "Mi
+  colección"; ahora el **botón Revisar del globo** usa el mismo selector (lógica
+  unificada en ``_review_quake_with_picker``), en vez de abrir directamente con
+  la más cercana. En "Mi colección" la estación elegida se **re-vincula** al
+  favorito (``FavoritesStore.set_event_station``). Si no hay catálogo de
+  estaciones, cae a la enlazada/cercana por defecto. (El centro de eventos no
+  necesita el selector: ya tiene su tabla de estaciones cercanas visible.)
+- **Favoritos: evento y estación van enlazados.** Al ☆favoritear un sismo en el
+  centro de eventos, ahora también se favoritea la **estación relacionada** (la
+  seleccionada en la lista de cercanas, o la más cercana) y el favorito del
+  evento **recuerda esa estación** (``FavoriteEvent.network`` / ``.station``).
+  Revisar un sismo favorito usa ESA estación de forma determinista (antes
+  re-calculaba la cercana cada vez, que podía cambiar según el feed). Compatible
+  hacia atrás: favoritos antiguos sin estación caen a la más cercana.
+- **Replay: desacoplado del botón Detener; botón "Limpiar" propio.** Antes,
+  pulsar Detener en el stream en vivo BORRABA también la traza histórica cargada
+  en Replay (estaban atados), forzando re-descargar tras una desconexión. Ahora
+  Replay es independiente de la conexión en vivo y tiene su propio botón
+  **"Limpiar"** (junto a "Cargar"), que limpia traza + contexto de evento
+  (banner/TauP) y restablece los botones. Detener ya no toca Replay.
+- **UI: las tablas ahora siguen el tema.** El QSS no tenía regla para
+  ``QTableWidget``/``QHeaderView`` → usaban el estilo nativo de Qt (encabezados,
+  líneas y selección fuera de la paleta macOS). Añadidas reglas de tabla
+  (cabecera, hairlines, selección accent, filas alternas) y la regla que faltaba
+  para ``QLabel#Caption`` (se usaba en todo el código sin estar definida). Filas
+  alternas activadas en las tablas de "Mi colección" y de estaciones cercanas.
+
 ## [0.8.0.0] — 2026-06-17
 
 🌟 **Release mayor** — reorganización de la app en torno al flujo
@@ -163,7 +621,21 @@ Lo más destacado:
   Estimación de dirección de una sola estación. (Inicio del 2.º bloque del
   roadmap.) Función pura ``measurements.polarization_azimuth`` con tests.
 
+### Removed
+- **Estación "Demo (datos simulados)" (XX.MOCK) eliminada del Workbench en
+  vivo.** Ya no aparece en el selector de estaciones; se quitó su rama
+  ``MockSource`` del flujo en vivo (``workbench_controller``) y el caso especial
+  XX en el botón m/s. El default pasa a "Mi Shake LAN (rs.local)"; las estaciones
+  IRIS reales se añaden desde el globo. (La clase ``MockSource`` se conserva para
+  los tests.)
+
 ### Fixed
+- **Replay: "Limpiar" no borraba el espectrograma.** ``_clear_display`` reseteaba
+  el oscilograma y el PSD pero **olvidaba el espectrograma**, que quedaba con la
+  imagen anterior. Ahora también se resetea.
+- **Globo: el texto del diálogo "¿Revisar este sismo?" estaba desactualizado.**
+  Decía "con la estación MÁS CERCANA" / "Replay"; ahora refleja el flujo actual
+  ("Análisis histórico" + "eliges una estación cercana a continuación").
 - **La suite de tests podía leer/BORRAR los datos reales del usuario.**
   ``QSettings(org, app)`` no respeta ``setPath``/``setDefaultFormat`` (en macOS
   lee el *plist* nativo real), así que el aislamiento por ``setPath`` no servía:

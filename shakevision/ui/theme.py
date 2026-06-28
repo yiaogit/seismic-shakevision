@@ -248,6 +248,13 @@ def _build_qss(p: dict[str, str]) -> str:
     QLabel#StatusOk    {{ color: {p["ok"]};          font-weight: 600; }}
     QLabel#StatusWarn  {{ color: {p["accent_warm"]}; font-weight: 600; }}
     QLabel#StatusAlert {{ color: {p["alert"]};       font-weight: 600; }}
+    /* Caption: texto secundario pequeño (hints, contadores, "última
+       actualización"…). Se usaba por todo el código vía objectName pero
+       no tenía regla → caía al estilo por defecto. */
+    QLabel#Caption {{
+        color: {p["text_muted"]};
+        font-size: {FONT_SIZE_LABEL}px;
+    }}
 
     /* ── INPUTS (ComboBox, SpinBox, LineEdit, DateTime) ──
        Estilo "pill" macOS: rounded 8px, padding cómodo, focus
@@ -349,6 +356,58 @@ def _build_qss(p: dict[str, str]) -> str:
         border-color: {p["accent_hover"]};
     }}
     QPushButton[primary="true"]:pressed, QPushButton#PrimaryButton:pressed {{
+        background-color: {p["accent_glow"]};
+    }}
+
+    /* ── Conmutador segmentado En vivo / Histórico (v0.8.x) ──
+       Toggle estilo macOS: el seleccionado se rellena con accent,
+       el resto queda suave. Compacto (padding menor que un botón normal). */
+    QPushButton#SegmentButton {{
+        background-color: {p["panel_elevated"]};
+        color: {p["text_secondary"]};
+        border: 1px solid {p["panel_border"]};
+        border-radius: 7px;
+        padding: 6px 16px;
+        font-weight: 500;
+        min-height: 16px;
+        margin: 0px 2px;
+    }}
+    QPushButton#SegmentButton:hover {{
+        background-color: {p["panel"]};
+        border-color: {p["text_muted"]};
+    }}
+    QPushButton#SegmentButton:checked {{
+        background-color: {p["accent"]};
+        color: white;
+        border-color: {p["accent"]};
+        font-weight: 600;
+    }}
+    QPushButton#SegmentButton:checked:hover {{
+        background-color: {p["accent_hover"]};
+        border-color: {p["accent_hover"]};
+    }}
+    QPushButton#SegmentButton:focus {{
+        border: 2px solid {p["accent"]};
+        padding: 5px 15px;
+    }}
+
+    /* ── Chips de rango rápido (24 h / 7 d / …) — pill compacto ── */
+    QPushButton#ChipButton {{
+        background-color: {p["panel_elevated"]};
+        color: {p["text_secondary"]};
+        border: 1px solid {p["panel_border"]};
+        border-radius: 11px;
+        padding: 3px 12px;
+        font-size: 11px;
+        font-weight: 500;
+        min-height: 0px;
+    }}
+    QPushButton#ChipButton:hover {{
+        background-color: {p["accent"]};
+        color: white;
+        border-color: {p["accent"]};
+    }}
+    QPushButton#ChipButton:pressed {{
         background-color: {p["accent_glow"]};
     }}
 
@@ -458,6 +517,85 @@ def _build_qss(p: dict[str, str]) -> str:
         color: {p["accent"]};
         background-color: {p["panel_elevated"]};
         font-weight: 600;
+    }}
+
+    /* ── TABLES (antes usaban el estilo nativo de Qt, fuera de tema) ──
+       IMPORTANTE: estos selectores se limitan a **QTableWidget** (las
+       tablas de datos: centro de eventos, estaciones cercanas, "Mi
+       colección"). NO usar el selector genérico ``QTableView``: la vista
+       interna del calendario (``QCalendarWidget`` → ``QTableView``) lo
+       heredaría y se rompería la rejilla de días (v0.8.0 hotfix). */
+    QTableWidget {{
+        background-color: {p["panel"]};
+        alternate-background-color: {p["panel_elevated"]};
+        color: {p["text_primary"]};
+        gridline-color: {p["panel_divider"]};
+        border: 1px solid {p["panel_border"]};
+        border-radius: 10px;
+        selection-background-color: {p["accent"]};
+        selection-color: white;
+        outline: 0;
+    }}
+    QTableWidget::item {{
+        padding: 4px 8px;
+        border: none;
+    }}
+    QTableWidget::item:selected {{
+        background-color: {p["accent"]};
+        color: white;
+    }}
+    QTableWidget QHeaderView::section {{
+        background-color: {p["background"]};
+        color: {p["text_secondary"]};
+        padding: 6px 10px;
+        border: none;
+        border-bottom: 1px solid {p["panel_border"]};
+        font-weight: 600;
+        font-size: {FONT_SIZE_LABEL}px;
+    }}
+    QTableWidget QHeaderView::section:hover {{
+        color: {p["text_primary"]};
+    }}
+    QTableWidget QTableCornerButton::section {{
+        background-color: {p["background"]};
+        border: none;
+        border-bottom: 1px solid {p["panel_border"]};
+    }}
+
+    /* ── CALENDAR POPUP (selector de fecha de Replay / filtros) ──
+       Tematiza el desplegable de QDateTimeEdit. Reglas propias para no
+       depender del estilo de tabla de arriba. */
+    QCalendarWidget QWidget {{
+        alternate-background-color: {p["panel_elevated"]};
+    }}
+    QCalendarWidget QToolButton {{
+        color: {p["text_primary"]};
+        background-color: transparent;
+        border: none;
+        border-radius: 6px;
+        padding: 4px 10px;
+        margin: 2px;
+    }}
+    QCalendarWidget QToolButton:hover {{
+        background-color: {p["panel_elevated"]};
+    }}
+    QCalendarWidget QToolButton::menu-indicator {{ image: none; }}
+    QCalendarWidget #qt_calendar_navigationbar {{
+        background-color: {p["background"]};
+        border-bottom: 1px solid {p["panel_border"]};
+    }}
+    QCalendarWidget QSpinBox {{
+        margin: 2px;
+    }}
+    QCalendarWidget QAbstractItemView {{
+        background-color: {p["panel"]};
+        color: {p["text_primary"]};
+        selection-background-color: {p["accent"]};
+        selection-color: white;
+        outline: 0;
+    }}
+    QCalendarWidget QAbstractItemView:disabled {{
+        color: {p["text_muted"]};
     }}
 
     /* ── STATUS BAR (hairline footer) ──────────────────── */

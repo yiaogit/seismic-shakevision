@@ -47,10 +47,11 @@ class StationPreset:
 # Conjunto inicial de presets. El usuario podrá añadir más en tiempo de
 # ejecución; estos solo sirven como punto de partida.
 DEFAULT_STATIONS: list[StationPreset] = [
-    StationPreset(label="Demo (datos simulados)", network="XX", station="MOCK"),
+    # v0.8.0: se eliminó la estación "Demo (datos simulados)" (XX.MOCK).
     # ⚠ Las estaciones AM remotas requieren acceso real-time vía LAN
     # al Raspberry Shake propio. Conectar al servidor público falla.
-    # Estos presets sirven solo como ejemplo del formato N.S.L.C.
+    # Estos presets sirven solo como ejemplo del formato N.S.L.C.; el usuario
+    # añade estaciones IRIS reales desde el globo ("Monitorizar en vivo").
     StationPreset(label="Mi Shake LAN (rs.local)",  network="AM", station="LOCAL"),
 ]
 

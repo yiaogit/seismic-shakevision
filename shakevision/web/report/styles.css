@@ -311,10 +311,11 @@ footer.report-footer {
     color: #18181b;
     border-color: #e4e4e7;
   }
-  table.events td.mag    { width: 50px; }
-  table.events td.time   { width: 130px; }
-  table.events td.depth  { width: 60px; }
-  table.events td.pager  { width: 60px; }
+  table.events td.mag    { width: 64px; }
+  table.events td.time   { width: 116px; }
+  table.events td.coord  { width: 44px; }
+  table.events td.depth  { width: 56px; }
+  table.events td.pager  { width: 58px; }
   /* la quinta columna (place) auto-fit con wrap */
 
   .timeline-svg { background: #f4f4f5; border-color: #d4d4d8; }
@@ -328,4 +329,183 @@ footer.report-footer {
   /* Tipografía de impresión: evita huérfanas y viudas */
   p, li, td, th { orphans: 2; widows: 2; }
   h1, h2 { page-break-after: avoid; break-after: avoid; }
+}
+
+/* ── Contexto del reporte (modo + región + rango) ──────── */
+.report-context {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 4px;
+}
+.ctx-mode {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 12px;
+  border-radius: 999px;
+  color: #fff;
+}
+.ctx-analysis { background: #0a84ff; }
+.ctx-live { background: #34c759; }
+.ctx-chip {
+  font-size: 12px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(127, 127, 127, 0.22);
+  font-family: "JetBrains Mono", monospace;
+}
+
+/* ── Análisis profesional ──────────────────────────────── */
+.pro-section h3 {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 4px 0 8px;
+}
+.pro-kpis {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.pro-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 14px;
+  border: 1px solid rgba(127, 127, 127, 0.18);
+  border-radius: 8px;
+  min-width: 92px;
+}
+.pro-kpi span {
+  font-size: 10px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #71717a;
+}
+.pro-kpi strong {
+  font-size: 15px;
+  font-family: "JetBrains Mono", monospace;
+}
+
+/* ── Reporte de ANÁLISIS: rejilla KPI + tarjetas de figura ───────── */
+.an-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.an-kpis .pro-kpi { min-width: 0; }
+
+.fig-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 4px;
+}
+.fig-card {
+  border: 1px solid #262626;
+  border-radius: 10px;
+  background: #111111;
+  padding: 12px 14px 10px;
+  page-break-inside: avoid;     /* nunca partir título + gráfica */
+  break-inside: avoid;
+}
+.fig-card figcaption {
+  font-size: 12px;
+  font-weight: 600;
+  color: #fafafa;
+  margin: 0 0 8px;
+}
+.fig-card svg { width: 100%; height: auto; display: block; }
+.fig-empty {
+  color: #71717a;
+  font-size: 11px;
+  padding: 28px 0;
+  text-align: center;
+}
+
+.fig-cap {
+  font-size: 10px;
+  color: #71717a;
+  line-height: 1.4;
+  margin: 7px 0 0;
+}
+
+/* Hallazgos (párrafo interpretativo) */
+.findings p {
+  font-size: 12.5px;
+  line-height: 1.65;
+  margin: 2px 0 0;
+}
+
+/* Métodos + procedencia + advertencias */
+.warn-box {
+  border: 1px solid rgba(234, 179, 8, 0.5);
+  background: rgba(234, 179, 8, 0.09);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: 2px 0 14px;
+  page-break-inside: avoid;
+}
+.warn-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #b45309;
+  margin-bottom: 4px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+.warn-box ul { margin: 0; padding-left: 18px; }
+.warn-box li { font-size: 11.5px; line-height: 1.5; margin: 2px 0; }
+.methods-list { margin: 0 0 14px; padding-left: 18px; }
+.methods-list li {
+  font-size: 11.5px;
+  line-height: 1.6;
+  margin: 2px 0;
+  font-family: "JetBrains Mono", monospace;
+}
+.params-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.params-table th {
+  text-align: left;
+  font-weight: 600;
+  color: #a1a1aa;
+  width: 40%;
+  padding: 3px 10px 3px 0;
+  vertical-align: top;
+}
+.params-table td {
+  padding: 3px 0;
+  font-family: "JetBrains Mono", monospace;
+  word-break: break-word;
+}
+.methods-section h3 { font-size: 12px; font-weight: 600; margin: 4px 0 8px; }
+
+table.events td.coord {
+  font-family: "JetBrains Mono", monospace;
+  color: #a1a1aa;
+  text-align: right;
+  width: 52px;
+}
+.evid {
+  font-size: 9px;
+  color: #52525b;
+  font-family: "JetBrains Mono", monospace;
+}
+
+@media print {
+  .an-kpis { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .fig-grid { gap: 12px; }
+  .fig-card {
+    background: #fafafa;
+    border-color: #d4d4d8;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .fig-card figcaption { color: #18181b; }
+  .fig-cap, .params-table th, .evid { color: #52525b; }
+  .warn-box { border-color: #d4a017; background: #fdf6e3; }
+  .warn-title { color: #92400e; }
+  .params-table td, .methods-list li { color: #18181b; }
+  .methods-section { page-break-inside: avoid; }
 }

@@ -175,10 +175,23 @@
   const chart_pager   = echarts.init(document.getElementById("chart-pager"), null, { renderer: "canvas" });
   const chart_trend   = echarts.init(document.getElementById("chart-trend"), null, { renderer: "canvas" });
   const chart_scatter = echarts.init(document.getElementById("chart-scatter"), null, { renderer: "canvas" });
+  const chart_epi     = echarts.init(document.getElementById("chart-epicenters"), null, { renderer: "canvas" });
+  const chart_magtime = echarts.init(document.getElementById("chart-magtime"), null, { renderer: "canvas" });
+  const chart_depthdist = echarts.init(document.getElementById("chart-depthdist"), null, { renderer: "canvas" });
+  // Capa profesional (los contenedores arrancan ocultos → 0px; se redimensionan
+  // al desplegar la fila).
+  const chart_gr       = echarts.init(document.getElementById("chart-gr"), null, { renderer: "canvas" });
+  const chart_energy   = echarts.init(document.getElementById("chart-energy"), null, { renderer: "canvas" });
+  const chart_spatial = echarts.init(document.getElementById("chart-spatial"), null, { renderer: "canvas" });
+  const chart_depthsec = echarts.init(document.getElementById("chart-depthsec"), null, { renderer: "canvas" });
+  const chart_mcb      = echarts.init(document.getElementById("chart-mcb"), null, { renderer: "canvas" });
+  const chart_interevent = echarts.init(document.getElementById("chart-interevent"), null, { renderer: "canvas" });
 
   window.addEventListener("resize", () => {
     [chart_country, chart_mag, chart_depth, chart_time,
-     chart_pager, chart_trend, chart_scatter].forEach(c => c.resize());
+     chart_pager, chart_trend, chart_scatter, chart_epi, chart_magtime, chart_depthdist,
+     chart_gr, chart_energy, chart_spatial, chart_depthsec, chart_mcb, chart_interevent]
+      .forEach(c => c.resize());
   });
 
   // ============================================================
@@ -388,42 +401,31 @@
   // ============================================================
   // Avanzado · PAGER (radar)
   // ============================================================
-  function renderPager(data) {
-    if (!data || data.length === 0 || data.every(d => d.count === 0)) {
+  // Tasa de eventos (sustituye al radar PAGER): área-línea de nº de eventos
+  // por bin temporal a lo largo de la ventana.
+  function renderEventRate(data) {
+    if (!data || data.length === 0 || data.every(d => d.n === 0)) {
       chart_pager.clear();
       return;
     }
-    const max = Math.max(5, ...data.map(d => d.count));
+    const pts = data.map(d => [d.ts * 1000, d.n]);
     chart_pager.setOption({
-      ...baseOption(),
-      grid: undefined,
-      tooltip: { ...baseOption().tooltip, trigger: "item" },
-      radar: {
-        indicator: data.map(d => ({ name: d.label, max })),
-        center: ["50%", "55%"],
-        radius: "62%",
-        splitLine: { lineStyle: { color: "rgba(255,255,255,0.06)" } },
-        splitArea: { areaStyle: { color: ["rgba(255,255,255,0.02)", "rgba(255,255,255,0.04)"] } },
-        axisLine: { lineStyle: { color: "rgba(255,255,255,0.10)" } },
-        axisName: {
-          color: TEXT_PRIMARY, fontSize: 11, fontFamily: FONT_SANS,
-          backgroundColor: "transparent",
-        },
-      },
-      series: [{
-        type: "radar",
-        symbolSize: 6,
+      backgroundColor: "transparent",
+      grid: { left: 44, right: 16, top: 16, bottom: 28 },
+      tooltip: { trigger: "axis", backgroundColor: TOOLTIP_BG,
+        borderColor: TOOLTIP_BORDER, textStyle: { color: TEXT_PRIMARY } },
+      xAxis: { type: "time", splitLine: { show: false },
+        axisLabel: { color: TEXT_SECONDARY, fontFamily: FONT_MONO,
+          fontSize: 10 } },
+      yAxis: { type: "value", name: t("web.dashboard.axis.events"),
+        nameTextStyle: { color: TEXT_MUTED, fontSize: 10 },
+        axisLabel: { color: TEXT_SECONDARY, fontFamily: FONT_MONO,
+          fontSize: 10 },
+        splitLine: { lineStyle: { color: GRID_LINE } } },
+      series: [{ type: "line", smooth: true, showSymbol: false, data: pts,
         lineStyle: { color: ACCENT, width: 2 },
-        areaStyle: { color: "rgba(59,130,246,0.18)" },
-        itemStyle: {
-          color: (params) => data[params.dataIndex]?.color || ACCENT,
-        },
-        data: [{
-          value: data.map(d => d.count),
-          name: t("web.dashboard.series.pager"),
-        }],
-      }],
-    });
+        areaStyle: { color: ACCENT, opacity: 0.15 } }],
+    }, true);
   }
 
   // ============================================================
@@ -580,7 +582,11 @@
     if (seconds <= 6 * 3600) return "6 h";
     if (seconds <= 24 * 3600) return "24 h";
     if (seconds <= 7 * 86400) return "7 d";
-    return "30 d";
+    if (seconds <= 45 * 86400) return "30 d";
+    const days = seconds / 86400;
+    if (days < 330) return `${Math.round(days / 30)} mo`;
+    const years = seconds / (365 * 86400);
+    return years < 1.5 ? "1 y" : `${Math.round(years)} y`;
   }
 
   function renderKPIs(payload) {
@@ -597,14 +603,10 @@
     document.getElementById("kpi-max-mag").textContent =
       payload.max_magnitude != null ? `M ${payload.max_magnitude.toFixed(1)}` : "—";
 
-    // País / estación: si tenemos summary mostramos S/U conteos
-    const countriesEl = document.getElementById("kpi-countries");
-    if (payload.station_summary && payload.station_summary.total > 0) {
-      const s = payload.station_summary;
-      countriesEl.textContent = `${payload.country_count || 0} · ${s.shakenet}S/${s.usgs}U`;
-    } else {
-      countriesEl.textContent = Number(payload.country_count || 0).toLocaleString();
-    }
+    // Regiones afectadas: solo el nº de regiones (el conteo de estaciones que
+    // se anexaba aquí confundía y venía con cifras erróneas).
+    document.getElementById("kpi-countries").textContent =
+      Number(payload.country_count || 0).toLocaleString();
 
     if (payload.latest_iso) {
       const dt = new Date(payload.latest_iso);
@@ -696,6 +698,287 @@
     currentTheme() { return currentTheme; },
   };
 
+  // ============================================================
+  // Capa de análisis PROFESIONAL (b-value / energía / densidad espacial / profundidad)
+  // ============================================================
+  const _axis = (name) => ({
+    nameTextStyle: { color: TEXT_MUTED, fontSize: 11 },
+    axisLabel: { color: TEXT_SECONDARY, fontFamily: FONT_MONO, fontSize: 11 },
+    splitLine: { lineStyle: { color: GRID_LINE } },
+    name,
+  });
+  const _tip = () => ({ backgroundColor: TOOLTIP_BG, borderColor: TOOLTIP_BORDER,
+    textStyle: { color: TEXT_PRIMARY } });
+
+  function renderGR(pro) {
+    if (!pro || !pro.fmd || !pro.fmd.mag.length) { chart_gr.clear(); return; }
+    const f = pro.fmd;
+    const cum = f.mag.map((m, i) => [m, f.cumulative[i]]).filter(p => p[1] > 0);
+    const inc = f.mag.map((m, i) => [m, f.incremental[i]]).filter(p => p[1] > 0);
+    const series = [
+      { name: t("web.dashboard.series.gr_cum"), type: "scatter", data: cum,
+        symbolSize: 7, itemStyle: { color: ACCENT } },
+      { name: "inc", type: "scatter", data: inc, symbolSize: 4,
+        itemStyle: { color: TEXT_MUTED, opacity: 0.5 } },
+    ];
+    let subtext = "";
+    if (pro.b_value) {
+      const bv = pro.b_value;
+      const fit = [];
+      for (let m = bv.mc; m <= f.mag[f.mag.length - 1] + 0.1; m += 0.1) {
+        const nfit = Math.pow(10, bv.a - bv.b * m);
+        if (nfit >= 0.8) fit.push([m, nfit]);
+      }
+      series.push({ name: t("web.dashboard.series.gr_fit"), type: "line",
+        data: fit, showSymbol: false,
+        lineStyle: { color: ACCENT_2, type: "dashed", width: 2 } });
+      subtext = t("web.dashboard.pro.bvalue", { b: bv.b.toFixed(2),
+        err: bv.b_err.toFixed(2), mc: bv.mc.toFixed(1), n: bv.n });
+    }
+    chart_gr.setOption({
+      backgroundColor: "transparent",
+      title: subtext ? { text: subtext, left: "center", top: 4,
+        textStyle: { color: TEXT_SECONDARY, fontSize: 11, fontFamily: FONT_MONO,
+          fontWeight: 400 } } : undefined,
+      grid: { left: 48, right: 16, top: subtext ? 32 : 16, bottom: 36 },
+      tooltip: Object.assign({ trigger: "item" }, _tip()),
+      xAxis: Object.assign({ type: "value", nameLocation: "middle", nameGap: 22 },
+        _axis(t("web.dashboard.axis.magnitude"))),
+      yAxis: Object.assign({ type: "log" }, _axis("N")),
+      series,
+    }, true);
+  }
+
+  function renderEnergy(pro) {
+    if (!pro || !pro.cumulative || !pro.cumulative.t.length) {
+      chart_energy.clear(); return;
+    }
+    const c = pro.cumulative;
+    const cnt = c.t.map((ts, i) => [ts * 1000, c.count[i]]);
+    const ene = c.t.map((ts, i) => [ts * 1000, c.energy_cum[i]]);
+    chart_energy.setOption({
+      backgroundColor: "transparent",
+      grid: { left: 52, right: 58, top: 28, bottom: 32 },
+      tooltip: Object.assign({ trigger: "axis" }, _tip()),
+      legend: { top: 2, textStyle: { color: TEXT_MUTED, fontSize: 10 },
+        data: [t("web.dashboard.series.cum_count"),
+          t("web.dashboard.series.cum_energy")] },
+      xAxis: { type: "time", splitLine: { show: false },
+        axisLabel: { color: TEXT_SECONDARY, fontFamily: FONT_MONO, fontSize: 10 } },
+      yAxis: [
+        Object.assign({ type: "value" }, _axis(t("web.dashboard.axis.cum_count"))),
+        Object.assign({ type: "log", position: "right",
+          splitLine: { show: false } }, _axis("J")),
+      ],
+      series: [
+        { name: t("web.dashboard.series.cum_count"), type: "line",
+          showSymbol: false, yAxisIndex: 0, data: cnt,
+          lineStyle: { color: ACCENT, width: 2 },
+          areaStyle: { color: ACCENT, opacity: 0.12 } },
+        { name: t("web.dashboard.series.cum_energy"), type: "line",
+          showSymbol: false, yAxisIndex: 1, data: ene,
+          lineStyle: { color: "#ff9f0a", width: 2 } },
+      ],
+    }, true);
+  }
+
+  // ANÁLISIS: densidad espacial (rejilla lon × lat). Cada celda = un cuadro
+  // coloreado por nº de eventos (azul→rojo): muestra DÓNDE se concentra la
+  // actividad en un panorama de gran área. Datos: [lon, lat, conteo, mag_máx].
+  function renderSpatial(pro) {
+    const sp = pro && pro.spatial;
+    const cells = sp && sp.cells;
+    if (!cells || !cells.length) { chart_spatial.clear(); return; }
+    const maxc = cells.reduce((a, c) => Math.max(a, c[2]), 1);
+    chart_spatial.setOption({
+      backgroundColor: "transparent",
+      grid: { left: 48, right: 16, top: 14, bottom: 28 },
+      tooltip: Object.assign({ trigger: "item",
+        formatter: p => `${p.data[2]}× · M≤${p.data[3].toFixed(1)} · ` +
+          `${p.data[1].toFixed(1)}°, ${p.data[0].toFixed(1)}°` }, _tip()),
+      xAxis: Object.assign({ type: "value", scale: true },
+        _axis(t("web.dashboard.axis.longitude"))),
+      yAxis: Object.assign({ type: "value", scale: true },
+        _axis(t("web.dashboard.axis.latitude"))),
+      visualMap: { show: false, min: 1, max: maxc, dimension: 2,
+        inRange: { color: ["#1e3a8a", "#3b82f6", "#10b981", "#f59e0b",
+          "#ef4444"] } },
+      series: [{ type: "scatter", data: cells, symbol: "rect",
+        symbolSize: 13, itemStyle: { opacity: 0.82 } }],
+    }, true);
+  }
+
+  function renderDepthSection(pro) {
+    const sec = pro && pro.section;
+    if (!sec || !sec.length) { chart_depthsec.clear(); return; }
+    chart_depthsec.setOption({
+      backgroundColor: "transparent",
+      grid: { left: 52, right: 16, top: 16, bottom: 40 },
+      tooltip: Object.assign({ trigger: "item",
+        formatter: pp => `M ${pp.data[2].toFixed(1)} · ` +
+          `${t("web.dashboard.axis.depth_km")} ${pp.data[1].toFixed(0)}` }, _tip()),
+      xAxis: Object.assign({ type: "value", nameLocation: "middle", nameGap: 24,
+        scale: true }, _axis(t("web.dashboard.axis.distance"))),
+      yAxis: Object.assign({ type: "value", inverse: true, scale: true },
+        _axis(t("web.dashboard.axis.depth_km"))),
+      visualMap: { show: false, min: 0, max: 8, dimension: 2,
+        inRange: { color: ["#66bb6a", "#fbc02d", "#f4511e", "#c62828"] } },
+      series: [{ type: "scatter", data: sec,
+        symbolSize: pp => 3 + pp[2] * 1.6 }],
+    }, true);
+  }
+
+  // Calidad del catálogo: Mc(t) y b(t) en ventanas (con banda de error en b).
+  function renderMcB(pro) {
+    const s = pro && pro.mc_b;
+    if (!s || !s.t || s.t.length < 2) {
+      chart_mcb.setOption({ backgroundColor: "transparent",
+        title: { text: t("web.dashboard.pro.insufficient"), left: "center",
+          top: "center", textStyle: { color: TEXT_MUTED, fontSize: 12,
+            fontWeight: 400 } },
+        xAxis: { show: false }, yAxis: { show: false }, series: [] }, true);
+      return;
+    }
+    const tms = s.t.map(x => x * 1000);
+    const bpts = s.t.map((x, i) => [tms[i], s.b[i]]);
+    const mcpts = s.t.map((x, i) => [tms[i], s.mc[i]]);
+    chart_mcb.setOption({
+      backgroundColor: "transparent",
+      grid: { left: 44, right: 44, top: 24, bottom: 28 },
+      tooltip: Object.assign({ trigger: "axis" }, _tip()),
+      legend: { top: 2, textStyle: { color: TEXT_MUTED, fontSize: 10 },
+        data: ["b", "Mc"] },
+      xAxis: { type: "time", splitLine: { show: false },
+        axisLabel: { color: TEXT_SECONDARY, fontFamily: FONT_MONO,
+          fontSize: 10 } },
+      yAxis: [
+        Object.assign({ type: "value", scale: true }, _axis("b")),
+        Object.assign({ type: "value", scale: true, position: "right",
+          splitLine: { show: false } }, _axis("Mc")),
+      ],
+      series: [
+        { name: "b", type: "line", data: bpts, yAxisIndex: 0,
+          showSymbol: true, symbolSize: 5,
+          lineStyle: { color: ACCENT, width: 2 } },
+        { name: "Mc", type: "line", data: mcpts, yAxisIndex: 1,
+          showSymbol: true, symbolSize: 4,
+          lineStyle: { color: "#ff9f0a", width: 2, type: "dashed" } },
+      ],
+    }, true);
+  }
+
+  // EN VIVO: dispersión de epicentros (lon × lat) coloreada por magnitud.
+  function renderEpicenters(pts) {
+    if (!pts || !pts.length) { chart_epi.clear(); return; }
+    chart_epi.setOption({
+      backgroundColor: "transparent",
+      grid: { left: 46, right: 16, top: 12, bottom: 34 },
+      tooltip: Object.assign({ trigger: "item",
+        formatter: p => `M ${p.data[2].toFixed(1)} · ` +
+          `${p.data[1].toFixed(1)}°, ${p.data[0].toFixed(1)}°` }, _tip()),
+      xAxis: Object.assign({ type: "value", scale: true,
+        nameLocation: "middle", nameGap: 22 },
+        _axis(t("web.dashboard.axis.longitude"))),
+      yAxis: Object.assign({ type: "value", scale: true },
+        _axis(t("web.dashboard.axis.latitude"))),
+      visualMap: { show: false, min: 0, max: 8, dimension: 2,
+        inRange: { color: ["#66bb6a", "#fbc02d", "#f4511e", "#c62828"] } },
+      series: [{ type: "scatter", data: pts,
+        symbolSize: p => 3 + p[2] * 1.4 }],
+    }, true);
+  }
+
+  // ANÁLISIS: magnitud vs tiempo (secuencia de eventos en la ventana).
+  function renderMagTime(pts) {
+    if (!pts || !pts.length) { chart_magtime.clear(); return; }
+    chart_magtime.setOption({
+      backgroundColor: "transparent",
+      grid: { left: 40, right: 16, top: 12, bottom: 28 },
+      tooltip: Object.assign({ trigger: "item",
+        formatter: p => `M ${p.data[1].toFixed(1)}` }, _tip()),
+      xAxis: { type: "time", splitLine: { show: false },
+        axisLabel: { color: TEXT_SECONDARY, fontFamily: FONT_MONO,
+          fontSize: 10 } },
+      yAxis: Object.assign({ type: "value", scale: true },
+        _axis(t("web.dashboard.axis.magnitude"))),
+      visualMap: { show: false, min: 0, max: 8, dimension: 1,
+        inRange: { color: ["#66bb6a", "#fbc02d", "#f4511e", "#c62828"] } },
+      series: [{ type: "scatter", data: pts,
+        symbolSize: p => 3 + p[1] * 1.2 }],
+    }, true);
+  }
+
+  // ANÁLISIS: distribución de profundidad (histograma del catálogo de la
+  // ventana). Barras horizontales, someras arriba → profundas abajo.
+  function renderDepthDist(pro) {
+    const h = pro && pro.depth_hist;
+    if (!h || !h.counts || !h.counts.length) { chart_depthdist.clear(); return; }
+    const labels = h.counts.map((_, i) =>
+      `${Math.round(h.edges[i])}–${Math.round(h.edges[i + 1])}`);
+    chart_depthdist.setOption({
+      backgroundColor: "transparent",
+      grid: { left: 64, right: 18, top: 12, bottom: 28 },
+      tooltip: Object.assign({ trigger: "axis", axisPointer: { type: "shadow" },
+        formatter: p => `${p[0].name} km · ${p[0].value}` }, _tip()),
+      xAxis: Object.assign({ type: "value", minInterval: 1 },
+        _axis(t("web.dashboard.axis.count"))),
+      yAxis: Object.assign({ type: "category", inverse: true, data: labels,
+        nameLocation: "end" }, _axis(t("web.dashboard.axis.depth_km"))),
+      series: [{ type: "bar", data: h.counts, barWidth: "62%",
+        itemStyle: { color: "#0ea5e9", borderRadius: [0, 3, 3, 0] } }],
+    }, true);
+  }
+
+  // ANÁLISIS: distribución (log) de intervalos entre eventos consecutivos.
+  // Pico en intervalos cortos → catálogo agrupado (réplicas/enjambre);
+  // distribución ancha → proceso ~Poissoniano (aleatorio).
+  function renderInterEvent(pro) {
+    const ie = pro && pro.inter_event;
+    if (!ie || !ie.counts || !ie.counts.length) { chart_interevent.clear(); return; }
+    const fmtH = hrs => {
+      if (hrs < 1 / 60) return `${Math.round(hrs * 3600)}s`;
+      if (hrs < 1) return `${Math.round(hrs * 60)}m`;
+      if (hrs < 48) return `${hrs.toFixed(hrs < 10 ? 1 : 0)}h`;
+      return `${(hrs / 24).toFixed(hrs < 240 ? 1 : 0)}d`;
+    };
+    const labels = ie.hours.map(fmtH);
+    const subtitle = t("web.dashboard.pro.median_gap", { v: fmtH(ie.median_h) });
+    chart_interevent.setOption({
+      backgroundColor: "transparent",
+      title: { text: subtitle, left: "center", top: 2,
+        textStyle: { color: TEXT_MUTED, fontSize: 10, fontWeight: 400 } },
+      grid: { left: 40, right: 16, top: 26, bottom: 30 },
+      tooltip: Object.assign({ trigger: "axis", axisPointer: { type: "shadow" } }, _tip()),
+      xAxis: Object.assign({ type: "category", data: labels,
+        axisLabel: { color: TEXT_SECONDARY, fontFamily: FONT_MONO, fontSize: 9,
+          interval: "auto", hideOverlap: true } },
+        _axis(t("web.dashboard.axis.gap"))),
+      yAxis: Object.assign({ type: "value", minInterval: 1 },
+        _axis(t("web.dashboard.axis.count"))),
+      series: [{ type: "bar", data: ie.counts, barWidth: "92%",
+        itemStyle: { color: "#a855f7" } }],
+    }, true);
+  }
+
+  function renderPro(pro) {
+    const summaryEl = document.getElementById("pro-summary");
+    if (summaryEl) {
+      summaryEl.textContent = (pro && pro.b_value)
+        ? t("web.dashboard.pro.bvalue", { b: pro.b_value.b.toFixed(2),
+            err: pro.b_value.b_err.toFixed(2), mc: pro.b_value.mc.toFixed(1),
+            n: pro.b_value.n })
+        : "";
+    }
+    // Solo pintar las gráficas pro si la PÁGINA de análisis está visible
+    // (evita trabajo en cada push del feed en vivo).
+    const pa = document.getElementById("page-analysis");
+    if (pa && pa.style.display !== "none") {
+      renderGR(pro); renderEnergy(pro); renderSpatial(pro);
+      renderDepthSection(pro); renderMcB(pro);
+      renderDepthDist(pro); renderInterEvent(pro);
+    }
+  }
+
   // Helper interno reutilizable por setAggregations y setTheme.
   function _renderAll(p) {
     renderKPIs(p);
@@ -704,9 +987,11 @@
     renderDepth(p.depth_buckets);
     renderTimeline(p);
     renderTrend(p.period_histogram);
-    renderPager(p.pager_distribution);
-    syncPagerRegionOptions(p);
+    renderEventRate(p.event_rate);
     renderScatter(p.depth_mag_scatter);
+    renderEpicenters(p.epicenters);
+    renderMagTime(p.mag_time);
+    renderPro(p.pro);
   }
 
   // ============================================================
@@ -726,7 +1011,49 @@
   });
 
   // ============================================================
-  // Desplegable de región del radar PAGER
+  // Plegar/desplegar la fila de análisis profesional (opt-in)
+  // ============================================================
+  (function () {
+    const toggle = document.getElementById("pro-toggle");
+    const grid = document.getElementById("pro-grid");
+    if (!toggle || !grid) return;
+    toggle.addEventListener("click", () => {
+      const opening = grid.style.display === "none";
+      grid.style.display = opening ? "" : "none";
+      toggle.setAttribute("aria-expanded", opening ? "true" : "false");
+      if (opening) {
+        // Los contenedores estaban a 0px → redimensionar y pintar ahora.
+        [chart_gr, chart_energy, chart_spatial, chart_depthsec, chart_mcb]
+          .forEach(c => c.resize());
+        if (lastPayload) renderPro(lastPayload.pro);
+      }
+    });
+  })();
+
+  // ============================================================
+  // Conmutación de PÁGINA (En vivo / Análisis) — la dispara Qt vía
+  // window.setDashboardMode(). Son DOS páginas independientes: cada gráfica
+  // pertenece a una sola; cambiar de modo solo muestra/oculta su contenedor.
+  // ============================================================
+  window.setDashboardMode = function (mode) {
+    const isLive = mode !== "analysis";
+    const pl = document.getElementById("page-live");
+    const pa = document.getElementById("page-analysis");
+    if (pl) pl.style.display = isLive ? "" : "none";
+    if (pa) pa.style.display = isLive ? "none" : "";
+    if (!isLive && lastPayload) renderPro(lastPayload.pro);
+    setTimeout(() => {
+      [chart_country, chart_mag, chart_depth, chart_time, chart_pager,
+       chart_trend, chart_scatter, chart_epi, chart_magtime, chart_depthdist,
+       chart_gr, chart_energy, chart_spatial, chart_depthsec, chart_mcb,
+       chart_interevent]
+        .forEach(c => c.resize());
+    }, 60);
+  };
+  window.setDashboardMode("live");   // estado inicial
+
+  // ============================================================
+  // Desplegable de región del radar PAGER (legacy; elemento ya removido)
   // ============================================================
   const pagerRegionSel = document.getElementById("pager-region-select");
   if (pagerRegionSel) {

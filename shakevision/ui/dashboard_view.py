@@ -29,10 +29,20 @@ from pathlib import Path
 from typing import Any, Optional
 
 from PySide6.QtCore import QObject, QUrl, Signal, Slot
-from PySide6.QtWidgets import QFrame, QLabel, QSizePolicy, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QComboBox,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
 
 from shakevision.i18n import LocaleService, t
 from shakevision.services.data_models import Earthquake, ShakeStation
+from shakevision.ui.combo_utils import fit_combo
 from shakevision.ui.loading_overlay import LoadingOverlay
 from shakevision.ui.signal_safety import subscribe
 from shakevision.ui.theme import (
@@ -76,13 +86,28 @@ _DEPTH_BUCKETS: list[tuple[str, float, float]] = [
 # Mapa de algunas regiones / estados USA → país canónico
 # ============================================================
 _US_STATES: frozenset[str] = frozenset({
-    "Alaska", "California", "Hawaii", "Oklahoma", "Nevada", "Texas",
-    "Washington", "Oregon", "Utah", "Wyoming", "Montana", "Idaho",
-    "Arizona", "New Mexico", "Colorado", "Tennessee", "Arkansas",
-    "Missouri", "Illinois", "Kansas", "Nebraska", "Mississippi",
-    "Alabama", "Georgia", "Kentucky", "Maine", "Virginia",
-    "North Carolina", "South Carolina",
-    "Puerto Rico",
+    # Nombres completos — los 50 estados + DC + territorios.
+    "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado",
+    "Connecticut", "Delaware", "Florida", "Georgia", "Hawaii", "Idaho",
+    "Illinois", "Indiana", "Iowa", "Kansas", "Kentucky", "Louisiana",
+    "Maine", "Maryland", "Massachusetts", "Michigan", "Minnesota",
+    "Mississippi", "Missouri", "Montana", "Nebraska", "Nevada",
+    "New Hampshire", "New Jersey", "New Mexico", "New York",
+    "North Carolina", "North Dakota", "Ohio", "Oklahoma", "Oregon",
+    "Pennsylvania", "Rhode Island", "South Carolina", "South Dakota",
+    "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington",
+    "West Virginia", "Wisconsin", "Wyoming",
+    "Puerto Rico", "U.S. Virgin Islands", "Guam", "American Samoa",
+    "District of Columbia",
+    # Códigos USPS de 2 letras: USGS los usa en muchos ``place`` de EE. UU.
+    # (p. ej. "12km W of Searles Valley, CA") y sin esto se contaban como
+    # "países" separados ("CA", "AK"…). Los topónimos extranjeros usan el
+    # nombre completo del país, así que no hay colisión en este contexto.
+    "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID",
+    "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS",
+    "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK",
+    "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV",
+    "WI", "WY", "DC", "PR", "GU", "VI", "AS", "MP",
 })
 
 # Aliases para regiones marítimas / mesetas oceánicas
@@ -454,6 +479,99 @@ def build_station_summary(
     return counts
 
 
+def _downsample(seq: list, max_points: int = 600) -> list:
+    """Reduce una serie a ≤ ``max_points`` puntos (muestreo uniforme por índice).
+
+    La curva acumulada es monótona, así que el submuestreo conserva la forma sin
+    inflar el payload con miles de puntos."""
+
+    n = len(seq)
+    if n <= max_points:
+        return seq
+    step = n / float(max_points)
+    idx = sorted({int(i * step) for i in range(max_points)} | {n - 1})
+    return [seq[i] for i in idx]
+
+
+def _bbox_contains(bbox: tuple, lat: float, lon: float) -> bool:
+    """¿Está (lat, lon) dentro de ``(min_lat, max_lat, min_lon, max_lon)``?"""
+
+    try:
+        return (bbox[0] <= lat <= bbox[1]) and (bbox[2] <= lon <= bbox[3])
+    except (TypeError, IndexError):
+        return True
+
+
+def build_event_rate(quakes: list[Earthquake], now_unix: float,
+                     period_seconds: float, nbins: int = 40) -> list[dict]:
+    """Tasa de eventos por bin temporal (sustituye al radar PAGER).
+
+    Devuelve ``[{"ts", "n"}, …]`` con el nº de eventos por bin a lo largo de la
+    ventana — se pinta como línea/área (distinto de la distribución por
+    periodo, que son barras con magnitud máxima)."""
+
+    start = now_unix - max(60.0, float(period_seconds))
+    width = (now_unix - start) / nbins
+    if width <= 0:
+        return []
+    bins = [0] * nbins
+    for q in quakes:
+        idx = int((q.timestamp_unix - start) / width)
+        if 0 <= idx < nbins:
+            bins[idx] += 1
+    return [{"ts": start + (i + 0.5) * width, "n": c}
+            for i, c in enumerate(bins)]
+
+
+def build_pro_stats(quakes: list[Earthquake]) -> Optional[dict[str, Any]]:
+    """Estadística sísmica profesional para la capa de análisis (ver
+    ``processing/seismic_stats.py``). Devuelve ``None`` si no hay eventos."""
+
+    if not quakes:
+        return None
+    from shakevision.processing import seismic_stats as ss
+
+    mags = [q.magnitude for q in quakes]
+    times = [q.timestamp_unix for q in quakes]
+    depths = [q.depth_km for q in quakes]
+
+    bval = ss.b_value(mags)
+    mc = bval["mc"] if bval else ss.magnitude_of_completeness(mags)
+
+    cum = ss.cumulative_series(times, mags)
+    # Submuestrear las curvas acumuladas (paralelas) si son enormes.
+    if cum["t"]:
+        keep = _downsample(list(range(len(cum["t"]))))
+        for key in ("t", "count", "moment_cum", "energy_cum"):
+            cum[key] = [cum[key][i] for i in keep]
+
+    # Densidad espacial (rejilla lon × lat): "¿dónde se concentra la actividad?"
+    # — la pregunta natural de un panorama de gran área y larga ventana. (Mejor
+    # que el diagrama espacio-tiempo, que solo lee bien sobre una estructura
+    # lineal; ``omori_fit`` sigue disponible para secuencias de réplicas.)
+    spatial = ss.spatial_density(
+        [q.longitude for q in quakes], [q.latitude for q in quakes], mags)
+
+    # Sección transversal Wadati–Benioff (proyección ⊥ a la fosa), capada.
+    section = ss.cross_section(
+        [q.latitude for q in quakes], [q.longitude for q in quakes],
+        depths, mags)
+    section = _downsample(section, max_points=2000)
+
+    return {
+        "b_value": bval,
+        "mc": mc,
+        "fmd": ss.fmd(mags),
+        "cumulative": cum,
+        "spatial": spatial,
+        "mc_b": ss.mc_b_timeseries(times, mags),
+        "depth_hist": ss.depth_histogram(depths),
+        "depth_pct": ss.depth_percentiles(depths),
+        "inter_event": ss.inter_event_times(times),
+        "section": section,
+    }
+
+
 def build_payload(
     quakes: list[Earthquake],
     now_unix: Optional[float] = None,
@@ -461,6 +579,7 @@ def build_payload(
     stations: Optional[list[ShakeStation]] = None,
     pager_region: Optional[str] = None,
     country_min_magnitude: float = 3.0,
+    region_bbox: Optional[tuple] = None,
 ) -> dict[str, Any]:
     """Empaqueta todas las agregaciones para la página, ya filtradas.
 
@@ -491,9 +610,16 @@ def build_payload(
 
     in_window = [q for q in quakes if q.timestamp_unix >= cutoff]
 
+    # Top-10 = vista GENERAL/GLOBAL: cuenta todos los eventos (no se filtra por
+    # magnitud ni por la región seleccionada) — es el ancla "qué pasa en el
+    # mundo". El resto de gráficas SÍ respetan la región (ver más abajo).
     countries = aggregate_by_country(
         in_window, top_n=10, min_magnitude=country_min_magnitude,
     )
+    # Filtro de REGIÓN (solo modo en vivo): acota TODO menos el Top-10 global.
+    if region_bbox:
+        in_window = [q for q in in_window
+                     if _bbox_contains(region_bbox, q.latitude, q.longitude)]
 
     # ─── Timezone del usuario ───
     # Si el TimezoneService está disponible (caso normal de la app),
@@ -591,6 +717,19 @@ def build_payload(
         ),
         # Resumen de estaciones (para el filtro de fuente del UI)
         "station_summary": build_station_summary(stations),
+        # Capa de análisis profesional (b-value / energía / Omori / profundidad)
+        "pro": build_pro_stats(in_window),
+        # Tasa de eventos (sustituye al radar PAGER)
+        "event_rate": build_event_rate(in_window, now, period_seconds),
+        # Epicentros (lon, lat, mag) para el mapa de dispersión EN VIVO.
+        "epicenters": _downsample(
+            [[round(q.longitude, 3), round(q.latitude, 3),
+              round(q.magnitude, 1)] for q in in_window], 1500),
+        # Magnitud vs tiempo (t_ms, mag) para la secuencia en ANÁLISIS.
+        "mag_time": _downsample(
+            [[q.timestamp_unix * 1000.0, round(q.magnitude, 1)]
+             for q in sorted(in_window, key=lambda x: x.timestamp_unix)],
+            1500),
     }
 
 
@@ -647,6 +786,17 @@ class DashboardPanel(QFrame):
         self._got_first_data = False
         # Catálogo de estaciones recibido del worker (para KPI station_summary)
         self._stations_cache: Optional[list[ShakeStation]] = None
+        # Modo análisis (catálogo histórico de una región+ventana) vs en vivo.
+        self._analysis_mode = False
+        self._view_mode = "live"          # "live" | "analysis" (vista actual)
+        self._analysis_quakes: list = []  # último catálogo histórico (reporte)
+        self._analysis_worker = None
+        self._live_region_bbox: Optional[tuple] = None
+        self._last_live_args: Optional[tuple] = None
+        self._analysis_window_days = 365
+
+        # Barra de análisis (región + ventana + magnitud mín) ANTES de la web.
+        layout.addWidget(self._build_analysis_bar())
 
         try:
             self._init_web_view(layout)
@@ -679,16 +829,326 @@ class DashboardPanel(QFrame):
 
         if self._view is None:
             return
+        # Recordar el último feed en vivo para poder volver desde "Análisis".
+        self._last_live_args = (list(quakes), period_seconds, pager_region)
+        # En modo análisis NO pisamos el histórico con el feed en vivo.
+        if self._analysis_mode:
+            return
         payload = build_payload(
             quakes,
             period_seconds=period_seconds,
             stations=self._stations_cache,
             pager_region=pager_region,
+            region_bbox=self._live_region_bbox,
         )
         self._push_payload(payload)
         if not self._got_first_data and hasattr(self, "_overlay"):
             self._got_first_data = True
             self._overlay.hide_overlay()
+
+    # ------------------------------------------------------------------
+    # Barra de análisis (región + ventana → consulta fdsnws-event)
+    # ------------------------------------------------------------------
+    def _build_analysis_bar(self) -> QWidget:
+        from shakevision.services import region_presets
+        from shakevision.ui.signal_safety import subscribe
+
+        bar = QWidget()
+        bar.setObjectName("DashboardAnalysisBar")
+        row = QHBoxLayout(bar)
+        row.setContentsMargins(8, 6, 8, 6)
+        row.setSpacing(8)
+
+        # ── Conmutador de modo (prominente): En vivo | Análisis ──
+        self.an_mode_live = QPushButton(t("dashboard.live"))
+        self.an_mode_an = QPushButton(t("dashboard.analyze"))
+        for b in (self.an_mode_live, self.an_mode_an):
+            b.setCheckable(True)
+            b.setObjectName("SegmentButton")
+        self.an_mode_live.setChecked(True)
+        self.an_mode_live.clicked.connect(lambda: self._set_dashboard_mode("live"))
+        self.an_mode_an.clicked.connect(
+            lambda: self._set_dashboard_mode("analysis"))
+        row.addWidget(self.an_mode_live)
+        row.addWidget(self.an_mode_an)
+        row.addSpacing(10)
+
+        loc = self._current_lang()
+
+        # ── Controles EN VIVO: selector de región (el Top-10 sigue global) ──
+        self._live_controls = QWidget()
+        lrow = QHBoxLayout(self._live_controls)
+        lrow.setContentsMargins(0, 0, 0, 0)
+        lrow.setSpacing(8)
+        self._live_lbl_region = QLabel(t("hist.region"))
+        lrow.addWidget(self._live_lbl_region)
+        self.live_region = QComboBox()
+        for key, name in region_presets.presets(loc):
+            self.live_region.addItem(name, userData=key)
+        self.live_region.currentIndexChanged.connect(
+            self._on_live_region_changed)
+        lrow.addWidget(self.live_region)
+        row.addWidget(self._live_controls)
+        # Nombres de región varían por idioma → medir en todos para no recortar.
+        _region_samples = [name
+                           for lng in LocaleService.available_languages()
+                           for _k, name in region_presets.presets(lng)]
+        fit_combo(self.live_region, extra=_region_samples)
+
+        # ── Controles de análisis (ocultos en modo en vivo): 2 filas ──
+        from PySide6.QtCore import QDateTime
+
+        from shakevision.ui.range_slider import RangeSlider
+        self._an_controls = QWidget()
+        cwrap = QVBoxLayout(self._an_controls)
+        cwrap.setContentsMargins(0, 0, 0, 0)
+        cwrap.setSpacing(4)
+        crow = QHBoxLayout()
+        crow.setContentsMargins(0, 0, 0, 0)
+        crow.setSpacing(8)
+        loc = self._current_lang()
+        self._an_lbl_region = QLabel(t("hist.region"))
+        crow.addWidget(self._an_lbl_region)
+        self.an_region = QComboBox()
+        for key, name in region_presets.presets(loc):
+            self.an_region.addItem(name, userData=key)
+        crow.addWidget(self.an_region)
+        self._an_lbl_window = QLabel(t("dashboard.window"))
+        crow.addWidget(self._an_lbl_window)
+        self.an_preset = QComboBox()
+        for key, days in (("win_1y", 365), ("win_5y", 365 * 5),
+                          ("win_10y", 365 * 10), ("preset_all", -1)):
+            self.an_preset.addItem(t(f"dashboard.{key}"), userData=days)
+        self.an_preset.currentIndexChanged.connect(self._on_preset_changed)
+        crow.addWidget(self.an_preset)
+        self._an_lbl_mag = QLabel(t("hist.min_mag"))
+        crow.addWidget(self._an_lbl_mag)
+        self.an_minmag = QComboBox()
+        _mags = (1.0, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0)
+        for v in _mags:
+            self.an_minmag.addItem(f"≥ {v:.1f}", userData=v)
+        # Por defecto 3.0: para estadística (b-value/Mc) hace falta bajar cerca
+        # de Mc (≈ M2-3 en redes densas), NO M≥4 (deja demasiados pocos eventos).
+        self.an_minmag.setCurrentIndex(_mags.index(3.0))
+        crow.addWidget(self.an_minmag)
+        fit_combo(self.an_region, extra=_region_samples)
+        fit_combo(self.an_preset, i18n_keys=[
+            "dashboard.win_1y", "dashboard.win_5y",
+            "dashboard.win_10y", "dashboard.preset_all"])
+        fit_combo(self.an_minmag)
+        self.an_search = QPushButton(t("dashboard.search"))
+        self.an_search.setObjectName("PrimaryButton")
+        self.an_search.clicked.connect(self._on_search)
+        crow.addWidget(self.an_search)
+        crow.addStretch(1)
+        self.an_status = QLabel("")
+        self.an_status.setObjectName("Caption")
+        crow.addWidget(self.an_status)
+        cwrap.addLayout(crow)
+        # Slider de rango temporal (sustituye a los calendarios). Encuadrado en
+        # ~1 año por defecto (set_window acerca el rango → lo reciente no queda
+        # apretado en un eje 1900-hoy).
+        now = QDateTime.currentDateTimeUtc()
+        self.an_slider = RangeSlider()
+        self.an_slider.set_window(
+            float(now.addYears(-1).toSecsSinceEpoch()),
+            float(now.toSecsSinceEpoch()))
+        cwrap.addWidget(self.an_slider)
+        self._an_controls.setVisible(False)
+        row.addWidget(self._an_controls, stretch=1)
+
+        subscribe(self, LocaleService.language_changed_signal(),
+                  self._retranslate_analysis_bar)
+        return bar
+
+    @staticmethod
+    def _current_lang() -> str:
+        try:
+            return LocaleService.current_language() or "en"
+        except Exception:  # noqa: BLE001
+            return "en"
+
+    def _run_js(self, js: str) -> None:
+        if self._view is not None and self._ready:
+            self._view.page().runJavaScript(js)
+
+    def _set_dashboard_mode(self, mode: str) -> None:
+        """Conmuta En vivo / Análisis: ajusta controles Qt + avisa a la web
+        (que oculta el selector de periodo y reparte las gráficas por modo)."""
+
+        is_live = (mode == "live")
+        self._view_mode = "live" if is_live else "analysis"
+        self.an_mode_live.setChecked(is_live)
+        self.an_mode_an.setChecked(not is_live)
+        self._an_controls.setVisible(not is_live)
+        self._live_controls.setVisible(is_live)
+        self._run_js(
+            f"window.setDashboardMode && window.setDashboardMode('{mode}')")
+        if is_live:
+            self._analysis_mode = False
+            self.an_status.setText("")
+            if self._last_live_args is not None:
+                q, ps, pr = self._last_live_args
+                self._push_payload(build_payload(
+                    q, period_seconds=ps, stations=self._stations_cache,
+                    pager_region=pr, region_bbox=self._live_region_bbox))
+
+    def report_context(self):
+        """``(quakes, context)`` para el reporte según el modo ACTUAL.
+
+        En análisis: el catálogo histórico + región + rango. En vivo: el último
+        feed + periodo. El reporte usa esto para encabezar y maquetar."""
+
+        if self._view_mode == "analysis" and self._analysis_quakes:
+            lo, hi = self.an_slider.values()
+            return list(self._analysis_quakes), {
+                "mode": "analysis",
+                "region": self.an_region.currentText(),
+                "from": float(lo), "to": float(hi),
+                "min_mag": self.an_minmag.currentData(),
+            }
+        import time as _time
+        quakes, period_s, _pr = (self._last_live_args or ([], 86400.0, None))
+        # El reporte se acota al PERIODO y a la REGIÓN elegidos, para que las
+        # etiquetas (subtítulo, ranking, resumen) coincidan con los datos:
+        #  • El feed en vivo siempre trae ~30 d (all_month); sin filtrar, un
+        #    reporte de "1 d" mostraba 30 d de datos etiquetados como 1 d.
+        #  • El Top-10 EN PANTALLA sigue global por diseño; aquí el reporte sí
+        #    se acota. "Global" no filtra por región y se muestra "全球…".
+        cutoff = _time.time() - max(60.0, float(period_s))
+        quakes = [q for q in quakes if q.timestamp_unix >= cutoff]
+        bbox = self._live_region_bbox
+        if bbox:
+            quakes = [q for q in quakes
+                      if _bbox_contains(bbox, q.latitude, q.longitude)]
+        ctx = {"mode": "live", "period_seconds": period_s,
+               "region": self.live_region.currentText()}
+        return list(quakes), ctx
+
+    def _on_live_region_changed(self, _idx: int) -> None:
+        from shakevision.services import region_presets
+        self._live_region_bbox = region_presets.bbox_for(
+            self.live_region.currentData())
+        if self._last_live_args is not None and not self._analysis_mode:
+            q, ps, pr = self._last_live_args
+            self._push_payload(build_payload(
+                q, period_seconds=ps, stations=self._stations_cache,
+                pager_region=pr, region_bbox=self._live_region_bbox))
+
+    def _ensure_analysis_worker(self):
+        if self._analysis_worker is None:
+            from shakevision.services.fdsn_worker import FDSNQueryWorker
+            self._analysis_worker = FDSNQueryWorker(parent=self)
+            self._analysis_worker.results.connect(self._on_analysis_results)
+            self._analysis_worker.failed.connect(self._on_analysis_failed)
+            self._analysis_worker.counted.connect(self._on_count)
+        return self._analysis_worker
+
+    def _on_preset_changed(self, _idx: int) -> None:
+        """Preset de ventana → mueve el slider (≥0 = "hace N días", -1 = todo)."""
+
+        from PySide6.QtCore import QDate, QDateTime, Qt
+        days = self.an_preset.currentData()
+        now = QDateTime.currentDateTimeUtc()
+        to = float(now.toSecsSinceEpoch())
+        if days == -1:
+            frm = float(QDateTime(
+                QDate(1900, 1, 1), now.time(), Qt.TimeSpec.UTC
+            ).toSecsSinceEpoch())
+        else:
+            frm = float(now.addDays(-int(days)).toSecsSinceEpoch())
+        # set_window encuadra el slider en la ventana elegida (eje lineal,
+        # proporcional, sin apretar lo reciente).
+        self.an_slider.set_window(frm, to)
+
+    def _analysis_params(self) -> dict:
+        from shakevision.services import region_presets
+        lo, hi = self.an_slider.values()
+        params = {
+            "starttime": float(lo),
+            "endtime": float(hi),
+            "min_magnitude": float(self.an_minmag.currentData() or 4.5),
+            "orderby": "time", "limit": 20000,
+        }
+        bbox = region_presets.bbox_for(self.an_region.currentData())
+        if bbox is not None:
+            params.update(min_latitude=bbox[0], max_latitude=bbox[1],
+                          min_longitude=bbox[2], max_longitude=bbox[3])
+        return params
+
+    def _on_search(self) -> None:
+        # Pre-chequeo del tope: contamos ANTES de descargar.
+        self.an_status.setText(t("dashboard.querying"))
+        self.an_search.setEnabled(False)
+        self._ensure_analysis_worker().count(self._analysis_params())
+
+    def _on_count(self, n: int, params: dict) -> None:
+        from shakevision.services.fdsn_event import FDSN_MAX_LIMIT
+        # Si el usuario cambió a "En vivo" mientras contábamos, abortamos.
+        if self._view_mode != "analysis":
+            self.an_search.setEnabled(True)
+            self.an_status.setText("")
+            return
+        if n < 0:
+            # No se pudo contar → seguimos igualmente con la consulta.
+            self._ensure_analysis_worker().query(params)
+            return
+        if n > FDSN_MAX_LIMIT:
+            self.an_search.setEnabled(True)
+            self.an_status.setText(t("dashboard.count_over", n=f"{n:,}"))
+            return
+        self.an_status.setText(t("dashboard.count_estimate", n=f"{n:,}"))
+        self._ensure_analysis_worker().query(params)
+
+    def _on_analysis_results(self, quakes) -> None:
+        self.an_search.setEnabled(True)
+        # Resultado TARDÍO tras cambiar a "En vivo" → ignorarlo (no pisar la
+        # vista en vivo ni re-bloquear el modo análisis). Antes esto causaba
+        # cuelgues/sobrescrituras al alternar modos durante una consulta larga.
+        if self._view_mode != "analysis":
+            self.an_status.setText("")
+            return
+        self._analysis_mode = True
+        self._analysis_quakes = list(quakes)
+        try:
+            from_epoch, to_epoch = self.an_slider.values()
+            payload = build_payload(
+                list(quakes), now_unix=to_epoch,
+                period_seconds=max(3600.0, to_epoch - from_epoch),
+                stations=self._stations_cache,
+            )
+            self._push_payload(payload)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Construir el payload de análisis falló")
+            self.an_status.setText(str(exc))
+            return
+        if not self._got_first_data and hasattr(self, "_overlay"):
+            self._got_first_data = True
+            self._overlay.hide_overlay()
+        self.an_status.setText(t(
+            "dashboard.analyzing", n=len(quakes),
+            region=self.an_region.currentText(),
+            window=self.an_preset.currentText()))
+
+    def _on_analysis_failed(self, message: str, too_many: bool) -> None:
+        self.an_search.setEnabled(True)
+        if self._view_mode == "analysis":
+            self.an_status.setText(message)
+
+    def _retranslate_analysis_bar(self) -> None:
+        try:
+            self.an_mode_live.setText(t("dashboard.live"))
+            self.an_mode_an.setText(t("dashboard.analyze"))
+            self._live_lbl_region.setText(t("hist.region"))
+            self._an_lbl_region.setText(t("hist.region"))
+            self._an_lbl_window.setText(t("dashboard.window"))
+            self._an_lbl_mag.setText(t("hist.min_mag"))
+            self.an_search.setText(t("dashboard.search"))
+            for i, key in enumerate(("win_1y", "win_5y", "win_10y",
+                                     "preset_all")):
+                self.an_preset.setItemText(i, t(f"dashboard.{key}"))
+        except RuntimeError:
+            pass
 
     def update_stations(self, stations: list[ShakeStation]) -> None:
         """Recibe el catálogo de estaciones para alimentar el KPI de fuente."""

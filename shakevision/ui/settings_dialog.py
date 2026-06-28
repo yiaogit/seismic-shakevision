@@ -44,6 +44,7 @@ from shakevision.i18n import LocaleService, t
 from shakevision.i18n.service import LANGUAGE_LABELS, SUPPORTED_LANGUAGES
 from shakevision.services.shake_presets import ShakePresetStore
 from shakevision.services.timezone_service import TimezoneService
+from shakevision.ui.combo_utils import fit_combo
 from shakevision.ui.signal_safety import subscribe
 
 
@@ -164,6 +165,7 @@ class SettingsDialog(QDialog):
         for code in SUPPORTED_LANGUAGES:
             label = LANGUAGE_LABELS.get(code, code)
             self._lang_combo.addItem(label, userData=code)
+        fit_combo(self._lang_combo)
         form.addRow(t("settings.language.label"), self._lang_combo)
 
         help_text = QLabel(t("settings.language.help"))
@@ -194,6 +196,7 @@ class SettingsDialog(QDialog):
         # Cargar lista completa de zonas
         for name in TimezoneService.available_timezones():
             self._tz_combo.addItem(name)
+        fit_combo(self._tz_combo)
         self._tz_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         tz_row.addWidget(self._tz_combo, stretch=1)
         self._detect_btn = QPushButton(t("settings.timezone.detect_button"))

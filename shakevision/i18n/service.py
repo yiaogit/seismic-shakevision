@@ -143,6 +143,26 @@ class _Singleton(QObject):
                 base.update(self._tables.get(self._current, {}))
             return base
 
+    def all_translations(self, key: str) -> list[str]:
+        """Devuelve el valor de ``key`` en TODOS los idiomas soportados.
+
+        Útil para dimensionar widgets (p. ej. el ancho de un ``QComboBox``)
+        al texto más largo entre idiomas, de modo que cambiar de idioma nunca
+        recorte el contenido. Con fallback a inglés si un idioma carece de la
+        clave; se omiten valores vacíos/duplicados preservando el orden.
+        """
+
+        out: list[str] = []
+        with self._lock:
+            for lang in SUPPORTED_LANGUAGES:
+                self._load_table(lang)
+                val = self._tables.get(lang, {}).get(key)
+                if val is None:
+                    val = self._tables.get("en", {}).get(key)
+                if val and val not in out:
+                    out.append(val)
+        return out
+
     # ------------------------------------------------------------------
     # Carga de ficheros
     # ------------------------------------------------------------------
@@ -223,6 +243,10 @@ class LocaleService:
     @staticmethod
     def current_table() -> dict[str, str]:
         return _get_instance().current_table()
+
+    @staticmethod
+    def all_translations(key: str) -> list[str]:
+        return _get_instance().all_translations(key)
 
     @staticmethod
     def label_for(lang: str) -> str:

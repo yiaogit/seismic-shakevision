@@ -89,6 +89,23 @@ def test_to_iso_local_uses_user_tz() -> None:
     assert "-06:00" in iso_mx or "-05:00" in iso_mx
 
 
+def test_format_utc_ignores_user_tz_and_labels() -> None:
+    """format_utc() siempre rinde UTC con etiqueta, sin importar la zona."""
+
+    TimezoneService.set_timezone("America/Mexico_City")  # NO debe afectar
+    out = TimezoneService.format_utc(1700000000.0)
+    # 2023-11-14 22:13:20 UTC
+    assert out.endswith("UTC")
+    assert "2023-11-14" in out
+    assert "22:13:20" in out
+
+
+def test_to_iso_utc_has_z_suffix() -> None:
+    TimezoneService.set_timezone("America/Mexico_City")
+    iso = TimezoneService.to_iso_utc(1700000000.0)
+    assert iso == "2023-11-14T22:13:20Z"
+
+
 # ============================================================
 # Address (free text)
 # ============================================================

@@ -679,12 +679,18 @@ class MainWindow(QMainWindow):
         fav_btn = box.addButton(
             t("dialog.btn_unfavorite") if fav_now else t("dialog.btn_favorite"),
             QMessageBox.ActionRole)
+        from shakevision.ui.icons import get_icon as _gi
+        from shakevision.ui.theme_manager import ThemeManager as _TM
+        fav_btn.setIcon(_gi(
+            "star_fill" if fav_now else "star", theme=_TM.current_theme()))
         box.addButton(t("dialog.btn_cancel"), QMessageBox.RejectRole)
         box.setDefaultButton(review_btn)
         box.exec()
         clicked = box.clickedButton()
         if clicked is review_btn:
-            self._open_event_in_replay(quake)
+            # v0.8.0: mostrar el selector de estación cercana (igual que "Mi
+            # colección"), no abrir directamente con la más cercana.
+            self._review_quake_with_picker(quake)
         elif clicked is fav_btn:
             self._on_globe_favorite_toggled(quake_id)   # add/quita favorito
 
@@ -711,6 +717,49 @@ class MainWindow(QMainWindow):
                 best, best_d = s, d
         return best
 
+    def _nearest_stations_to(self, quake, k: int = 8):
+        """``[(station, Δ°), …]`` con las ``k`` estaciones USGS más cercanas al
+        sismo (las únicas reproducibles vía IRIS dataselect)."""
+
+        from shakevision.processing.measurements import great_circle_degrees
+        stations = getattr(self, "_latest_stations", None) or []
+        scored = []
+        for s in stations:
+            lat = getattr(s, "latitude", None)
+            lon = getattr(s, "longitude", None)
+            if lat is None or lon is None or getattr(s, "provider", "") != "usgs":
+                continue
+            d = great_circle_degrees(quake.latitude, quake.longitude, lat, lon)
+            scored.append((s, d))
+        scored.sort(key=lambda it: it[1])
+        return scored[:k]
+
+    def _pick_review_station(self, nearest, bound_net: str = "",
+                             bound_sta: str = ""):
+        """Diálogo para elegir con QUÉ estación cercana revisar. Pre-selecciona
+        la estación ya enlazada (si está entre las cercanas). Devuelve la
+        estación elegida, o ``None`` si el usuario cancela."""
+
+        from PySide6.QtWidgets import QInputDialog
+        items = [
+            f"{s.network}.{s.code} — Δ{d:.1f}° · {d * 111.195:,.0f} km"
+            for s, d in nearest
+        ]
+        default_idx = 0
+        for i, (s, _d) in enumerate(nearest):
+            if s.network == bound_net and s.code == bound_sta:
+                default_idx = i
+                break
+        text, ok = QInputDialog.getItem(
+            self, t("mine.pick_station_title"), t("mine.pick_station_label"),
+            items, default_idx, False)
+        if not ok:
+            return None
+        try:
+            return nearest[items.index(text)][0]
+        except (ValueError, IndexError):
+            return nearest[default_idx][0]
+
     def _event_name(self, quake) -> str:
         return f"M{quake.magnitude:.1f} — {quake.place}"
 
@@ -718,15 +767,17 @@ class MainWindow(QMainWindow):
         """Abre el Workbench/Replay en el evento dado (sin diálogo).
 
         Si se da (o se encuentra) una estación CERCANA, se usa esa para el
-        evento (ventana razonable, P/S dentro del dato), sin tocar el combo ni
-        la conexión en vivo. Si no hay catálogo de estaciones, cae al modo
-        antiguo (estación seleccionada en la barra lateral).
+        evento. v0.8.0 (reestructuración doble-modo): la revisión va SIEMPRE al
+        **modo Histórico**, y la estación se fija en el **selector propio de
+        Replay** (vía ``set_event_review`` → combo de Replay). Ya NO se escribe
+        en el combo EN VIVO — evento e historia quedan separados de la
+        monitorización. Ver docs/workbench-restructure.md.
         """
 
         from datetime import datetime, timezone
         when = datetime.fromtimestamp(quake.timestamp_unix, tz=timezone.utc)
         self.pro_window.show_and_focus()
-        self.pro_window.subtabs.setCurrentIndex(self.pro_window.PRO_REPLAY)
+        self.pro_window.show_replay()
         # Tip para usuarios de UN solo monitor: el análisis abre en OTRA ventana
         # (el Workbench), que puede quedar tapada por la principal.
         self._status_bar.showMessage(t("status.opened_in_workbench"), 5000)
@@ -752,10 +803,13 @@ class MainWindow(QMainWindow):
         except Exception:  # noqa: BLE001
             logger.debug("Replay: prefill desde evento falló", exc_info=True)
 
-    def _on_event_review_requested(self, quake_id: str, station) -> None:
-        """Centro de eventos: el usuario eligió un evento + estación cercana."""
+    def _on_event_review_requested(self, quake, station) -> None:
+        """Centro de eventos: el usuario eligió un evento + estación cercana.
 
-        quake = self._find_quake(quake_id)
+        Recibimos el ``Earthquake`` COMPLETO (no un id): así funciona también con
+        eventos históricos (fdsnws), que no están en el feed en vivo y antes
+        ``_find_quake`` devolvía None → la revisión no se abría."""
+
         if quake is not None:
             self._open_event_in_replay(quake, station=station)
 
@@ -763,7 +817,7 @@ class MainWindow(QMainWindow):
         """Doble clic en una grabación local → abrir en Replay."""
 
         self.pro_window.show_and_focus()
-        self.pro_window.subtabs.setCurrentIndex(self.pro_window.PRO_REPLAY)
+        self.pro_window.show_replay()
         try:
             self.pro_window.replay_panel.load_local_stream(path, net, sta)
         except Exception:  # noqa: BLE001
@@ -779,20 +833,36 @@ class MainWindow(QMainWindow):
             self._status_bar.showMessage(t("mine.catalog_open_failed"), 4000)
             return
         self.pro_window.show_and_focus()
-        self.pro_window.subtabs.setCurrentIndex(self.pro_window.PRO_REPLAY)
+        self.pro_window.show_replay()
         self._status_bar.showMessage(t("status.opened_in_workbench"), 5000)
         try:
             self.pro_window.replay_panel.load_catalog_event(detail)
         except Exception:  # noqa: BLE001
             logger.debug("Replay: reabrir desde catálogo falló", exc_info=True)
 
-    def _on_review_favorite_event(self, fav) -> None:
-        """"Mi colección": doble clic en un sismo favorito → revisar.
+    def _review_quake_with_picker(self, quake, bound_net: str = "",
+                                  bound_sta: str = ""):
+        """Revisa un sismo mostrando el SELECTOR de estación cercana (si hay
+        catálogo de estaciones); pre-selecciona la enlazada. Abre la revisión y
+        devuelve la estación elegida (para re-enlazar favoritos), o ``None`` si
+        el usuario canceló. Usado por el globo y por "Mi colección"."""
 
-        El favorito guarda lat/lon/depth (v0.7.7) → se construye un objeto
-        tipo-Earthquake y se reusa la ruta de revisión. Favoritos antiguos sin
-        coords se intentan resolver en el feed actual por id.
-        """
+        from types import SimpleNamespace
+        nearest = self._nearest_stations_to(quake, k=8)
+        if nearest:
+            station = self._pick_review_station(nearest, bound_net, bound_sta)
+            if station is None:
+                return None   # cancelado → no abrir
+        elif bound_net and bound_sta:
+            station = SimpleNamespace(network=bound_net, code=bound_sta)
+        else:
+            station = None
+        self._open_event_in_replay(quake, station=station)
+        return station
+
+    def _on_review_favorite_event(self, fav) -> None:
+        """"Mi colección": doble clic en un sismo favorito → revisar (con
+        selector de estación cercana; re-enlaza la elegida al favorito)."""
 
         from types import SimpleNamespace
         if getattr(fav, "latitude", 0.0) or getattr(fav, "longitude", 0.0):
@@ -802,10 +872,23 @@ class MainWindow(QMainWindow):
                 longitude=fav.longitude, depth_km=fav.depth_km)
         else:
             quake = self._find_quake(fav.id)
-        if quake is not None:
-            self._open_event_in_replay(quake)
-        else:
+        if quake is None:
             self._status_bar.showMessage(t("mine.fav_no_coords"), 4000)
+            return
+
+        bound_net = (getattr(fav, "network", "") or "").strip()
+        bound_sta = (getattr(fav, "station", "") or "").strip()
+        station = self._review_quake_with_picker(quake, bound_net, bound_sta)
+        # Re-bind: la estación elegida pasa a ser la del favorito.
+        if station is not None and getattr(station, "network", "") and \
+                getattr(station, "code", ""):
+            try:
+                from shakevision.services.favorites_store import FavoritesStore
+                FavoritesStore.set_event_station(
+                    fav.id, station.network, station.code)
+            except Exception:  # noqa: BLE001
+                logger.debug("No se pudo re-enlazar estación del favorito",
+                             exc_info=True)
 
     def _on_use_favorite_station(self, net: str, code: str) -> None:
         """"Mi colección": doble clic en estación favorita → añadir al combo
@@ -974,16 +1057,26 @@ class MainWindow(QMainWindow):
         box = QMessageBox(self)
         box.setWindowTitle(t("dialog.usgs.title", network=network, code=code))
         box.setText(msg)
-        add_btn = box.addButton(t("dialog.btn_add_workbench"),
-                                QMessageBox.AcceptRole)
+        # v0.8.0: DOS-en-uno — el usuario elige la INTENCIÓN:
+        #   监测实时 → combo en vivo (modo En vivo)
+        #   看历史   → selector de Replay (modo Histórico)
+        monitor_btn = box.addButton(t("dialog.btn_monitor_live"),
+                                    QMessageBox.AcceptRole)
+        history_btn = box.addButton(t("dialog.btn_view_history"),
+                                    QMessageBox.AcceptRole)
         fav_now = FavoritesStore.is_favorite_station(network, code)
         fav_btn = box.addButton(
             t("dialog.btn_unfavorite") if fav_now else t("dialog.btn_favorite"),
             QMessageBox.ActionRole)
+        from shakevision.ui.icons import get_icon as _gi
+        from shakevision.ui.theme_manager import ThemeManager as _TM
+        fav_btn.setIcon(_gi(
+            "star_fill" if fav_now else "star", theme=_TM.current_theme()))
         box.addButton(t("dialog.btn_cancel"), QMessageBox.RejectRole)
-        box.setDefaultButton(add_btn)
+        box.setDefaultButton(monitor_btn)
         box.exec()
         clicked = box.clickedButton()
+
         if clicked is fav_btn:
             if fav_now:
                 FavoritesStore.remove_station(network, code)
@@ -991,12 +1084,28 @@ class MainWindow(QMainWindow):
                 FavoritesStore.add_station(
                     network, code, site_name=site or "", provider="usgs")
             return
-        if clicked is not add_btn:
+
+        if clicked is history_btn:
+            # Análisis histórico: poner la estación en el selector PROPIO de
+            # Replay y cambiar a modo Histórico (NO toca el combo en vivo).
+            band = (channels[0] or "BH?")[:2]
+            self.pro_window.show_and_focus()
+            try:
+                self.pro_window.replay_panel.select_history_station(
+                    network, code, loc, band, f"{network}.{code}")
+            except Exception:  # noqa: BLE001
+                logger.debug("看历史: fijar estación en Replay falló",
+                             exc_info=True)
+            self.pro_window.show_replay()
+            self._status_bar.showMessage(
+                t("status.opened_in_workbench"), 5000)
             return
 
-        # Construir el preset con host + location + canal explícitos.
-        # Importante: location NO puede ser "*" (SeedLink no acepta
-        # wildcards). Usamos el code estándar de la red ("00" para IRIS).
+        if clicked is not monitor_btn:
+            return
+
+        # Monitorización en vivo: añadir al combo EN VIVO (modo En vivo).
+        # location NO puede ser "*" (SeedLink no acepta wildcards).
         preset = StationPreset(
             label=f"{network}.{code} — {site[:30]}",
             network=network,
@@ -1007,6 +1116,8 @@ class MainWindow(QMainWindow):
             seedlink_port=port,
         )
         added = self.pro_window.add_station(preset)
+        self.pro_window.show_and_focus()
+        self.pro_window.show_live()
         n = self.pro_window.dynamic_station_count()
         if added:
             self._status_bar.showMessage(
@@ -1095,10 +1206,25 @@ class MainWindow(QMainWindow):
             logger.debug("UsageTracker.record_report_generated falló",
                          exc_info=True)
 
+    def _report_dataset(self):
+        """``(quakes, context)`` para el reporte: el del panel de datos según su
+        modo (en vivo / análisis), con respaldo al feed en vivo."""
+
+        quakes = list(self._latest_earthquakes or [])
+        context = {"mode": "live"}
+        try:
+            dq, ctx = self.dashboard_panel.report_context()
+            if dq:
+                quakes, context = dq, ctx
+        except Exception:  # noqa: BLE001
+            logger.debug("report_context falló", exc_info=True)
+        return quakes, context
+
     def _on_export_report(self) -> None:
         """Pregunta al usuario dónde guardar el reporte y lo escribe."""
 
-        if not self._latest_earthquakes:
+        quakes, context = self._report_dataset()
+        if not quakes:
             self._status_bar.showMessage(t("status.no_data_for_report"), 6000)
             return
 
@@ -1115,10 +1241,11 @@ class MainWindow(QMainWindow):
 
         try:
             written = generator.generate(
-                quakes=self._latest_earthquakes,
+                quakes=quakes,
                 station_label=self._station_label(),
                 version=__version__,
                 output_path=target,
+                context=context,
             )
         except Exception as exc:  # noqa: BLE001
             self._status_bar.showMessage(
@@ -1134,7 +1261,8 @@ class MainWindow(QMainWindow):
     def _on_export_report_pdf(self) -> None:
         """Misma lógica que el HTML pero invocando QWebEngineView.printToPdf."""
 
-        if not self._latest_earthquakes:
+        quakes, context = self._report_dataset()
+        if not quakes:
             self._status_bar.showMessage(t("status.no_data_for_report"), 6000)
             return
 
@@ -1150,9 +1278,10 @@ class MainWindow(QMainWindow):
             return
 
         html = generator.render(
-            quakes=self._latest_earthquakes,
+            quakes=quakes,
             station_label=self._station_label(),
             version=__version__,
+            context=context,
         )
 
         # Crear el exportador (lo guardamos como atributo para que viva

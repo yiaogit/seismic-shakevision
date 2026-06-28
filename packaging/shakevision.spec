@@ -59,6 +59,14 @@ datas = [
 # shakevision/__main__.py para el contexto completo).
 datas += collect_data_files("certifi")
 
+# v0.8.x — búsqueda multilingüe de eventos (services/geo_region.py):
+#   * babel trae los datos locale de CLDR (nombres de país en es/fr/zh).
+#     Sin esto, Locale.parse(...).territories queda vacío en el bundle.
+#   * reverse_geocoder empaqueta un CSV de ciudades (rg_cities1000.csv)
+#     que carga en runtime; hay que incluirlo como dato.
+datas += collect_data_files("babel")
+datas += collect_data_files("reverse_geocoder")
+
 # ------------------------------------------------------------
 # Hidden imports — módulos que PyInstaller no descubre por análisis
 # estático porque se importan dinámicamente (importlib, plugins, etc.).
@@ -90,6 +98,11 @@ hiddenimports = [
     "PySide6.QtMultimedia",
     "PySide6.QtNetwork",
     "PySide6.QtPositioning",
+    # v0.8.x — enriquecimiento geográfico de eventos
+    "babel",
+    "babel.localedata",
+    "reverse_geocoder",
+    "scipy.spatial",          # reverse_geocoder usa cKDTree
 ]
 
 # macOS — pyobjc se importa de forma PEREZOSA dentro de funciones en
@@ -210,12 +223,12 @@ if sys.platform == "darwin":
         name="ShakeVision.app",
         icon=ICON_PATH,
         bundle_identifier="org.shakevision.app",
-        version="0.8.0.0",
+        version="0.8.3.0",
         info_plist={
             "CFBundleName": "ShakeVision",
             "CFBundleDisplayName": "ShakeVision",
-            "CFBundleShortVersionString": "0.8.0.0",
-            "CFBundleVersion": "0.8.0.0",
+            "CFBundleShortVersionString": "0.8.3.0",
+            "CFBundleVersion": "0.8.3.0",
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "11.0",
             "NSHumanReadableCopyright": "© 2025 ShakeVision contributors — MIT License",

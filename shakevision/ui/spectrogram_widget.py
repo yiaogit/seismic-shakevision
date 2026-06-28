@@ -37,13 +37,20 @@ DEFAULT_DB_MAX: float = -10.0
 class SpectrogramPanel(QFrame):
     """Mapa de calor tiempo-frecuencia para el canal vertical."""
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: Optional[QWidget] = None,
+                 absolute_time: bool = False) -> None:
         super().__init__(parent)
         self.setObjectName("WaveformPanel")  # Reutiliza el estilo del panel de ondas
         self.setFrameShape(QFrame.NoFrame)
         # v0.7.7: altura mínima para que el splitter NO lo aplaste a una
         # franja donde no se ven los ticks de frecuencia.
         self.setMinimumHeight(140)
+
+        # v0.8.0: en Replay (estático) el eje X es **hora UTC absoluta** —
+        # coincide con el oscilograma; antes mostraba segundos relativos
+        # NEGATIVOS (convención del modo en vivo), lo que confundía en histórico.
+        self._absolute_time = bool(absolute_time)
+        self._channel: str = ""
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
@@ -56,11 +63,17 @@ class SpectrogramPanel(QFrame):
         layout.addWidget(self._header)
 
         # PlotWidget contenedor — v0.6 P11: theme-aware
-        self._plot = pg.PlotWidget(background=COLOR_BACKGROUND)
+        if self._absolute_time:
+            from shakevision.ui.waveform_widget import _UTCAxisItem
+            self._plot = pg.PlotWidget(
+                background=COLOR_BACKGROUND,
+                axisItems={"bottom": _UTCAxisItem(orientation="bottom")})
+        else:
+            self._plot = pg.PlotWidget(background=COLOR_BACKGROUND)
         self._plot.setMouseEnabled(x=True, y=False)
         self._plot.setMenuEnabled(False)
         self._plot.showGrid(x=True, y=True, alpha=0.10)
-        self._plot.setLabel("bottom", t("spectrogram.axis_time"))
+        self._plot.setLabel("bottom", self._time_axis_label())
         self._plot.setLabel("left", t("spectrogram.axis_freq"))
         self._plot.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         from shakevision.ui.pg_theming import subscribe_pg_plot
@@ -101,23 +114,48 @@ class SpectrogramPanel(QFrame):
     # ------------------------------------------------------------------
     # API pública
     # ------------------------------------------------------------------
+    def _time_axis_label(self) -> str:
+        return t("spectrogram.axis_time_utc" if self._absolute_time
+                 else "spectrogram.axis_time")
+
+    def set_channel(self, channel: str) -> None:
+        """Fija el canal mostrado en la cabecera (p. ej. ``BHZ``). Antes el
+        canal estaba HARDCODEADO ("EHZ") en la cadena i18n, lo que era erróneo
+        para estaciones de banda ancha (BH…)."""
+
+        self._channel = (channel or "").strip()
+        self._apply_header()
+
+    def _apply_header(self) -> None:
+        base = t("spectrogram.title")
+        self._header.setText(f"{base} ({self._channel})" if self._channel
+                             else base)
+
     def _retranslate(self) -> None:
         """Re-aplica labels traducidos al cambiar idioma."""
 
-        self._header.setText(t("spectrogram.title"))
-        self._plot.setLabel("bottom", t("spectrogram.axis_time"))
+        self._apply_header()
+        self._plot.setLabel("bottom", self._time_axis_label())
         self._plot.setLabel("left", t("spectrogram.axis_freq"))
 
-    def update_from_spectrum(self, spectrum: SpectrumResult) -> None:
-        """Refresca el mapa de calor con un nuevo ``SpectrumResult``."""
+    def update_from_spectrum(self, spectrum: SpectrumResult,
+                             t0_abs: Optional[float] = None) -> None:
+        """Refresca el mapa de calor con un nuevo ``SpectrumResult``.
+
+        Si ``t0_abs`` (epoch UTC del inicio de la ventana) se da, el eje X pasa
+        a hora absoluta: los tiempos relativos se desplazan para que el primer
+        bin caiga en ``t0_abs`` (alineado con el oscilograma)."""
 
         if spectrum.power_db.size == 0:
             return
 
         # Ajustar el ImageItem al rango (X: tiempos, Y: frecuencias).
         # ``setRect`` evita tener que reescalar manualmente el array.
-        x0 = float(spectrum.times[0])
-        x1 = float(spectrum.times[-1]) if spectrum.times.size > 1 else x0 + 1.0
+        t_first = float(spectrum.times[0])
+        offset = (float(t0_abs) - t_first) if t0_abs is not None else 0.0
+        x0 = t_first + offset
+        x1 = (float(spectrum.times[-1]) + offset
+              if spectrum.times.size > 1 else x0 + 1.0)
         y0 = float(spectrum.freqs[0])
         y1 = float(spectrum.freqs[-1])
 

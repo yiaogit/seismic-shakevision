@@ -561,13 +561,16 @@ class AppHeader(QFrame):
         self._refresh_mode_button_text()
 
     def _refresh_theme_button(self) -> None:
-        """Re-pinta emoji + tooltip del botón de tema."""
+        """v0.8.0: icono vectorial (sol/luna) + tooltip del botón de tema. El
+        icono refleja el modo ACTUAL (sol=claro, luna=oscuro) y se recolorea con
+        el tema. Sustituye al emoji ☀/🌙."""
 
         mode = ThemeManager.mode()
-        # v0.7.6: fallback al emoji/tooltip de "dark" (era "🌓"/"auto"
-        # antes de quitar el modo auto).
-        glyph = _THEME_MODE_GLYPH.get(mode, "🌙")
-        self._theme_button.setText(glyph)
+        theme = ThemeManager.current_theme()
+        self._theme_button.setText("")
+        self._theme_button.setIcon(
+            get_icon("sun" if mode == "light" else "moon", theme=theme))
+        self._theme_button.setIconSize(QSize(18, 18))
         self._theme_button.setToolTip(
             t(_THEME_MODE_TOOLTIP_KEY.get(mode, "header.theme.tooltip_dark"))
         )

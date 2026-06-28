@@ -51,6 +51,7 @@ from shakevision.services.shake_presets import (
     LanShakePreset,
     ShakePresetStore,
 )
+from shakevision.ui.combo_utils import fit_combo
 from shakevision.ui.signal_safety import subscribe
 
 
@@ -451,6 +452,12 @@ class ControlPanel(QFrame):
         # Botón principal
         self.listen_button = QPushButton()
         self.listen_button.clicked.connect(self._on_listen_clicked)
+        try:
+            from shakevision.ui.icons import get_icon
+            from shakevision.ui.theme_manager import ThemeManager as _TM
+            self.listen_button.setIcon(get_icon("listen", theme=_TM.current_theme()))
+        except Exception:  # noqa: BLE001
+            pass
         layout.addWidget(self.listen_button)
 
         # Slider de aceleración
@@ -728,10 +735,15 @@ class ControlPanel(QFrame):
             if self.station_combo.itemData(i) is _ADD_LAN_SHAKE_SENTINEL:
                 self.station_combo.removeItem(i)
                 break
+        from shakevision.ui.icons import get_icon
+        from shakevision.ui.theme_manager import ThemeManager as _TM
         self.station_combo.addItem(
+            get_icon("add", theme=_TM.current_theme()),
             t("controls.station.add_lan_shake"),
             userData=_ADD_LAN_SHAKE_SENTINEL,
         )
+        fit_combo(self.station_combo,
+                  i18n_keys=["controls.station.add_lan_shake"])
 
     def _add_lan_shake_to_combo(self, lan: "LanShakePreset") -> None:
         """Inserta un LanShakePreset como un StationPreset normal."""
@@ -783,8 +795,8 @@ class ControlPanel(QFrame):
 
         Estrategia: borrar todos los items dinámicos cuyo host coincide
         con algún preset del store o que ya no existen, y re-insertar
-        los actuales. Conserva los presets estáticos (XX/MOCK + AM
-        defaults de AppConfig) y selecciona el último Shake añadido si
+        los actuales. Conserva los presets estáticos (AM defaults de
+        AppConfig) y selecciona el último Shake añadido si
         el usuario acaba de añadir uno.
         """
 

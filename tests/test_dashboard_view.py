@@ -178,6 +178,8 @@ def test_build_payload_returns_all_keys() -> None:
         "period_histogram",
         "trend_48h", "depth_mag_scatter",
         "station_summary",
+        # v0.8.3: gráficas nuevas del panel (en vivo + análisis)
+        "epicenters", "mag_time", "event_rate", "pro",
     }
     assert set(payload.keys()) == expected
     assert payload["count_24h"] == 3

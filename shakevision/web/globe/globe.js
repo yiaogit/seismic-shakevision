@@ -1061,7 +1061,7 @@
     if (!data || !data.raw) return "";
     if (data.kind === "device") {
       const d = data.raw;
-      return `<div style="font-weight:600;margin-bottom:4px">📡 ${d.network}.${d.code}</div>`
+      return `<div style="font-weight:600;margin-bottom:4px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><circle cx="12" cy="12" r="1.8"/><path d="M8 8a5.5 5.5 0 0 0 0 8M16 8a5.5 5.5 0 0 1 0 8M5 5a10 10 0 0 0 0 14M19 5a10 10 0 0 1 0 14"/></svg>${d.network}.${d.code}</div>`
            + `<div style="color:#a1a1aa;font-family:monospace">${t("web.globe.tooltip.lat")}: ${d.lat.toFixed(3)}°</div>`
            + `<div style="color:#a1a1aa;font-family:monospace">${t("web.globe.tooltip.lng")}: ${d.lng.toFixed(3)}°</div>`
            + `<div style="color:#a1a1aa;font-family:monospace">${t("web.globe.tooltip.alt")}: ${d.elevation.toFixed(0)} m</div>`
@@ -1136,7 +1136,7 @@
   }
 
   function syncRotateBtnUI(isRotating) {
-    rotateBtn.textContent = isRotating ? "⏸" : "▶";
+    // El icono (pausa/play) lo pinta el CSS según la clase `paused`.
     rotateBtn.classList.toggle("paused", !isRotating);
   }
 
@@ -1300,16 +1300,17 @@
       !d.provider || d.provider === "shakenet").length;
     const nUsgs = state.devices.filter(d => d.provider === "usgs").length;
 
+    // El icono es vectorial (CSS mask por `data-layer`), no un emoji.
     if (state.activeLayer === "devices") {
-      icon.textContent = "📡";
+      icon.dataset.layer = "devices";
       text.textContent = t("web.globe.counter.devices",
         {shake: nShake, usgs: nUsgs});
     } else if (state.activeLayer === "quakes") {
-      icon.textContent = "🌋";
+      icon.dataset.layer = "quakes";
       text.textContent = t("web.globe.counter.quakes",
         {n: state.quakes.length});
     } else {
-      icon.textContent = "✨";
+      icon.dataset.layer = "both";
       text.textContent = t("web.globe.counter.both",
         {quakes: state.quakes.length, shake: nShake, usgs: nUsgs});
     }

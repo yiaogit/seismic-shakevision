@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFrame,
@@ -26,7 +27,13 @@ from PySide6.QtWidgets import (
 )
 
 from shakevision.i18n import LocaleService, t
+from shakevision.processing.magnitude_color import magnitude_color
 from shakevision.ui.signal_safety import subscribe
+
+#: Tope de filas a PINTAR. QTableWidget no está virtualizado: pintar los ~miles
+#: de eventos del feed all_month (decenas de miles de items) congela la UI. Se
+#: muestran las más recientes hasta este tope; el usuario refina para ver más.
+_MAX_ROWS = 2000
 
 
 class _NumericItem(QTableWidgetItem):
@@ -72,7 +79,7 @@ class EventListPanel(QFrame):
         self._hint.setObjectName("Caption")
         layout.addWidget(self._hint)
 
-        self._table = QTableWidget(0, 4)
+        self._table = QTableWidget(0, 5)
         self._table.setObjectName("EventTable")
         self._table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self._table.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -103,13 +110,25 @@ class EventListPanel(QFrame):
         else:
             self._hint.setText(t("events.hint"))
 
-    def set_events(self, quakes) -> None:
-        """Rellena la tabla con la lista de ``Earthquake`` (recientes primero)."""
+    def set_events(self, quakes, categories: Optional[dict] = None) -> None:
+        """Rellena la tabla con la lista de ``Earthquake`` (recientes primero).
 
-        rows = sorted(quakes, key=lambda q: q.timestamp_unix, reverse=True)
+        ``categories`` (opcional): ``{quake_id: (etiqueta, dist_deg)}`` con la
+        categoría de distancia a la estación más cercana (local / regional /
+        telesismo). Si falta para un evento, la celda muestra "—".
+        """
+
+        categories = categories or {}
+        ordered = sorted(quakes, key=lambda q: q.timestamp_unix, reverse=True)
+        total = len(ordered)
+        rows = ordered[:_MAX_ROWS]      # cap de pintado (anti-congelación)
         self._loaded_once = True
-        self._has_data = len(rows) > 0
-        self._update_hint()
+        self._has_data = total > 0
+        if total > _MAX_ROWS:
+            self._hint.setText(
+                t("events.showing_capped", shown=len(rows), total=total))
+        else:
+            self._update_hint()
         self._table.setSortingEnabled(False)
         self._table.setRowCount(len(rows))
         for r, q in enumerate(rows):
@@ -119,11 +138,22 @@ class EventListPanel(QFrame):
             # El id del sismo viaja en la columna 0 para recuperarlo al activar.
             time_item.setData(Qt.UserRole + 1, q.id)
             mag_item = _NumericItem(f"{q.magnitude:.1f}", q.magnitude)
+            # Evaluación por color: número de magnitud coloreado y en negrita.
+            mag_item.setForeground(QColor(magnitude_color(q.magnitude)))
+            _f = mag_item.font()
+            _f.setBold(True)
+            mag_item.setFont(_f)
             depth_item = _NumericItem(f"{q.depth_km:.0f}", q.depth_km)
+            # Categoría de distancia a la estación más cercana (ordena por Δ°).
+            cat = categories.get(q.id)
+            if cat:
+                near_item = _NumericItem(cat[0], float(cat[1]))
+            else:
+                near_item = _NumericItem("—", float("inf"))
             place_item = QTableWidgetItem(q.place or "—")
             place_item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
             for c, item in enumerate(
-                    (time_item, mag_item, depth_item, place_item)):
+                    (time_item, mag_item, depth_item, near_item, place_item)):
                 self._table.setItem(r, c, item)
         self._table.setSortingEnabled(True)
 
@@ -153,7 +183,8 @@ class EventListPanel(QFrame):
     def _apply_headers(self) -> None:
         self._table.setHorizontalHeaderLabels([
             t("events.col_time"), t("events.col_mag"),
-            t("events.col_depth"), t("events.col_place"),
+            t("events.col_depth"), t("events.col_nearest"),
+            t("events.col_place"),
         ])
 
     def _retranslate(self) -> None:

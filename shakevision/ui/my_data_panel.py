@@ -35,10 +35,13 @@ from PySide6.QtWidgets import (
 )
 
 from shakevision.i18n import LocaleService, t
+from shakevision.processing.event_filter import filter_quakes, passes
 from shakevision.processing.recorder import list_recordings
 from shakevision.services.catalog_store import CatalogStore
 from shakevision.services.favorites_store import FavoritesStore
+from shakevision.ui.event_filter_bar import EventFilterBar
 from shakevision.ui.event_list_panel import _NumericItem
+from shakevision.ui.icons import get_icon
 from shakevision.ui.signal_safety import subscribe
 
 
@@ -78,6 +81,12 @@ class MyDataPanel(QFrame):
         self.refresh_btn.clicked.connect(self.refresh)
         bar.addWidget(self.refresh_btn)
         root.addLayout(bar)
+
+        # ── Filtro (rango temporal + búsqueda) — reutiliza EventFilterBar sin
+        # el combo de magnitud (no aplica a estaciones/grabaciones). ──
+        self.filter_bar = EventFilterBar(parent=self, show_magnitude=False)
+        self.filter_bar.filter_changed.connect(self.refresh)
+        root.addWidget(self.filter_bar)
 
         outer = QSplitter(Qt.Vertical, parent=self)
 
@@ -122,6 +131,8 @@ class MyDataPanel(QFrame):
         subscribe(self, LocaleService.language_changed_signal(),
                   self._retranslate)
         subscribe(self, FavoritesStore.changed_signal(), self.refresh)
+        from shakevision.ui.theme_manager import ThemeManager as _TM
+        subscribe(self, _TM.changed_signal(), self._retranslate)
 
     # ------------------------------------------------------------------
     @staticmethod
@@ -146,6 +157,7 @@ class MyDataPanel(QFrame):
         table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         table.setSelectionBehavior(QAbstractItemView.SelectRows)
         table.setSelectionMode(QAbstractItemView.SingleSelection)
+        table.setAlternatingRowColors(True)
         table.verticalHeader().setVisible(False)
         table.horizontalHeader().setStretchLastSection(True)
         lay.addWidget(table, stretch=1)
@@ -153,11 +165,23 @@ class MyDataPanel(QFrame):
 
     # ------------------------------------------------------------------
     def refresh(self) -> None:
-        # ★ Sismos
-        self._fav_events = list(FavoritesStore.list_events())
-        self._fav_events.sort(key=lambda e: e.timestamp_unix, reverse=True)
-        self._ev_table.setRowCount(len(self._fav_events))
-        for r, e in enumerate(self._fav_events):
+        # Filtros activos (rango temporal + texto). La VISIBILIDAD de las
+        # secciones depende de si HAY datos en absoluto (opción C); las filas
+        # mostradas son las que pasan el filtro (filtrar a 0 deja la tabla
+        # vacía, no oculta la sección — así no "desaparece" al buscar).
+        t_from, t_to = self.filter_bar.time_range()
+        q = (self.filter_bar.query() or "").strip().lower()
+        shown = total = 0
+
+        # ★ Sismos (reutiliza el filtro puro de eventos: hora + lugar).
+        all_events = list(FavoritesStore.list_events())
+        ev_rows = filter_quakes(all_events, t_from=t_from, t_to=t_to, query=q)
+        ev_rows.sort(key=lambda e: e.timestamp_unix, reverse=True)
+        self._fav_events = ev_rows
+        total += len(all_events)
+        shown += len(ev_rows)
+        self._ev_table.setRowCount(len(ev_rows))
+        for r, e in enumerate(ev_rows):
             it = _NumericItem(_fmt(e.timestamp_unix), e.timestamp_unix)
             it.setData(Qt.UserRole + 1, e.id)
             self._ev_table.setItem(r, 0, it)
@@ -165,10 +189,17 @@ class MyDataPanel(QFrame):
                                                       e.magnitude))
             self._ev_table.setItem(r, 2, QTableWidgetItem(e.place or "—"))
 
-        # ★ Estaciones
-        stations = list(FavoritesStore.list_stations())
-        self._st_table.setRowCount(len(stations))
-        for r, s in enumerate(stations):
+        # ★ Estaciones (sin hora → solo filtro de texto sobre código + sitio).
+        all_stations = list(FavoritesStore.list_stations())
+        st_rows = [
+            s for s in all_stations
+            if not q or q in
+            f"{s.network}.{s.code} {getattr(s, 'site_name', '') or ''}".lower()
+        ]
+        total += len(all_stations)
+        shown += len(st_rows)
+        self._st_table.setRowCount(len(st_rows))
+        for r, s in enumerate(st_rows):
             code = QTableWidgetItem(f"{s.network}.{s.code}")
             code.setData(Qt.UserRole + 1, s.network)
             code.setData(Qt.UserRole + 2, s.code)
@@ -176,11 +207,19 @@ class MyDataPanel(QFrame):
             self._st_table.setItem(r, 1, QTableWidgetItem(
                 getattr(s, "site_name", "") or "—"))
 
-        # Grabaciones — C: ocultar la sección si no hay ninguna.
-        recs = list_recordings()
-        self._rec_box.setVisible(bool(recs))
-        self._rec_table.setRowCount(len(recs))
-        for r, info in enumerate(recs):
+        # Grabaciones — C: ocultar la sección si no hay ninguna en absoluto.
+        all_recs = list_recordings()
+        rec_rows = [
+            info for info in all_recs
+            if passes(magnitude=0.0, timestamp_unix=info.time_unix,
+                      place=f"{info.network}.{info.station} {info.path.name}",
+                      t_from=t_from, t_to=t_to, query=q)
+        ]
+        self._rec_box.setVisible(bool(all_recs))
+        total += len(all_recs)
+        shown += len(rec_rows)
+        self._rec_table.setRowCount(len(rec_rows))
+        for r, info in enumerate(rec_rows):
             it = QTableWidgetItem(_fmt(info.time_unix))
             it.setData(Qt.UserRole + 1, str(info.path))
             it.setData(Qt.UserRole + 2, info.network)
@@ -192,21 +231,28 @@ class MyDataPanel(QFrame):
 
         # Catálogo QuakeML
         try:
-            events = CatalogStore().list_events()
+            all_cat = CatalogStore().list_events()
         except Exception:  # noqa: BLE001
-            events = []
-        # C: ocultar la sección si no hay eventos guardados (igual que
-        # grabaciones). Es una función de analista; al usuario casual no le
-        # interesa ver una tabla vacía.
-        self._cat_box.setVisible(bool(events))
-        self._cat_table.setRowCount(len(events))
-        for r, ev in enumerate(events):
+            all_cat = []
+        cat_rows = [
+            ev for ev in all_cat
+            if passes(magnitude=0.0, timestamp_unix=ev["time"],
+                      place=f"{ev.get('station', '')} {ev.get('desc', '')}",
+                      t_from=t_from, t_to=t_to, query=q)
+        ]
+        self._cat_box.setVisible(bool(all_cat))
+        total += len(all_cat)
+        shown += len(cat_rows)
+        self._cat_table.setRowCount(len(cat_rows))
+        for r, ev in enumerate(cat_rows):
             it = QTableWidgetItem(_fmt(ev["time"]))
             it.setData(Qt.UserRole + 1, int(ev.get("idx", -1)))
             self._cat_table.setItem(r, 0, it)
             self._cat_table.setItem(r, 1, QTableWidgetItem(ev["station"]))
             self._cat_table.setItem(r, 2, QTableWidgetItem(str(ev["n_picks"])))
             self._cat_table.setItem(r, 3, QTableWidgetItem(ev.get("desc", "")))
+
+        self.filter_bar.set_count(shown, total)
 
     # ------------------------------------------------------------------
     # Acciones
@@ -344,8 +390,14 @@ class MyDataPanel(QFrame):
                 0, QHeaderView.ResizeToContents)
 
     def _retranslate(self) -> None:
+        from shakevision.ui.theme_manager import ThemeManager as _TM
+        try:
+            th = _TM.current_theme()
+        except Exception:  # noqa: BLE001
+            th = "dark"
         self._title.setText(t("mine.title"))
         self.refresh_btn.setText(t("local.refresh"))
+        self.refresh_btn.setIcon(get_icon("refresh", theme=th))
         self._ev_hdr.setText(t("mine.fav_events"))
         self._st_hdr.setText(t("mine.fav_stations"))
         self._rec_hdr.setText(t("local.recordings"))

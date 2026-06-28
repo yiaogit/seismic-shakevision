@@ -28,8 +28,10 @@ from typing import Optional
 
 from PySide6.QtCore import QObject, Qt, QThread, Signal, Slot
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDateTimeEdit,
+    QDoubleSpinBox,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -43,7 +45,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import QDateTime
 
-from shakevision.config import AppConfig, seedlink_channels_for, seedlink_location_for
+from shakevision.config import AppConfig, seedlink_location_for
 from shakevision.i18n import LocaleService, t
 from shakevision.processing.filters import WaveformProcessor
 from shakevision.processing.spectrum import SpectrumComputer
@@ -54,6 +56,7 @@ from shakevision.services.dataselect import (
 )
 from shakevision.sources.replay import _stream_to_channels
 from shakevision.services.response import ResponseService
+from shakevision.ui.combo_utils import fit_combo
 from shakevision.ui.loading_overlay import LoadingOverlay
 from shakevision.ui.spectrogram_widget import SpectrogramPanel
 from shakevision.ui.spectrum_panel import SpectrumPanel
@@ -166,6 +169,10 @@ class ReplayPanel(QWidget):
         self._event_name: str = ""           # texto del sismo a revisar
         # ¿La estación la fijó la revisión de evento (independiente del combo)?
         self._event_station_mode: bool = False
+        # True mientras fijamos la fecha de forma PROGRAMÁTICA (prefill /
+        # catálogo / sugerir-ventana): evita que ``dateTimeChanged`` borre el
+        # contexto de evento. Solo los cambios MANUALES del usuario lo borran.
+        self._dt_programmatic: bool = False
         # v0.7.7: servicio de respuesta instrumental (lazy) para el botón m/s.
         self._response_service = None
         # Salida física: "counts" | "VEL" | "DISP" | "ACC". Para ≠counts se
@@ -212,12 +219,18 @@ class ReplayPanel(QWidget):
         # pero Replay descargaba IU.ANMO por defecto.
         self._net, self._sta, self._loc, self._cha = "IU", "ANMO", "00", "BH?"
 
+        # v0.8.0: selector de estación PROPIO de Replay (desacoplado del combo
+        # en vivo). Es un DESPLEGABLE de estaciones conocidas (no se teclea):
+        # el combo en vivo, favoritos y el evento revisado alimentan sus
+        # opciones. Cambiarlo a mano = búsqueda histórica de OTRA estación.
         self._lbl_station = QLabel()
         form.addWidget(self._lbl_station, 0, 0)
-        self.station_value = QLabel("—")
-        self.station_value.setObjectName("StationValue")
-        self.station_value.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        form.addWidget(self.station_value, 0, 1, 1, 2)
+        self.station_combo = QComboBox()
+        self.station_combo.setObjectName("StationValue")
+        self.station_combo.setMinimumWidth(180)
+        self.station_combo.currentIndexChanged.connect(
+            self._on_replay_station_changed)
+        form.addWidget(self.station_combo, 0, 1, 1, 2)
 
         # Selector de BANDA (BH/HH/LH/EH/SH). El código de estación lo fija la
         # selección de la barra lateral; aquí el usuario solo elige la banda
@@ -228,10 +241,9 @@ class ReplayPanel(QWidget):
         self.band_combo = QComboBox()
         for band in _BANDS:
             self.band_combo.addItem(band, userData=band)
-        # Caja más grande + popup ancho para que quepa la descripción.
-        self.band_combo.setMinimumWidth(230)
-        self.band_combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
-        self.band_combo.view().setMinimumWidth(300)
+        # Caja + popup dimensionados a la descripción más larga entre idiomas.
+        fit_combo(self.band_combo,
+                  i18n_keys=[f"replay.band.{b.lower()}" for b in _BANDS])
         self.band_combo.currentIndexChanged.connect(self._on_band_changed)
         form.addWidget(self.band_combo, 0, 4, 1, 2)
 
@@ -250,6 +262,12 @@ class ReplayPanel(QWidget):
         self._lbl_start = QLabel()
         form.addWidget(self._lbl_start, 1, 0)
         self.start_dt = QDateTimeEdit()
+        # El campo ES UTC (coincide con la etiqueta 'UTC' y con la política de
+        # superficies profesionales). Antes era LocalTime y se convertía con
+        # .toUTC() al leer: el INSTANTE de consulta no cambia (ese .toUTC() pasa
+        # a ser no-op), pero ahora la ENTRADA MANUAL y la visualización están en
+        # UTC de verdad, sin el desfase silencioso de la zona local.
+        self.start_dt.setTimeSpec(Qt.TimeSpec.UTC)
         self.start_dt.setDisplayFormat("yyyy-MM-dd  HH:mm:ss  'UTC'")
         self.start_dt.setCalendarPopup(True)
         self.start_dt.setKeyboardTracking(True)
@@ -259,6 +277,15 @@ class ReplayPanel(QWidget):
         # Empezar con el cursor en la sección "minutos" (más útil para
         # ajustar precisión que en el año).
         self.start_dt.setCurrentSection(QDateTimeEdit.MinuteSection)
+        # Acotar el rango: nada de fechas futuras (sin datos) ni pre-1900.
+        # (No cambiamos el TimeSpec del campo para no alterar la lectura
+        # existente vía .toUTC() — solo los límites.)
+        from shakevision.ui.date_picker import CATALOG_FLOOR, cap_to_now
+        self.start_dt.setMinimumDate(CATALOG_FLOOR)
+        cap_to_now(self.start_dt)
+        # Cambio MANUAL de fecha → búsqueda histórica independiente (quita el
+        # banner "revisando evento"). Los cambios programáticos van protegidos.
+        self.start_dt.dateTimeChanged.connect(self._on_start_dt_changed)
         form.addWidget(self.start_dt, 1, 1, 1, 3)
 
         # Duration con presets rápidos (30s / 1m / 2m / 5m / 30m)
@@ -282,7 +309,9 @@ class ReplayPanel(QWidget):
         self.output_combo = QComboBox()
         for code in ("counts", "VEL", "DISP", "ACC"):
             self.output_combo.addItem(code, userData=code)
-        self.output_combo.setMinimumWidth(150)
+        fit_combo(self.output_combo, i18n_keys=[
+            "replay.out_counts", "replay.out_vel",
+            "replay.out_disp", "replay.out_acc"])
         self.output_combo.currentIndexChanged.connect(self._on_output_changed)
         form.addWidget(self.output_combo, 1, 7)
 
@@ -313,6 +342,40 @@ class ReplayPanel(QWidget):
         preset_row.addStretch(1)
         root.addLayout(preset_row)
 
+        # ─── Filtro INDEPENDIENTE de Replay (v0.8.0) ─────────────────
+        # El modo histórico ya NO sigue el filtro de la barra lateral; tiene su
+        # propio paso de banda (se inicializa desde config.filt).
+        filt_row = QHBoxLayout()
+        filt_row.setSpacing(6)
+        self.filt_check = QCheckBox()
+        self.filt_check.setChecked(bool(getattr(self._filt, "enabled", True)))
+        self.filt_check.toggled.connect(self._on_replay_filter_changed)
+        filt_row.addWidget(self.filt_check)
+        self._lbl_filt_low = QLabel()
+        filt_row.addWidget(self._lbl_filt_low)
+        self.filt_low = QDoubleSpinBox()
+        self.filt_low.setRange(0.01, 50.0)
+        self.filt_low.setDecimals(2)
+        self.filt_low.setSingleStep(0.1)
+        self.filt_low.setSuffix(" Hz")
+        self.filt_low.setMinimumWidth(96)
+        self.filt_low.setValue(float(getattr(self._filt, "lowcut_hz", 0.5)))
+        self.filt_low.valueChanged.connect(self._on_replay_filter_changed)
+        filt_row.addWidget(self.filt_low)
+        self._lbl_filt_high = QLabel()
+        filt_row.addWidget(self._lbl_filt_high)
+        self.filt_high = QDoubleSpinBox()
+        self.filt_high.setRange(0.02, 50.0)
+        self.filt_high.setDecimals(2)
+        self.filt_high.setSingleStep(0.5)
+        self.filt_high.setSuffix(" Hz")
+        self.filt_high.setMinimumWidth(96)
+        self.filt_high.setValue(float(getattr(self._filt, "highcut_hz", 10.0)))
+        self.filt_high.valueChanged.connect(self._on_replay_filter_changed)
+        filt_row.addWidget(self.filt_high)
+        filt_row.addStretch(1)
+        root.addLayout(filt_row)
+
         # ─── Botonera (solo Descargar; sin reproducir/pausar/detener) ───
         btn_row = QHBoxLayout()
         btn_row.setSpacing(6)
@@ -320,6 +383,14 @@ class ReplayPanel(QWidget):
         self.download_btn = QPushButton()
         self.download_btn.clicked.connect(self._on_download_clicked)
         btn_row.addWidget(self.download_btn)
+
+        # Limpiar la traza histórica cargada (independiente de la conexión en
+        # vivo). Antes "limpiar" estaba atado al botón Detener del stream; ahora
+        # Replay tiene su propio botón. Deshabilitado hasta que haya algo cargado.
+        self.clear_btn = QPushButton()
+        self.clear_btn.clicked.connect(self._on_clear_clicked)
+        self.clear_btn.setEnabled(False)
+        btn_row.addWidget(self.clear_btn)
 
         # Rotación ZNE→ZRT (checkable). Solo se habilita cuando hay contexto
         # de evento + coordenadas de estación (para el back-azimuth).
@@ -378,7 +449,10 @@ class ReplayPanel(QWidget):
         self.waveform_panel.units_requested.connect(self._on_units_requested)
         # v0.7.7: PSD del tramo seleccionado (caja amarilla) → 2.º bloque.
         self.waveform_panel.region_changed.connect(self._update_psd)
-        self.spectrogram_panel = SpectrogramPanel(parent=splitter)
+        # absolute_time=True: en Replay el espectrograma usa hora UTC absoluta
+        # (igual que el oscilograma), no segundos relativos.
+        self.spectrogram_panel = SpectrogramPanel(
+            parent=splitter, absolute_time=True)
         self.spectrum_panel = SpectrumPanel(parent=splitter)
         splitter.addWidget(self.waveform_panel)
         splitter.addWidget(self.spectrogram_panel)
@@ -402,12 +476,22 @@ class ReplayPanel(QWidget):
         self._update_station_hint()
         self._lbl_start.setText(t("replay.field.start"))
         self._lbl_dur.setText(t("replay.field.duration"))
+        self.filt_check.setText(t("replay.filter_enable"))
+        self._lbl_filt_low.setText(t("replay.filter_low"))
+        self._lbl_filt_high.setText(t("replay.filter_high"))
         self.download_btn.setText(t("replay.button.download"))
+        self.clear_btn.setText(t("replay.button.clear"))
         self.rotate_btn.setText(t("replay.button.rotate"))
         self.rotate_btn.setToolTip(t("replay.rotate_tooltip"))
         self.toggle_spec_btn.setText(t("replay.toggle_spectrogram"))
         self.toggle_psd_btn.setText(t("replay.toggle_psd"))
         self.export_btn.setText(t("replay.button.export"))
+        try:
+            from shakevision.ui.icons import get_icon
+            from shakevision.ui.theme_manager import ThemeManager as _TM
+            self.export_btn.setIcon(get_icon("export", theme=_TM.current_theme()))
+        except Exception:  # noqa: BLE001
+            pass
         self._act_png.setText(t("replay.button.export_png"))
         self._act_csv.setText(t("replay.button.export_csv"))
         self._act_quakeml.setText(t("replay.button.export_quakeml"))
@@ -447,11 +531,13 @@ class ReplayPanel(QWidget):
     # Estación (sigue a la selección de la barra lateral) — v0.7.7
     # ------------------------------------------------------------------
     def _update_station_display(self) -> None:
-        """Refresca la etiqueta N.S.L.C. de solo lectura."""
+        """Asegura que el combo muestra la estación actual (_net/_sta),
+        añadiéndola si faltaba. Selección PROGRAMÁTICA (no dispara el handler)."""
 
-        self.station_value.setText(
-            f"{self._net}.{self._sta}.{self._loc or '--'}.{self._cha}"
-        )
+        idx = self.add_available_station(
+            self._net, self._sta, self._loc, (self._cha or "BH")[:2])
+        if idx >= 0:
+            self._select_station_index(idx)
 
     def _update_station_hint(self) -> None:
         """Aclara de dónde viene la estación: sigue al combo (modo normal) o es
@@ -501,7 +587,7 @@ class ReplayPanel(QWidget):
         t_min, t_max = min(picks.values()), max(picks.values())
         span = t_max - t_min
         dur = int(max(120, span + 120))
-        self.start_dt.setDateTime(
+        self._set_start_dt(
             QDateTime.fromSecsSinceEpoch(
                 int(t_min - 60), Qt.OffsetFromUTC, 0))
         self.dur_spin.setValue(dur)
@@ -526,39 +612,118 @@ class ReplayPanel(QWidget):
         dist_txt = f"{len(markers)}"
         self.status_label.setText(t("replay.catalog_restored", n=dist_txt))
 
-    def set_station(self, preset) -> None:
-        """Refleja en Replay la estación seleccionada en la barra lateral.
+    # ── Selector de estación PROPIO de Replay (v0.8.0 desacople) ──────
+    @staticmethod
+    def _station_entry(net: str, sta: str, loc: str = "",
+                       band: str = "BH", label: str = "") -> dict:
+        net = (net or "").upper()
+        sta = (sta or "").upper()
+        return {
+            "net": net, "sta": sta, "loc": loc or "",
+            "band": (band or "BH").upper()[:2],
+            "label": label or f"{net}.{sta}",
+        }
 
-        Convierte el canal vertical del preset (p. ej. ``BHZ``) en una
-        consulta de banda de 3 componentes (``BH?``) para descargar Z/N/E.
-        Es un no-op si ``preset`` no es un ``StationPreset`` (p. ej. el
-        sentinel "➕ Add LAN Shake…").
-        """
+    def add_available_station(self, net: str, sta: str, loc: str = "",
+                              band: str = "BH", label: str = "",
+                              select: bool = False) -> int:
+        """Añade una estación como OPCIÓN del combo de Replay (dedup por N.S).
+        Devuelve su índice, o -1 si net/sta vacíos. ``select`` la selecciona de
+        forma PROGRAMÁTICA (sin disparar el handler de cambio)."""
+
+        entry = self._station_entry(net, sta, loc, band, label)
+        if not entry["net"] or not entry["sta"]:
+            return -1
+        for i in range(self.station_combo.count()):
+            d = self.station_combo.itemData(i)
+            if d and d["net"] == entry["net"] and d["sta"] == entry["sta"]:
+                if select:
+                    self._select_station_index(i)
+                return i
+        # blockSignals: añadir el PRIMER ítem cambia el índice -1→0 y dispararía
+        # el handler de cambio espuriamente; la selección genuina del usuario
+        # (clic en el desplegable) no pasa por aquí y sí dispara.
+        self.station_combo.blockSignals(True)
+        self.station_combo.addItem(entry["label"], userData=entry)
+        self.station_combo.blockSignals(False)
+        fit_combo(self.station_combo)  # etiquetas de estación (sin idioma)
+        idx = self.station_combo.count() - 1
+        if select:
+            self._select_station_index(idx)
+        return idx
+
+    def add_available_preset(self, preset, select: bool = False) -> int:
+        """Añade una estación desde un ``StationPreset`` (combo en vivo)."""
 
         from shakevision.config import StationPreset
-
         if not isinstance(preset, StationPreset):
+            return -1
+        band = (preset.channel or "BH?")[:2]
+        return self.add_available_station(
+            preset.network, preset.station, preset.location, band,
+            preset.label, select=select)
+
+    def _select_station_index(self, idx: int) -> None:
+        self.station_combo.blockSignals(True)
+        self.station_combo.setCurrentIndex(idx)
+        self.station_combo.blockSignals(False)
+
+    def _apply_station_entry(self, entry: dict) -> None:
+        """Vuelca una entrada del combo a _net/_sta/_loc/_cha + banda."""
+
+        self._net = entry["net"]
+        self._sta = entry["sta"]
+        loc = (entry["loc"] or "").strip()
+        if loc in ("", "*", "--"):
+            loc = seedlink_location_for(self._net)
+        self._loc = loc
+        self._cha = f"{entry['band']}?"
+        self._set_band_combo(entry["band"])
+
+    def _on_replay_station_changed(self, _idx: int) -> None:
+        """Cambio MANUAL de estación en Replay → búsqueda histórica de OTRA
+        estación; invalida el contexto de evento (banner/TauP)."""
+
+        entry = self.station_combo.currentData()
+        if not entry:
             return
-        # Cambiar de estación invalida el contexto de evento (las llegadas
-        # teóricas dependían de la estación anterior).
+        self._apply_station_entry(entry)
         self._event = None
         self._event_name = ""
         self._event_station_mode = False
+        self._event_dist_deg = None
         self._set_load_cta(False)
         self._update_event_banner()
-        self._net = (preset.network or "").upper()
-        self._sta = (preset.station or "").upper()
-        loc = (preset.location or "").strip()
-        if loc in ("", "*", "--"):
-            loc = seedlink_location_for(preset.network)
-        self._loc = loc
-        ch = (preset.channel or "").strip().upper()
-        if not ch:
-            ch = seedlink_channels_for(preset.network)[0]
-        # Vertical → banda completa (BHZ → BH?) para traer las 3 componentes.
-        self._cha = (ch[:-1] + "?") if len(ch) >= 2 else ch
-        self._set_band_combo(self._cha[:2])
-        self._update_station_display()
+        self._update_station_hint()
+
+    def set_station(self, preset) -> None:
+        """v0.8.0: la estación del combo EN VIVO se añade a Replay como OPCIÓN.
+        Solo se SELECCIONA si Replay aún no tenía ninguna (default inicial);
+        cambios posteriores del combo en vivo NO secuestran la selección de
+        Replay — Replay es independiente del modo en vivo."""
+
+        was_empty = self.station_combo.count() == 0
+        idx = self.add_available_preset(preset, select=was_empty)
+        if was_empty and idx >= 0:
+            self._apply_station_entry(self.station_combo.itemData(idx))
+            self._update_station_hint()
+
+    def select_history_station(self, net: str, sta: str, loc: str = "",
+                               band: str = "BH", label: str = "") -> None:
+        """Pone Replay en esta estación para análisis histórico (la añade +
+        selecciona + aplica). Es el destino del "看历史" del diálogo de estación;
+        invalida el contexto de evento (búsqueda histórica independiente)."""
+
+        idx = self.add_available_station(net, sta, loc, band, label, select=True)
+        if idx < 0:
+            return
+        self._apply_station_entry(self.station_combo.itemData(idx))
+        self._event = None
+        self._event_name = ""
+        self._event_station_mode = False
+        self._event_dist_deg = None
+        self._set_load_cta(False)
+        self._update_event_banner()
         self._update_station_hint()
 
     def _on_band_changed(self, _idx: int) -> None:
@@ -604,7 +769,7 @@ class ReplayPanel(QWidget):
             "depth_km": max(0.0, float(depth_km)),
             "origin_ts": origin_utc.timestamp(),
         }
-        self.start_dt.setDateTime(
+        self._set_start_dt(
             QDateTime.fromSecsSinceEpoch(
                 int(origin_utc.timestamp() - 30), Qt.OffsetFromUTC, 0))
         self.dur_spin.setValue(int(duration_s))
@@ -716,13 +881,45 @@ class ReplayPanel(QWidget):
             self.status_label.setText(t("replay.click_load_hint"))
             return
         start, dur = win
-        self.start_dt.setDateTime(
+        self._set_start_dt(
             QDateTime.fromSecsSinceEpoch(int(start), Qt.OffsetFromUTC, 0))
         self.dur_spin.setValue(int(dur))
         dist = self._event_dist_deg
         self.status_label.setText(
             t("replay.window_autoset",
               dist=f"{dist:.1f}" if dist is not None else "—"))
+
+    def _set_start_dt(self, qdt) -> None:
+        """Fija la fecha de inicio de forma PROGRAMÁTICA (sin que se interprete
+        como un cambio manual del usuario que limpiaría el contexto de evento)."""
+
+        self._dt_programmatic = True
+        try:
+            self.start_dt.setDateTime(qdt)
+        finally:
+            self._dt_programmatic = False
+
+    def _on_start_dt_changed(self, *_a) -> None:
+        """El usuario cambió la fecha A MANO → modo búsqueda histórica
+        independiente: deja de "revisar" ese evento (quita banner + TauP). Los
+        cambios programáticos (prefill/catálogo/sugerir-ventana) van protegidos
+        por ``_dt_programmatic`` y no entran aquí."""
+
+        if self._dt_programmatic:
+            return
+        if (self._event is None and not self._event_name
+                and not self._event_station_mode):
+            return
+        self._event = None
+        self._event_name = ""
+        self._event_station_mode = False
+        self._event_dist_deg = None
+        self._update_event_banner()
+        try:
+            self._update_station_display()
+            self._update_station_hint()
+        except (RuntimeError, AttributeError):
+            pass
 
     def _update_event_banner(self) -> None:
         if self._event is not None and self._event_name:
@@ -820,6 +1017,7 @@ class ReplayPanel(QWidget):
         self._render()                       # filtra + dibuja + espectrograma
         for b in self._export_buttons:
             b.setEnabled(True)
+        self.clear_btn.setEnabled(True)
 
         self._loaded = True
         self.status_label.setText(
@@ -879,10 +1077,11 @@ class ReplayPanel(QWidget):
         self.waveform_panel.set_amp_unit_override(unit_override)
         self.waveform_panel.load_static(zf, nf, ef, start_ts, sr)
         self.waveform_panel.set_channel_labels(f"{band}Z", h1_label, h2_label)
+        self.spectrogram_panel.set_channel(f"{band}Z")
         # Arrays mostrados → exportar CSV lo que se ve (filtrado/rotado/físico).
         self._display_arrays = (zf, nf, ef, start_ts, sr)
         self._reapply_arrivals()
-        self._render_spectrogram(zf, nf, ef, sr_int)
+        self._render_spectrogram(zf, nf, ef, sr_int, start_ts)
 
     # ------------------------------------------------------------------
     # Salida física (deconvolución completa del Stream) — v0.7.7
@@ -946,19 +1145,35 @@ class ReplayPanel(QWidget):
             self._render()
             self.status_label.setText(t("analysis.response_ok"))
 
-    def _render_spectrogram(self, zf, nf, ef, sr_int: int) -> None:
+    def _render_spectrogram(self, zf, nf, ef, sr_int: int,
+                            start_ts: Optional[float] = None) -> None:
         try:
             zc = next((a for a in (zf, nf, ef) if a is not None and a.size), None)
             if zc is not None:
                 spec = SpectrumComputer(sample_rate_hz=sr_int).compute(zc)
                 if spec is not None:
-                    self.spectrogram_panel.update_from_spectrum(spec)
+                    self.spectrogram_panel.update_from_spectrum(
+                        spec, t0_abs=start_ts)
         except Exception:  # noqa: BLE001
             logger.debug("Replay: espectrograma estático omitido", exc_info=True)
 
+    def _on_replay_filter_changed(self, *_a) -> None:
+        """Filtro PROPIO de Replay (v0.8.0): reconstruye ``_filt`` desde sus
+        controles y re-filtra la traza ya cargada (sin re-descargar)."""
+
+        from shakevision.config import FilterConfig
+        self._filt = FilterConfig(
+            enabled=bool(self.filt_check.isChecked()),
+            lowcut_hz=float(self.filt_low.value()),
+            highcut_hz=float(self.filt_high.value()),
+            order=int(getattr(self._filt, "order", 4)),
+        )
+        if self._loaded_arrays:
+            self._render()
+
     def on_filter_changed(self, cfg) -> None:
-        """El usuario cambió el filtro (barra lateral) → re-filtrar la traza
-        histórica YA cargada, sin volver a descargar."""
+        """(Legado) Filtro de la barra lateral. v0.8.0: Replay ya NO está
+        cableado a esto (tiene filtro propio); se conserva por compatibilidad."""
 
         self._filt = cfg
         if self._loaded_arrays:
@@ -1181,12 +1396,37 @@ class ReplayPanel(QWidget):
     # ------------------------------------------------------------------
     # Cleanup
     # ------------------------------------------------------------------
+    def _on_clear_clicked(self) -> None:
+        """Botón "Limpiar" propio de Replay (desacoplado de Detener)."""
+
+        self.clear_loaded()
+
     def clear_loaded(self) -> None:
-        """Limpia la traza histórica cargada (la llama el controlador al
-        pulsar Detener en la sesión en vivo, además del uso interno)."""
+        """Borrón y cuenta nueva de Replay: limpia la traza cargada Y el
+        contexto de evento (banner + TauP), y restablece los botones.
+
+        Ya NO la llama el botón Detener del stream en vivo (v0.8.0: Replay es
+        independiente de la conexión); la dispara el botón "Limpiar" propio o
+        usos internos."""
 
         self._clear_display()
         self._event = None
+        self._event_name = ""
+        self._event_station_mode = False
+        self._event_dist_deg = None
+        self._pending_user_picks = None
+        self._update_event_banner()
+        self._set_load_cta(False)
+        try:
+            self.export_btn.setEnabled(False)
+            self.clear_btn.setEnabled(False)
+        except (RuntimeError, AttributeError):
+            pass
+        try:
+            self._update_station_display()
+            self._update_station_hint()
+        except (RuntimeError, AttributeError):
+            pass
         try:
             self.status_label.clear()
         except (RuntimeError, AttributeError):
@@ -1217,6 +1457,7 @@ class ReplayPanel(QWidget):
             b.setEnabled(False)
         try:
             self.waveform_panel.reset()
+            self.spectrogram_panel.reset()   # v0.8.0 fix: faltaba al limpiar
             self.spectrum_panel.reset()
         except (RuntimeError, AttributeError):
             pass

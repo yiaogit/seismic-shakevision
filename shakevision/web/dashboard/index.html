@@ -44,89 +44,136 @@
     </header>
 
     <main id="charts-area">
-      <!-- Controles globales: solo periodo -->
-      <!-- NOTA: el selector de FUENTE (Todos/USGS/Shake) se eliminó
-           porque los feeds GeoJSON de USGS no exponen consistentemente
-           el origen del evento; filtrar por "Raspberry Shake" siempre
-           devolvía un conjunto vacío y confundía al usuario. -->
-      <div id="controls-bar">
-        <div id="period-selector" class="selector-row">
-          <span class="selector-label" data-i18n="web.dashboard.selector.period">PERIODO</span>
-          <button class="period-btn" data-period="all_hour">1 h</button>
-          <button class="period-btn" data-period="all_6h">6 h</button>
-          <button class="period-btn active" data-period="all_day">24 h</button>
-          <button class="period-btn" data-period="all_week">7 d</button>
-          <button class="period-btn" data-period="all_month">30 d</button>
+      <!-- ░░░░ PÁGINA: EN VIVO (monitoreo) ░░░░ -->
+      <div id="page-live">
+        <div id="controls-bar">
+          <div id="period-selector" class="selector-row">
+            <span class="selector-label" data-i18n="web.dashboard.selector.period">PERIODO</span>
+            <button class="period-btn" data-period="all_hour">1 h</button>
+            <button class="period-btn" data-period="all_6h">6 h</button>
+            <button class="period-btn active" data-period="all_day">24 h</button>
+            <button class="period-btn" data-period="all_week">7 d</button>
+            <button class="period-btn" data-period="all_month">30 d</button>
+          </div>
+        </div>
+
+        <h2 class="row-title"><span id="row-summary-title" data-i18n="web.dashboard.row.summary">Resumen</span> <span id="period-label" class="period-label">(últimas 24 h)</span></h2>
+
+        <div class="charts-grid">
+          <section class="chart-card">
+            <header>
+              <span class="chart-icon">📊</span>
+              <h3><span data-i18n="web.dashboard.chart.countries">Top 10 países / regiones</span></h3>
+            </header>
+            <div class="chart" id="chart-countries"></div>
+          </section>
+
+          <section class="chart-card">
+            <header>
+              <span class="chart-icon">📈</span>
+              <h3 data-i18n="web.dashboard.chart.magnitude">Distribución de magnitud</h3>
+            </header>
+            <div class="chart" id="chart-magnitude"></div>
+          </section>
+
+          <section class="chart-card">
+            <header>
+              <span class="chart-icon">🌊</span>
+              <h3 data-i18n="web.dashboard.chart.depth">Distribución de profundidad</h3>
+            </header>
+            <div class="chart" id="chart-depth"></div>
+          </section>
+
+          <section class="chart-card">
+            <header>
+              <span class="chart-icon">⏱</span>
+              <h3 id="timeline-title"><span id="timeline-title-text">Línea temporal</span> <span id="timeline-window-label" class="period-label-inline">(24 h)</span></h3>
+            </header>
+            <div class="chart" id="chart-timeline"></div>
+          </section>
+
+          <section class="chart-card">
+            <header>
+              <span class="chart-icon">📶</span>
+              <h3 data-i18n="web.dashboard.chart.rate">Tasa de eventos</h3>
+            </header>
+            <div class="chart" id="chart-pager"></div>
+          </section>
+
+          <section class="chart-card">
+            <header>
+              <span class="chart-icon">🗺️</span>
+              <h3 data-i18n="web.dashboard.chart.epicenters">Epicentros (lon × lat)</h3>
+            </header>
+            <div class="chart" id="chart-epicenters"></div>
+          </section>
         </div>
       </div>
 
-      <h2 class="row-title"><span id="row-summary-title">Resumen</span> <span id="period-label" class="period-label">(últimas 24 h)</span></h2>
+      <!-- ░░░░ PÁGINA: ANÁLISIS (estadística) ░░░░ -->
+      <div id="page-analysis" style="display:none;">
+        <h2 class="row-title" data-i18n="web.dashboard.row.advanced">Análisis avanzado</h2>
+        <div class="charts-grid">
+          <section class="chart-card">
+            <header>
+              <span class="chart-icon">🎯</span>
+              <h3 data-i18n="web.dashboard.chart.scatter">Profundidad × Magnitud</h3>
+            </header>
+            <div class="chart" id="chart-scatter"></div>
+          </section>
+          <section class="chart-card">
+            <header>
+              <span class="chart-icon">📉</span>
+              <h3><span data-i18n="web.dashboard.chart.trend">Distribución por periodo</span> <span id="trend-bucket-label" class="period-label-inline">(adaptativo)</span></h3>
+            </header>
+            <div class="chart" id="chart-trend"></div>
+          </section>
+          <section class="chart-card">
+            <header>
+              <span class="chart-icon">📈</span>
+              <h3 data-i18n="web.dashboard.chart.magtime">Magnitud en el tiempo</h3>
+            </header>
+            <div class="chart" id="chart-magtime"></div>
+          </section>
+          <section class="chart-card">
+            <header>
+              <span class="chart-icon">🌊</span>
+              <h3 data-i18n="web.dashboard.chart.depthdist">Distribución de profundidad</h3>
+            </header>
+            <div class="chart" id="chart-depthdist"></div>
+          </section>
+        </div>
 
-      <!-- Primera fila: 4 gráficas básicas -->
-      <div class="charts-grid">
-        <section class="chart-card">
-          <header>
-            <span class="chart-icon">📊</span>
-            <h3><span data-i18n="web.dashboard.chart.countries">Top 10 países / regiones</span> <span class="period-label-inline" data-i18n="web.dashboard.chart.countries_filter">(M ≥ 3.0)</span></h3>
-          </header>
-          <div class="chart" id="chart-countries"></div>
-        </section>
-
-        <section class="chart-card">
-          <header>
-            <span class="chart-icon">📈</span>
-            <h3 data-i18n="web.dashboard.chart.magnitude">Distribución de magnitud</h3>
-          </header>
-          <div class="chart" id="chart-magnitude"></div>
-        </section>
-
-        <section class="chart-card">
-          <header>
-            <span class="chart-icon">🌊</span>
-            <h3 data-i18n="web.dashboard.chart.depth">Distribución de profundidad</h3>
-          </header>
-          <div class="chart" id="chart-depth"></div>
-        </section>
-
-        <section class="chart-card">
-          <header>
-            <span class="chart-icon">⏱</span>
-            <h3 id="timeline-title"><span id="timeline-title-text">Línea temporal</span> <span id="timeline-window-label" class="period-label-inline">(24 h)</span></h3>
-          </header>
-          <div class="chart" id="chart-timeline"></div>
-        </section>
-      </div>
-
-      <h2 class="row-title" data-i18n="web.dashboard.row.advanced">Análisis avanzado</h2>
-
-      <!-- Segunda fila: 3 gráficas avanzadas -->
-      <div class="charts-grid charts-grid-3">
-        <section class="chart-card">
-          <header>
-            <span class="chart-icon">🚨</span>
-            <h3 data-i18n="web.dashboard.chart.pager">Niveles PAGER</h3>
-            <select id="pager-region-select" class="region-select" data-i18n-title="web.dashboard.pager.tooltip" title="Filtrar por región">
-              <option value="all" data-i18n="web.dashboard.pager.select.all">Todo el mundo</option>
-            </select>
-          </header>
-          <div class="chart" id="chart-pager"></div>
-        </section>
-
-        <section class="chart-card">
-          <header>
-            <span class="chart-icon">📉</span>
-            <h3><span data-i18n="web.dashboard.chart.trend">Distribución por periodo</span> <span id="trend-bucket-label" class="period-label-inline">(adaptativo)</span></h3>
-          </header>
-          <div class="chart" id="chart-trend"></div>
-        </section>
-
-        <section class="chart-card">
-          <header>
-            <span class="chart-icon">🎯</span>
-            <h3 data-i18n="web.dashboard.chart.scatter">Profundidad × Magnitud</h3>
-          </header>
-          <div class="chart" id="chart-scatter"></div>
-        </section>
+        <h2 class="row-title">
+          <span data-i18n="web.dashboard.row.professional">Análisis profesional</span>
+          <span id="pro-summary" class="period-label-inline"></span>
+        </h2>
+        <div id="pro-grid" class="charts-grid charts-grid-2">
+          <section class="chart-card">
+            <header><h3 data-i18n="web.dashboard.chart.gr">Gutenberg–Richter (valor b)</h3></header>
+            <div class="chart" id="chart-gr"></div>
+          </section>
+          <section class="chart-card">
+            <header><h3 data-i18n="web.dashboard.chart.energy">Liberación de energía</h3></header>
+            <div class="chart" id="chart-energy"></div>
+          </section>
+          <section class="chart-card">
+            <header><h3 data-i18n="web.dashboard.chart.spatial">Densidad espacial (lon × lat)</h3></header>
+            <div class="chart" id="chart-spatial"></div>
+          </section>
+          <section class="chart-card">
+            <header><h3 data-i18n="web.dashboard.chart.depthsection">Sección profundidad × latitud</h3></header>
+            <div class="chart" id="chart-depthsec"></div>
+          </section>
+          <section class="chart-card">
+            <header><h3 data-i18n="web.dashboard.chart.mcb">Calidad del catálogo (Mc / b)</h3></header>
+            <div class="chart" id="chart-mcb"></div>
+          </section>
+          <section class="chart-card">
+            <header><h3 data-i18n="web.dashboard.chart.interevent">Intervalos entre eventos</h3></header>
+            <div class="chart" id="chart-interevent"></div>
+          </section>
+        </div>
       </div>
     </main>
   </div>
