@@ -75,6 +75,10 @@ class EventListPanel(QFrame):
 
         self._loaded_once = False
         self._has_data = False
+        # Estado del recorte a _MAX_ROWS. Se guarda para poder reconstruir el
+        # aviso traducido en cada cambio de idioma (antes se perdía).
+        self._capped_total = 0
+        self._capped_shown = 0
         self._hint = QLabel("")
         self._hint.setObjectName("Caption")
         layout.addWidget(self._hint)
@@ -101,10 +105,16 @@ class EventListPanel(QFrame):
 
     # ------------------------------------------------------------------
     def _update_hint(self) -> None:
-        """Estado del listado: cargando / sin eventos / instrucción."""
+        """Estado del listado: cargando / recortado / sin eventos / instrucción."""
 
         if not self._loaded_once:
             self._hint.setText(t("events.loading"))
+        elif self._capped_total > _MAX_ROWS:
+            # Se pintan solo las N más recientes: avisar SIEMPRE (también tras
+            # un cambio de idioma) para no confundir con el total filtrado.
+            self._hint.setText(t(
+                "events.showing_capped",
+                shown=self._capped_shown, total=self._capped_total))
         elif not self._has_data:
             self._hint.setText(t("events.empty"))
         else:
@@ -125,10 +135,12 @@ class EventListPanel(QFrame):
         self._loaded_once = True
         self._has_data = total > 0
         if total > _MAX_ROWS:
-            self._hint.setText(
-                t("events.showing_capped", shown=len(rows), total=total))
+            self._capped_total = total
+            self._capped_shown = len(rows)
         else:
-            self._update_hint()
+            self._capped_total = 0
+            self._capped_shown = 0
+        self._update_hint()
         self._table.setSortingEnabled(False)
         self._table.setRowCount(len(rows))
         for r, q in enumerate(rows):
@@ -178,6 +190,8 @@ class EventListPanel(QFrame):
 
     def reset(self) -> None:
         self._table.setRowCount(0)
+        self._capped_total = 0
+        self._capped_shown = 0
 
     # ------------------------------------------------------------------
     def _apply_headers(self) -> None:

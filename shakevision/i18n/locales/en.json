@@ -524,7 +524,7 @@
   "events.filter_to": "To",
   "events.filter_search": "Search place, country, region…",
   "events.filter_reset": "Reset",
-  "events.filter_count": "Showing {shown} / {total}",
+  "events.filter_count": "Filtered {shown} / {total}",
   "events.updated": "Updated {time}",
   "replay.button.save_catalog": "Save to catalog",
   "replay.catalog_saved": "✓ Saved to local catalog.",

@@ -16,10 +16,13 @@ Diseño
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 # Directorio por defecto. El usuario puede sobrescribirlo en el
@@ -69,14 +72,23 @@ class FileCache:
             return None
 
     def set(self, key: str, data: bytes) -> None:
-        """Guarda los bytes bajo la clave indicada (atómico)."""
+        """Guarda los bytes bajo la clave indicada (atómico).
 
-        self._dir.mkdir(parents=True, exist_ok=True)
-        target = self._path_for(key)
-        # Escritura atómica: tmp + os.replace
-        tmp = target.with_suffix(target.suffix + ".tmp")
-        tmp.write_bytes(data)
-        os.replace(tmp, target)
+        La caché es **best-effort**: si el directorio no se puede crear o
+        escribir (HOME de solo lectura, sandbox, disco lleno…), se registra
+        en debug y la operación termina sin excepción. Un fallo de caché
+        nunca debe tumbar la carga de datos que el usuario está pidiendo.
+        """
+
+        try:
+            self._dir.mkdir(parents=True, exist_ok=True)
+            target = self._path_for(key)
+            # Escritura atómica: tmp + os.replace
+            tmp = target.with_suffix(target.suffix + ".tmp")
+            tmp.write_bytes(data)
+            os.replace(tmp, target)
+        except OSError:
+            logger.debug("No se pudo escribir la caché %r", key, exc_info=True)
 
     def age_seconds(self, key: str) -> Optional[float]:
         """Devuelve la edad de la entrada o ``None`` si no existe.

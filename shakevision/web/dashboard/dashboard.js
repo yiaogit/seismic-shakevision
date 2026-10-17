@@ -454,7 +454,7 @@
     // Ancho de barra en píxeles según bucket. ECharts auto-ajusta si
     // pasamos null/auto, pero para histogramas largos queda mejor fijar.
     const barWidthByLabel = {
-      "5 min": 4, "30 min": 6, "1 h": 8, "1 día": 14,
+      "5 min": 4, "30 min": 6, "1 h": 8, "1 d": 14,
     };
     const barMaxWidth = barWidthByLabel[label] || 8;
 

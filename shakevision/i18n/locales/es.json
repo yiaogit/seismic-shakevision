@@ -524,7 +524,7 @@
   "events.filter_to": "Hasta",
   "events.filter_search": "Buscar lugar, país, región…",
   "events.filter_reset": "Restablecer",
-  "events.filter_count": "Mostrando {shown} / {total}",
+  "events.filter_count": "Filtrados {shown} / {total}",
   "events.updated": "Actualizado {time}",
   "replay.button.save_catalog": "Guardar en catálogo",
   "replay.catalog_saved": "✓ Guardado en el catálogo local.",

@@ -177,7 +177,10 @@ WAVEFORM_COLORS = {
 # Tipografía (no cambia con el tema)
 # ============================================================
 FONT_STACK_SANS = (
-    '"Inter Variable", "Inter", '
+    # El TTC empaquetado (Inter.ttc) expone la familia "Inter" (caras
+    # estáticas), NO "Inter Variable". Poner primero la que no existe hacía
+    # que Qt avisara en cada arranque y resolviera alias de más.
+    '"Inter", "Inter Variable", '
     '"-apple-system", "SF Pro Text", '
     '"Segoe UI Variable", "Segoe UI", '
     '"PingFang SC", "Microsoft YaHei", '
@@ -734,7 +737,10 @@ def _load_bundled_fonts() -> list[str]:
     if not ASSETS_FONTS_DIR.exists():
         return families
     for path in ASSETS_FONTS_DIR.iterdir():
-        if path.suffix.lower() not in {".ttf", ".otf"}:
+        # .ttc (TrueType Collection) también: Inter se descarga como
+        # Inter.ttc con 36 caras, y quedaba fuera al filtrar solo ttf/otf
+        # (Qt avisaba "missing font family Inter" en cada arranque).
+        if path.suffix.lower() not in {".ttf", ".otf", ".ttc"}:
             continue
         font_id = QFontDatabase.addApplicationFont(str(path))
         if font_id == -1:

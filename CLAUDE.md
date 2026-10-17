@@ -37,15 +37,16 @@ License: MIT.
 ## 2. Current state (read this first)
 
 > 📌 **当前会话方向 (user)**
-> 1. 把本文件与 `docs/roadmap.md` 校准到 **0.8.3.0** 的真实状态（本次已做）。
-> 2. **本机冒烟验证**：界面启动、数据面板「实时 | 分析」双页、历史回放、
->    报告导出——补上沙箱里无法验证的渲染类工作，再据发现优化。结果见 §9。
+> 1. 把本文件与 `docs/roadmap.md` 校准到 **0.8.3.0** 的真实状态（已完成）。
+> 2. **本机冒烟验证**（已完成，结果见 §9）。随后修复了验证发现的
+>    P1/P2 批次（浅色标签栏、i18n、缓存 best-effort、字体、ruff），
+>    记录在 `CHANGELOG.md` 的 `[Unreleased]`。
 
 | Item | Value |
 |---|---|
-| Current version (4 files, see §5) | **0.8.3.0** — committed, tagged and released |
+| Current version (4 files, see §5) | **0.8.3.0** — tagged + released; `[Unreleased]` holds a fix batch (theme/i18n/cache/font/lint) |
 | Latest tag pushed to origin | `v0.8.3.0` (commit `dd45523`, 2026-06-28) |
-| HEAD | `main` @ `295adbd` — one CI release-notes fix on top of the tag |
+| HEAD | `main` @ `295adbd` + local docs/fixes on top of the tag |
 | Latest **release with installers** on GitHub Releases | `v0.8.3.0` — macOS arm64 `.dmg`, Windows `.zip`, Linux `.AppImage` + `SHA256SUMS.txt` |
 | Branch | `main` |
 | Python | 3.10 / 3.11 / 3.12 (CI matrix); 3.14 runs locally but is **off-matrix** |
@@ -64,29 +65,20 @@ License: MIT.
    query + pro charts + analysis report all render on a real machine. The
    remaining gap is the **empty state**: when no analysis query has succeeded
    (or `/count` exceeds 20 000) the page keeps showing live KPIs/charts.
-4. **Light theme tab bar (macOS).** `QTabWidget.setDocumentMode(True)` keeps a
-   native dark strip in light mode, making inactive tabs unreadable;
-   `setDocumentMode(False)` fixes it (verified in §9).
-5. **Live re-translation gaps.** Dashboard region combos + analysis status text
-   do not retranslate; `"1 día"` bucket label is hardcoded Spanish; Event
-   Center’s capped-row hint is overwritten on language change.
-6. **Two intentionally-unused i18n keys** (`common.cancel`,
+4. **Two intentionally-unused i18n keys** (`common.cancel`,
    `profile.tab_title`): the app never calls them, but
    `tests/test_i18n.py` and `tests/test_profile_view.py` assert them as
    a locale contract. The dead-key scan must therefore include `tests/`,
    not just `shakevision/` + web JS. All 4 locales stay aligned
    (739 keys, same placeholders).
-7. **`ui/sidebar_nav.py` has no runtime consumer** — the shell uses a
+5. **`ui/sidebar_nav.py` has no runtime consumer** — the shell uses a
    `QTabWidget` (main_window.py); only `tests/test_sidebar_nav.py`
    imports the sidebar. Either re-wire it or delete it in a cleanup.
-8. **Python 3.14 is off the CI matrix.** It installs and runs locally
-   (565/565 tests green, §9), but 3.10–3.12 is the supported
+6. **Python 3.14 is off the CI matrix.** It installs and runs locally
+   (569/569 tests green, §9), but 3.10–3.12 is the supported
    configuration — reproduce any 3.14-only bug on 3.12 before chasing it
    (`brew install python@3.12` if needed).
-9. **Tooling drift:** `ruff` is unpinned (`>=0.4`), so 0.17.x now reports
-   576 findings by default while 0.12.7 is clean. Pin it or add an
-   explicit `[tool.ruff.lint] select`.
-10. **Docs drift**: CLAUDE.md and `docs/roadmap.md` had lagged behind
+7. **Docs drift**: CLAUDE.md and `docs/roadmap.md` had lagged behind
    0.8.x. Update this file in the same commit as any version bump.
 
 ---
@@ -452,42 +444,43 @@ historical query and rendered both reports.
 | # | Check | How | Result |
 |---|---|---|---|
 | 1 | Package compiles | `.venv/bin/python -m compileall -q shakevision/` | ✅ pass |
-| 2 | Full test suite | `.venv/bin/pytest -q` | ✅ **565 passed** in 26.1 s |
-| 3 | Lint | `.venv/bin/ruff check .` | ⚠️ ruff **0.17.1 → 576**; ruff **0.12.7 → clean** (CI installs unpinned `ruff>=0.4`) |
+| 2 | Full test suite | `.venv/bin/pytest -q` | ✅ **569 passed** in 3.1 s |
+| 3 | Lint | `.venv/bin/ruff check .` | ✅ fixed: `[tool.ruff.lint] select = ["E4","E7","E9","F"]` — 0.17.1 and 0.12.7 both clean |
 | 4 | App launches, splash → MainWindow | `.venv/bin/python -m shakevision` | ✅ (harness built MainWindow directly; splash path not exercised) |
 | 5 | 4 top tabs render (Globe/Data/Events/Mine) | visual | ✅ |
 | 6 | Globe loads from local `lib/` + quake markers | visual + JS | ✅ WebGL true, Earth + borders + labels + 181 quakes. Software rendering (`--disable-gpu`) → “browser does not support WebGL” |
 | 7 | Data ▸ Live charts + region selector | visual + JS | ✅ 9 ECharts instances, KPIs 181 / M5.7 / 21 regions, region combo works |
 | 8 | Data ▸ Analysis: JP · 1 y · M≥3 | real query | ✅ 1,369 events, 16 charts, KPIs relabel to “/ 1 y”, b/Mc/energy/depth charts render. ⚠️ over-cap query (20,971) only warns — page keeps the previous **live** charts/KPIs (no analysis empty state) |
-| 9 | Event Center: live/historical, filters, nearby stations | visual + Qt introspection | ✅ 10,164 loaded, table capped at 2,000 rows, live/historical switch works. ⚠️ cap notice is overwritten by a language switch; the filter count still says “Showing 10,164 / 10,164” |
+| 9 | Event Center: live/historical, filters, nearby stations | visual + Qt introspection | ✅ 10,164 loaded, table capped at 2,000 rows, live/historical switch works. ✅ fixed: cap notice survives language switches; counter now says “Filtered {shown} / {total}” (filter matches, not painted rows) |
 | 10 | Pro Workbench opens; panels instantiate | visual | ✅ opens, waveform/spectrogram/heliogram/hodogram built. Live station connection not exercised (needs SeedLink/LAN Shake) |
 | 11 | Replay review from an event | end-to-end | ⚠️ not exercised (needs an IRIS dataselect download); panel instantiates |
 | 12 | Report export (live + analysis) | generator + WebEngine | ✅ analysis HTML 204 KB / PDF 776 KB with GR + energy SVG + findings; live HTML 29 KB / PDF 259 KB |
-| 13 | Language + theme switch live | visual + JS | ✅ Qt UI, web charts, report all follow the switch. ⚠️ light theme: native macOS **document-mode tab bar stays dark** → inactive tabs nearly unreadable (`setDocumentMode(False)` fixes it, verified) |
+| 13 | Language + theme switch live | visual + JS | ✅ Qt UI, web charts, report all follow the switch. ✅ fixed: light theme tab bar now readable (`setDocumentMode(False)`); region combos + analysis status retranslate |
 
-### Findings from this run (fix candidates, not yet fixed)
+### Findings from this run (after the fix batch)
 
-1. **Light theme tab bar (macOS).** `QTabWidget.setDocumentMode(True)` uses a
-   native strip that ignores the light palette; inactive tab text is
-   unreadable. Setting `setDocumentMode(False)` makes it follow QSS (verified).
-2. **Analysis page empty state.** Switching to Analysis without a successful
-   query (or when `/count` exceeds 20 000) leaves the live KPI row
-   (“EARTHQUAKES / 24 H”) and live-derived charts on screen, which reads as
-   historical data. Needs an explicit “run a query” empty state.
-3. **Live re-translation gaps.** `_retranslate_analysis_bar()` updates labels
-   but not the region combos’ item texts or the existing `an_status` text;
-   switching to zh leaves “Global (any region)” and the last status in English.
-   The `EventListPanel` cap hint is also overwritten by `_update_hint()` on
-   retranslate.
-4. **Hardcoded Spanish label** `"1 día"` in `build_timeline` bucket labels
-   (`dashboard_view.py`), shown in every locale as “(bucket: 1 día)”.
-5. **Cache writes are fatal.** `FileCache.set()` propagates `OSError`, so a
-   read-only `~/.cache` aborts the whole data load with “Could not load data”.
-   Caching should be best-effort (and ideally use a platform cache dir).
-6. **Font warning.** QSS asks for `"Inter Variable"` but the bundled `Inter.ttc`
-   exposes family `Inter`, so Qt logs a missing-family warning on every start.
-7. **Ruff drift.** Unpinned ruff makes CI/lint non-reproducible (see row 3) —
-   pin the version or add an explicit `[tool.ruff.lint] select`.
+1. ✅ **Light theme tab bar (macOS)** — fixed: `setDocumentMode(False)` in
+   `main_window.py`; QTabBar now follows the QSS in both themes.
+2. ⏳ **Analysis page empty state** — **still open**, needs a UX decision:
+   switching to Analysis with no successful query (or when `/count` exceeds
+   20 000) leaves the live KPI row and live-derived charts on screen.
+3. ✅ **Live re-translation gaps** — fixed: region combos are rebuilt keeping
+   the selection, the analysis status is re-rendered from its stored i18n key,
+   the Event Center cap hint is preserved, and the filter counter retranslates.
+4. ✅ **Hardcoded `"1 día"`** — now `"1 d"` in `build_period_buckets` and in
+   the `dashboard.js` bar-width map.
+5. ✅ **Cache writes are fatal** — `FileCache.set()` is best-effort now
+   (debug log, no raise) + regression test.
+6. ✅ **Font warning** — root cause was `_load_bundled_fonts()` ignoring
+   `.ttc` (so `Inter.ttc` never registered). It now loads 38 families and the
+   QSS lists `Inter` first; startup log is clean.
+7. ✅ **Ruff drift** — explicit `[tool.ruff.lint] select`; 0.17.1 and 0.12.7
+   both pass.
+
+> Re-verified after the fixes: **569 tests**, compile + both ruff versions
+> clean; light+zh run shows the light tab bar, `全球(不限地区)`, the translated
+> over-cap status, `已筛选 10,163 / 10,163`, and the capped hint
+> `显示最新 2000 条(共 10163 条)`; no font warnings.
 
 ### Sandboxed-agent caveat (not a product issue)
 

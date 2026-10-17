@@ -105,6 +105,8 @@ class EventFilterBar(QWidget):
         self.count_lbl = QLabel("")
         self.count_lbl.setObjectName("Caption")
         row.addWidget(self.count_lbl)
+        # Último (filtrados, total) para poder re-traducir el contador.
+        self._last_count: Optional[tuple[int, int]] = None
         # Botón "Restablecer" OPCIONAL: el Centro de eventos lo quita (causaba
         # confusión / recargas pesadas); "Mi colección" lo conserva.
         self.reset_btn = None
@@ -190,6 +192,7 @@ class EventFilterBar(QWidget):
         return self.search_edit.text()
 
     def set_count(self, shown: int, total: int) -> None:
+        self._last_count = (int(shown), int(total))
         self.count_lbl.setText(
             t("events.filter_count", shown=shown, total=total))
 
@@ -235,3 +238,7 @@ class EventFilterBar(QWidget):
             self.reset_btn.setText(t("events.filter_reset"))
         self._apply_mag_texts()
         self._apply_depth_texts()
+        if self._last_count is not None:
+            shown, total = self._last_count
+            self.count_lbl.setText(
+                t("events.filter_count", shown=shown, total=total))

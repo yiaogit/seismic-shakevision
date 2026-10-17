@@ -135,7 +135,12 @@ class MainWindow(QMainWindow):
         # ahora vive en una VENTANA FLOTANTE separada (ProWindow) que
         # se abre con el botón "🔬 Pro" del AppHeader.
         self._tabs = QTabWidget(parent=body)
-        self._tabs.setDocumentMode(True)
+        # post-0.8.3: documentMode=False a propósito. En macOS el modo documento
+        # delega la tira de pestañas en el control nativo, que sigue la
+        # apariencia del SISTEMA (oscura) e ignora el QSS/paleta claro:
+        # en tema claro dejaba una banda negra con las pestañas inactivas
+        # ilegibles. Sin documentMode, QTabBar se pinta con nuestro QSS.
+        self._tabs.setDocumentMode(False)
         self._tabs.setTabPosition(QTabWidget.North)
         # NOTA: el connect de currentChanged se hace MÁS ABAJO, tras
         # crear todos los panels. Si se conecta aquí, el primer addTab

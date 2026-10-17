@@ -8,6 +8,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Fixed
+- **Tema claro (macOS) — barra de pestañas ilegible.** `QTabWidget` en modo
+  documento delega la tira de pestañas en el control nativo, que sigue la
+  apariencia del sistema e ignora el QSS claro: dejaba una banda oscura con
+  las pestañas inactivas casi invisibles. Se desactiva `documentMode` para
+  que `QTabBar` se pinte con el tema (verificado en claro y oscuro).
+- **i18n en caliente — regiones y estado de análisis congelados.** Al cambiar
+  de idioma, los combos de región del panel de datos mantenían los nombres
+  viejos y el texto de estado (`≈ N eventos…`) se quedaba en el idioma
+  anterior. Ahora los combos se reconstruyen conservando la selección y el
+  último estado se vuelve a renderizar traducido. El contador del centro de
+  eventos también se retraduce.
+- **Etiqueta `"1 día"` hardcodeada** en el histograma temporal: se mostraba
+  en los cuatro idiomas. Pasa a `"1 d"`, unidad neutra que también usa el
+  mapa de anchos de `dashboard.js`.
+- **Aviso de recorte de la tabla de eventos se perdía** al cambiar de idioma
+  (`_update_hint` lo reemplazaba por la instrucción genérica). El estado
+  recortado (mostradas/total) se conserva y se retraduce. Además el contador
+  pasa de “Showing/Filtrados…” a **“Filtered/已筛选 {shown} / {total}”**, que
+  describe lo que realmente cuenta (coincidencias del filtro), no las filas
+  pintadas.
+- **La caché ya no puede tumbar la carga de datos.** `FileCache.set()` trata
+  los errores de escritura como best-effort (log en debug). Antes, un
+  `~/.cache` de solo lectura (sandbox, HOME ro, disco lleno) abortaba el feed
+  completo con “Could not load data”.
+- **La fuente Inter no se cargaba.** `_load_bundled_fonts()` solo aceptaba
+  `.ttf/.otf`, así que `Inter.ttc` (36 caras) nunca se registraba y Qt avisaba
+  `missing font family "Inter"` en cada arranque. Se admite `.ttc` y el stack
+  QSS prioriza la familia real (`Inter`, no `Inter Variable`).
+- **Lint reproducible.** `[tool.ruff.lint] select = ["E4", "E7", "E9", "F"]`
+  fija el conjunto histórico: ruff 0.17.1 reportaba 576 hallazgos con su
+  selección por defecto ampliada, mientras 0.12.7 daba el árbol limpio.
+
+### Added
+- Tests: `tests/test_event_list_panel.py` (recorte + aviso tras retraducir) y
+  caso de caché no escribible en `tests/test_cache.py`.
+
 ## [0.8.3.0] - 2026-06-28
 
 ### Added

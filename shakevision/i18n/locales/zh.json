@@ -524,7 +524,7 @@
   "events.filter_to": "到",
   "events.filter_search": "搜索地点、国家、地区…",
   "events.filter_reset": "重置",
-  "events.filter_count": "显示 {shown} / {total}",
+  "events.filter_count": "已筛选 {shown} / {total}",
   "events.updated": "更新于 {time}",
   "replay.button.save_catalog": "存目录",
   "replay.catalog_saved": "✓ 已存入本地目录。",

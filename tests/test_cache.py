@@ -43,6 +43,21 @@ def test_set_then_get_returns_bytes(tmp_path: Path) -> None:
     assert c.get("k") == b"hello world"
 
 
+def test_set_is_best_effort_when_directory_unavailable(tmp_path: Path) -> None:
+    """Un fallo de caché no debe propagar OSError al llamador.
+
+    Antes, un ``~/.cache`` de solo lectura (sandbox, HOME ro) abortaba la
+    carga completa de datos con "Could not load data".
+    """
+
+    blocker = tmp_path / "blocker"
+    blocker.write_text("soy un fichero, no un directorio")
+    c = FileCache(cache_dir=blocker / "cache")
+
+    c.set("k", b"data")           # no debe lanzar
+    assert c.get("k") is None     # y simplemente no hay caché
+
+
 def test_get_returns_none_when_expired(tmp_path: Path) -> None:
     """Manipulamos el mtime para forzar caducidad sin esperar."""
 

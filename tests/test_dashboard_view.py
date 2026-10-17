@@ -373,8 +373,8 @@ def test_period_histogram_chooses_bucket_by_period() -> None:
         (3600,        "5 min",  12),
         (6 * 3600,    "30 min", 12),
         (24 * 3600,   "1 h",    24),
-        (7 * 86400,   "1 día",   7),
-        (30 * 86400,  "1 día",  30),
+        (7 * 86400,   "1 d",    7),
+        (30 * 86400,  "1 d",   30),
     ]
     for period, label, n_expected in cases:
         h = build_period_buckets([], now_unix=now, period_seconds=period)

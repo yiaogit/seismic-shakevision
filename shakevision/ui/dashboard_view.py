@@ -348,11 +348,11 @@ def build_period_buckets(
       *  ≤   1 h     → 12 buckets × 5 min
       *  ≤   6 h     → 12 buckets × 30 min
       *  ≤  24 h     → 24 buckets × 1 h
-      *  ≤   7 d     →  7 buckets × 1 día
-      *   30 d        → 30 buckets × 1 día
+      *  ≤   7 d     →  7 buckets × 1 d
+      *   30 d        → 30 buckets × 1 d
 
     Devuelve:
-        {"bucket_label": "5 min" | "30 min" | "1 h" | "1 día",
+        {"bucket_label": "5 min" | "30 min" | "1 h" | "1 d",
          "buckets": [{ts, count, max_mag}, ...]}
     """
 
@@ -360,7 +360,10 @@ def build_period_buckets(
     now = now_unix if now_unix is not None else _time.time()
     p = float(period_seconds)
 
-    # Elegir tamaño de bucket en segundos + etiqueta legible
+    # Elegir tamaño de bucket en segundos + etiqueta legible.
+    # "1 d" (no "1 día"): la etiqueta viaja al JS y se muestra en TODOS los
+    # idiomas; las demás también son unidades neutras. El mapa de tamaños de
+    # dashboard.js usa esta misma clave.
     if p <= 3600:
         bucket_s, bucket_label = 5 * 60, "5 min"
     elif p <= 6 * 3600:
@@ -368,7 +371,7 @@ def build_period_buckets(
     elif p <= 24 * 3600:
         bucket_s, bucket_label = 3600, "1 h"
     else:
-        bucket_s, bucket_label = 86400, "1 día"
+        bucket_s, bucket_label = 86400, "1 d"
 
     n_buckets = max(1, int(round(p / bucket_s)))
     start_edge = now - n_buckets * bucket_s
@@ -794,6 +797,12 @@ class DashboardPanel(QFrame):
         self._live_region_bbox: Optional[tuple] = None
         self._last_live_args: Optional[tuple] = None
         self._analysis_window_days = 365
+        # Último estado mostrado en la barra de análisis: permite volver a
+        # renderizarlo (traducido) al cambiar de idioma, en vez de dejar el
+        # texto viejo congelado.
+        self._status_key: Optional[str] = None
+        self._status_kwargs: dict = {}
+        self._status_raw: str = ""
 
         # Barra de análisis (región + ventana + magnitud mín) ANTES de la web.
         layout.addWidget(self._build_analysis_bar())
@@ -986,7 +995,7 @@ class DashboardPanel(QFrame):
             f"window.setDashboardMode && window.setDashboardMode('{mode}')")
         if is_live:
             self._analysis_mode = False
-            self.an_status.setText("")
+            self._clear_status()
             if self._last_live_args is not None:
                 q, ps, pr = self._last_live_args
                 self._push_payload(build_payload(
@@ -1078,7 +1087,7 @@ class DashboardPanel(QFrame):
 
     def _on_search(self) -> None:
         # Pre-chequeo del tope: contamos ANTES de descargar.
-        self.an_status.setText(t("dashboard.querying"))
+        self._set_status("dashboard.querying")
         self.an_search.setEnabled(False)
         self._ensure_analysis_worker().count(self._analysis_params())
 
@@ -1087,7 +1096,7 @@ class DashboardPanel(QFrame):
         # Si el usuario cambió a "En vivo" mientras contábamos, abortamos.
         if self._view_mode != "analysis":
             self.an_search.setEnabled(True)
-            self.an_status.setText("")
+            self._clear_status()
             return
         if n < 0:
             # No se pudo contar → seguimos igualmente con la consulta.
@@ -1095,9 +1104,9 @@ class DashboardPanel(QFrame):
             return
         if n > FDSN_MAX_LIMIT:
             self.an_search.setEnabled(True)
-            self.an_status.setText(t("dashboard.count_over", n=f"{n:,}"))
+            self._set_status("dashboard.count_over", n=f"{n:,}")
             return
-        self.an_status.setText(t("dashboard.count_estimate", n=f"{n:,}"))
+        self._set_status("dashboard.count_estimate", n=f"{n:,}")
         self._ensure_analysis_worker().query(params)
 
     def _on_analysis_results(self, quakes) -> None:
@@ -1106,7 +1115,7 @@ class DashboardPanel(QFrame):
         # vista en vivo ni re-bloquear el modo análisis). Antes esto causaba
         # cuelgues/sobrescrituras al alternar modos durante una consulta larga.
         if self._view_mode != "analysis":
-            self.an_status.setText("")
+            self._clear_status()
             return
         self._analysis_mode = True
         self._analysis_quakes = list(quakes)
@@ -1120,20 +1129,58 @@ class DashboardPanel(QFrame):
             self._push_payload(payload)
         except Exception as exc:  # noqa: BLE001
             logger.exception("Construir el payload de análisis falló")
-            self.an_status.setText(str(exc))
+            self._set_status_raw(str(exc))
             return
         if not self._got_first_data and hasattr(self, "_overlay"):
             self._got_first_data = True
             self._overlay.hide_overlay()
-        self.an_status.setText(t(
+        self._set_status(
             "dashboard.analyzing", n=len(quakes),
             region=self.an_region.currentText(),
-            window=self.an_preset.currentText()))
+            window=self.an_preset.currentText())
 
     def _on_analysis_failed(self, message: str, too_many: bool) -> None:
         self.an_search.setEnabled(True)
         if self._view_mode == "analysis":
-            self.an_status.setText(message)
+            self._set_status_raw(message)
+
+    # ── Estado de la barra de análisis (re-traducible) ──────────────
+    def _clear_status(self) -> None:
+        self._status_key = None
+        self._status_kwargs = {}
+        self._status_raw = ""
+        self.an_status.setText("")
+
+    def _set_status(self, key: str, **kwargs) -> None:
+        self._status_key = key
+        self._status_kwargs = dict(kwargs)
+        self._status_raw = ""
+        self.an_status.setText(t(key, **kwargs))
+
+    def _set_status_raw(self, text: str) -> None:
+        self._status_key = None
+        self._status_kwargs = {}
+        self._status_raw = text
+        self.an_status.setText(text)
+
+    def _rebuild_region_combo(self, combo: QComboBox) -> None:
+        """Recrea los ítems de un combo de región en el idioma actual,
+        conservando la selección (``userData`` = ISO o ``__global__``)."""
+
+        from shakevision.services import region_presets
+        current = combo.currentData()
+        combo.blockSignals(True)
+        combo.clear()
+        for key, name in region_presets.presets(self._current_lang()):
+            combo.addItem(name, userData=key)
+        idx = combo.findData(current)
+        combo.setCurrentIndex(idx if idx >= 0 else 0)
+        combo.blockSignals(False)
+        fit_combo(
+            combo,
+            extra=[name for lng in LocaleService.available_languages()
+                   for _k, name in region_presets.presets(lng)],
+        )
 
     def _retranslate_analysis_bar(self) -> None:
         try:
@@ -1147,6 +1194,19 @@ class DashboardPanel(QFrame):
             for i, key in enumerate(("win_1y", "win_5y", "win_10y",
                                      "preset_all")):
                 self.an_preset.setItemText(i, t(f"dashboard.{key}"))
+            # Los nombres de región vienen de CLDR/babel y también cambian.
+            self._rebuild_region_combo(self.live_region)
+            self._rebuild_region_combo(self.an_region)
+            # Y el último estado (p. ej. "≈ 20,971 eventos …") se quedaba
+            # congelado en el idioma anterior.
+            if self._status_key:
+                kwargs = dict(self._status_kwargs)
+                if self._status_key == "dashboard.analyzing":
+                    kwargs["region"] = self.an_region.currentText()
+                    kwargs["window"] = self.an_preset.currentText()
+                self.an_status.setText(t(self._status_key, **kwargs))
+            elif self._status_raw:
+                self.an_status.setText(self._status_raw)
         except RuntimeError:
             pass
 
