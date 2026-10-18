@@ -8,6 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+_(nothing yet)_
+
+---
+
+## [0.9.0.0] - 2026-10-18
+
+### Highlights
+- **P0/P1/P2 UX batch:** station placeholder + Connect gating, Smooth/Realtime
+  toggle, 30 Hz smooth live waveform, guarded Replay actions, historical count,
+  elapsed connection progress, ScopeBar collapse, helicorder progress, report
+  button, station toast, globe station search, migration of legacy activity.
+- **Reliability:** fixed Stop SIGSEGV (QThread double ownership), dialogs behind
+  the Workbench, kiosk shortcuts; Settings is now a non-blocking modal.
+- **Auto-update L1:** GitHub manifest, startup notification, SHA-256 verified
+  download (no silent install; signing/rollback remain L2).
+- **README:** new feature-first tour with screenshots + complete architecture.
+
 ### Fixed
 - **Tema claro (macOS) — barra de pestañas ilegible.** `QTabWidget` en modo
   documento delega la tira de pestañas en el control nativo, que sigue la
@@ -116,6 +133,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   “Viewed an earthquake” / “station —”。
 
 ### Added
+- **P0/P1/P2 收尾批次。** SeedLink 连接进度条 + 实时耗时；活动日志旧占位
+  记录一次性迁移删除；Settings 改为非阻塞 ApplicationModal `open()`（齿轮
+  点击可见、主窗不隐藏）；ScopeBar 可折叠；>1 年日期显示 ISO；Helicorder
+  显示 `x min / 24 h` 采集进度；Globe 台站标记增大并保留 Find station 搜索。
+- **自动更新 L1。** 新增 `services/updater.py`（GitHub Releases manifest、
+  版本比较、平台 asset、SHA256SUMS 解析、流式下载 + SHA-256 校验）和
+  `ui/update_dialog.py`；启动静默检查 + 通知 + 手动 Help → Check for
+  updates，下载后校验并打开文件夹。不做静默安装（签名/回滚 L2）。
+  新增 updater/activity-migration/aux-dialog smoke tests；共 **595 passed**。
+
 - **P0/P1 UX batch.** Workbench默认台站占位/Connect gating；Smooth/Realtime
   开关；历史查询前不显示 `0/0`；Replay 空态 PSD 提示；无 P/S 时禁用
   Catalog/QuakeML；部分窗口显示 `8:28 of 10:00`；动态台站满槽提示；

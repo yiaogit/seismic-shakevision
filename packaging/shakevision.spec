@@ -103,6 +103,9 @@ hiddenimports = [
     "babel.localedata",
     "reverse_geocoder",
     "scipy.spatial",          # reverse_geocoder usa cKDTree
+    # v0.9.0 — actualización L1 (import perezoso desde main_window)
+    "shakevision.services.updater",
+    "shakevision.ui.update_dialog",
 ]
 
 # macOS — pyobjc se importa de forma PEREZOSA dentro de funciones en
@@ -223,12 +226,12 @@ if sys.platform == "darwin":
         name="ShakeVision.app",
         icon=ICON_PATH,
         bundle_identifier="org.shakevision.app",
-        version="0.8.3.0",
+        version="0.9.0.0",
         info_plist={
             "CFBundleName": "ShakeVision",
             "CFBundleDisplayName": "ShakeVision",
-            "CFBundleShortVersionString": "0.8.3.0",
-            "CFBundleVersion": "0.8.3.0",
+            "CFBundleShortVersionString": "0.9.0.0",
+            "CFBundleVersion": "0.9.0.0",
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "11.0",
             "NSHumanReadableCopyright": "© 2025 ShakeVision contributors — MIT License",

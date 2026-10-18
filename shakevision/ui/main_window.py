@@ -22,10 +22,11 @@ del controlador (status/latencia/estación/conexión) a sus widgets.
 from __future__ import annotations
 
 import logging
+import threading
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSettings, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -79,6 +80,9 @@ TAB_MINE: int = 3       # 👤 Mi colección (favoritos + registros)
 
 class MainWindow(QMainWindow):
     """Ventana principal de la aplicación."""
+
+    #: Resultado de la comprobación de actualizaciones (hilo de red).
+    _update_check_done = Signal(object)
 
     def __init__(self, config: AppConfig) -> None:
         super().__init__()
@@ -264,6 +268,9 @@ class MainWindow(QMainWindow):
         # SWARM): F11 alterna; Esc sale. Oculta cabecera + barra de pestañas
         # para una vista limpia del globo/datos.
         self._kiosk: bool = False
+        self._settings_dialog = None
+        self._update_checking = False
+        self._update_check_done.connect(self._on_update_check_done)
         # ApplicationShortcut: funciona aunque el foco esté en el Workbench
         # o dentro de QWebEngine (WindowShortcut solo respondía con la
         # MainWindow activa; Esc quedaba atrapado y no se podía salir).
@@ -289,8 +296,10 @@ class MainWindow(QMainWindow):
 
         # Estación inicial en la barra superior (el panel de ondas lo fija
         # el propio controlador en su __init__).
-        _st0 = self._workbench.current_station
-        self.app_header.set_station(f"{_st0.network}.{_st0.station}")
+        _st0 = self.control_panel.current_station()
+        self.app_header.set_station(
+            f"{_st0.network}.{_st0.station}" if _st0 is not None
+            else t("controls.station.placeholder"))
         self.app_header.set_connection_state(ConnectionState.DISCONNECTED)
 
         # Botón "🔬 Pro" del AppHeader → mostrar la ventana flotante.
@@ -454,6 +463,10 @@ class MainWindow(QMainWindow):
             kick_immediately=True,
         )
 
+        # Comprobación silenciosa de actualizaciones L1 (no bloquea el
+        # arranque y no instala nada).
+        QTimer.singleShot(12000, lambda: self._check_updates(False))
+
     # ------------------------------------------------------------------
     # Construcción de menús
     # ------------------------------------------------------------------
@@ -492,6 +505,12 @@ class MainWindow(QMainWindow):
 
         # Menú Ayuda
         self._help_menu = menu_bar.addMenu(t("menu.help"))
+        self._check_updates_action = QAction(
+            t("menu.help.check_updates"), self)
+        self._check_updates_action.triggered.connect(
+            lambda: self._check_updates(True))
+        self._help_menu.addAction(self._check_updates_action)
+        self._help_menu.addSeparator()
         self._about_action = QAction(t("menu.help.about"), self)
         self._about_action.triggered.connect(self._show_about)
         self._help_menu.addAction(self._about_action)
@@ -1430,9 +1449,30 @@ class MainWindow(QMainWindow):
 
         from shakevision.ui.settings_dialog import SettingsDialog
 
+        # Si ya está abierto, traerlo al frente (no crear dos).
+        try:
+            if self._settings_dialog is not None and self._settings_dialog.isVisible():
+                self._settings_dialog.raise_()
+                self._settings_dialog.activateWindow()
+                return
+        except (RuntimeError, AttributeError):
+            self._settings_dialog = None
+
         dlg = SettingsDialog(self._dialog_parent())
         dlg.settings_applied.connect(self._on_settings_applied)
-        dlg.exec()
+        dlg.setWindowModality(Qt.ApplicationModal)
+        self._settings_dialog = dlg
+        dlg.finished.connect(self._on_settings_dialog_finished)
+        # ``open()`` (no exec anidado): en macOS el exec disparado desde el
+        # click del botón podía dejar la app sin diálogo visible / con la
+        # ventana principal oculta. open() muestra el modal y devuelve el
+        # control al bucle normal, con raise/activate explícitos.
+        dlg.open()
+        dlg.raise_()
+        dlg.activateWindow()
+
+    def _on_settings_dialog_finished(self, _result: int = 0) -> None:
+        self._settings_dialog = None
 
     def _refresh_tab_icons(self) -> None:
         """Re-pinta los iconos de las pestañas con el color del tema.
@@ -1561,6 +1601,80 @@ class MainWindow(QMainWindow):
         else:
             header_state = ConnectionState.DISCONNECTED
         self.app_header.set_connection_state(header_state)
+
+    # ------------------------------------------------------------------
+    # Actualizaciones L1
+    # ------------------------------------------------------------------
+    def _check_updates(self, interactive: bool = True) -> None:
+        """Consulta GitHub Releases sin bloquear la UI."""
+
+        if self._update_checking:
+            return
+        self._update_checking = True
+        if interactive:
+            self._status_bar.showMessage(t("update.checking"), 3000)
+
+        def _work() -> None:
+            from shakevision import __version__
+            from shakevision.services import updater
+            info = None
+            error = ""
+            try:
+                info = updater.check_for_update(__version__)
+            except Exception as exc:  # noqa: BLE001
+                error = str(exc)
+            try:
+                self._update_check_done.emit((interactive, info, error))
+            except RuntimeError:
+                pass
+
+        threading.Thread(target=_work, daemon=True,
+                         name="sg-update-check").start()
+
+    def _on_update_check_done(self, payload: object) -> None:
+        self._update_checking = False
+        try:
+            interactive, info, error = payload  # type: ignore[misc]
+        except (TypeError, ValueError):
+            return
+        from PySide6.QtWidgets import QMessageBox
+        if error:
+            if interactive:
+                QMessageBox.warning(self, t("update.title"),
+                                    t("update.check_failed", error=error))
+            return
+        if info is None:
+            if interactive:
+                from shakevision import __version__
+                QMessageBox.information(
+                    self, t("update.title"),
+                    t("update.up_to_date", version=__version__))
+            return
+
+        settings = QSettings("SeismicGuard", "Updates")
+        skipped = str(settings.value("updates/skipped_version", "") or "")
+        if not interactive and skipped == info.version:
+            return
+
+        from shakevision.ui.update_dialog import UpdateDialog
+        if interactive:
+            UpdateDialog(info, self._dialog_parent()).exec()
+            return
+
+        box = QMessageBox(self._dialog_parent())
+        box.setWindowTitle(t("update.notify_title"))
+        box.setText(t("update.available",
+                      version=info.version, current=__version__))
+        download = box.addButton(t("update.download"), QMessageBox.AcceptRole)
+        box.addButton(t("update.later"), QMessageBox.RejectRole)
+        skip = box.addButton(t("update.skip_version"),
+                              QMessageBox.DestructiveRole)
+        box.setDefaultButton(download)
+        box.exec()
+        if box.clickedButton() is skip:
+            settings.setValue("updates/skipped_version", info.version)
+        elif box.clickedButton() is download:
+            UpdateDialog(info, self._dialog_parent()).exec()
 
     def _show_about(self) -> None:
         """Muestra un cuadro "Acerca de" minimalista en la barra de estado."""

@@ -4,29 +4,18 @@
 
 [简体中文](README.md) · **English** · [Español](README.es.md) · [Français](README.fr.md)
 
-> Formerly **ShakeVision OpenData Monitor**. **v0.8.3**'s headline upgrade is a
-> **historical earthquake catalog + multilingual event search**: the Event Center
-> gains a Live/Historical toggle that queries the full USGS **fdsnws-event** ANSS
-> catalog (~1900→now), and search works across languages (type `日本` to find
-> Japan; offline Flinn–Engdahl regions + localized country names). On top of that:
-> the **Data panel** splits into **Live | Analysis** pages (Analysis runs
-> **professional seismic statistics** on the historical catalog — GR/b-value,
-> Mc/b over time, energy, spatial density, depth cross-section); **report export**
-> comes in two mode-aware layouts (**monitoring / statistical**); time selection
-> uses a **draggable range slider** and dropdowns auto-size across all languages.
-> Earlier, **v0.8.0** reorganized the app
-> around an *event → review → personal collection* flow and rewrites
-> **Replay** into a professional waveform browser (zoom/pan, absolute UTC
-> axis, band selection, instrument-response removal to VEL/DISP/ACC,
-> ZNE→ZRT rotation, theoretical P/S arrivals via TauP, dB spectrogram, PSD,
-> and PNG/CSV/QuakeML export). It adds a top-level **Event Center** (quake
-> table + nearby stations) and a **"My Collection"** tab (favorite quakes/
-> stations + recordings/review catalog, with reopening of saved reviews and
-> "Open folder" export). Earlier, v0.7.0 shipped the SeismicGuard rebrand, a
-> macOS-Sonoma-style theming overhaul, full 4-language i18n, an onboarding
-> wizard, a Profile activity timeline, and IP-based location detection. The
-> original v0.1.x binaries remain available on the Releases page under the
-> legacy `ShakeVision-*` name.
+> **v0.9.0 — smoother, more reliable, easier to use.** This release adds a
+> station placeholder with Connect gating, a **30 Hz smooth live waveform**
+> (switchable to Realtime), globe station search, elapsed connection progress,
+> a collapsible ScopeBar, helicorder collection progress, an in-page report
+> button, and **L1 auto-update** (GitHub manifest + SHA-256 verified download;
+> no silent install). It also fixes the **Stop QThread crash**, **dialogs hidden
+> behind the Workbench**, and **kiosk shortcuts**. The historical catalog/pro
+> statistics and dual reports from v0.8.3, and the event → review → collection
+> workflow from v0.8.0, remain fully available.
+>
+> Formerly **ShakeVision OpenData Monitor**; legacy v0.1.x binaries remain on
+> the Releases page under the `ShakeVision-*` name.
 
 **Open-source desktop seismic monitoring workstation**
 *Cross-platform desktop seismic monitoring workbench*
@@ -43,9 +32,63 @@ analysis into a single desktop app.
 [![Platforms](https://img.shields.io/badge/platform-windows%20%7C%20macos%20arm64%20%7C%20linux-lightgrey)](https://github.com/yiaogit/seismic-shakevision/releases/latest)
 [![i18n](https://img.shields.io/badge/i18n-EN%20%7C%20ES%20%7C%20%E4%B8%AD%E6%96%87%20%7C%20FR-brightgreen)](shakevision/i18n/locales/)
 
-[**Download installers**](#-download) · [**Run from source**](#-run-from-source) · [**Features**](#-features) · [**Architecture**](#-architecture) · [**Release flow**](#-release-flow)
+[**Download installers**](#-download) · [**Run from source**](#-run-from-source) · [**Screenshots**](#-screenshots--features) · [**Features**](#-features) · [**Architecture**](#-architecture) · [**Release flow**](#-release-flow)
 
 </div>
+
+---
+
+## 🖼 Screenshots & features
+
+> Captured from **v0.9.0** on a real session (1480×900 main window / 1200×800 Workbench). Dark is the default; light theme is one click away.
+
+### 1. 3D globe — from “see” to “use”
+
+<p align="center"><img src="docs/screenshots/globe.png" alt="3D globe, station layers, periods and Find station search" width="88%"></p>
+
+*28,282 ShakeNet stations + 151 USGS/IRIS stations; Devices / Quakes / Both, 1h–30d, pause/zoom/reset. Type `IU.PAB` in **Find station** and press Enter to open the same station dialog.*
+
+- **Station → Workbench:** `Monitor live` → select it in the side panel → `Connect`; or `Open station in Replay` for history.
+- **Quake → Replay:** click a quake → `Review` → pick the nearest station → Replay.
+- Favorites from either flow land in **Mine**.
+
+### 2. Data — live situation + historical statistics
+
+<p align="center"><img src="docs/screenshots/data-live.png" alt="Data Live KPIs and charts" width="88%"></p>
+<p align="center"><img src="docs/screenshots/data-analysis.png" alt="Data Analysis historical statistics and pro charts" width="88%"></p>
+
+*Live: 24h/6h/1h aggregation, KPIs, Top-10, magnitude/depth/timeline/epicenters. Analyze: USGS `fdsnws-event` query (here IS · 1 y · M≥3) with GR/b-value, energy, Mc(t), Omori and spatial/depth statistics. **Export report** is available right above the charts.*
+
+### 3. Events — one event at a time
+
+<p align="center"><img src="docs/screenshots/events.png" alt="Events historical catalog, filters and nearest stations" width="88%"></p>
+
+*Live / Historical modes; magnitude/depth/time/text filters; USGS catalog; nearest stations with Δ°/km. Click an event to populate stations, double-click a station to review with it, double-click an event to use the nearest station.*
+
+### 4. Mine — favorites and review catalog
+
+<p align="center"><img src="docs/screenshots/mine.png" alt="Mine favorite events, stations, recordings and review catalog" width="88%"></p>
+
+*Favorite events/stations, STA/LTA recordings, local QuakeML review catalog; double-click a row to reopen a saved review (restoring P/S markers), or open the folder to export MiniSEED/QuakeML.*
+
+### 5. Workbench Live — 30 Hz smooth waveform
+
+<p align="center"><img src="docs/screenshots/workbench-live.png" alt="Workbench Live 30 Hz smooth waveform, spectrogram and filters" width="76%"></p>
+
+*Three-channel waveform + FFT spectrogram + smooth playout (≈12 s buffer; toggle `Smooth display` for Realtime) + bandpass, STA/LTA and 24h Diary/Hodogram. The MMI/PGV chip stays in sync in the header.*
+
+### 6. Workbench Replay — from event to waveform
+
+<p align="center"><img src="docs/screenshots/workbench-replay.png" alt="Workbench Replay waveform, spectrogram, PSD and exports" width="76%"></p>
+
+*An event prefills station/time/duration; Load renders waveform, spectrogram, PSD and TauP P/S. `Rotate ZRT` needs horizontal components (correctly disabled for vertical-only stations); PNG/CSV/QuakeML and the local review catalog are all here.*
+
+### 7. Settings, reports and light theme
+
+<p align="center"><img src="docs/screenshots/settings.png" alt="Settings tabs" width="46%"></p>
+<p align="center"><img src="docs/screenshots/light-data.png" alt="Light theme Data page" width="88%"></p>
+
+*Language/timezone/address auto-detect, LAN Shake management and Reset; monitoring/statistical HTML+PDF reports; instant dark/light themes; Help → Check for updates for L1 updates.*
 
 ---
 
@@ -53,11 +96,13 @@ analysis into a single desktop app.
 
 | Module                     | What it does                                                                                                                       |
 |----------------------------|------------------------------------------------------------------------------------------------------------------------------------|
-| 🌍 **3D Globe**            | ECharts-GL real-time Earth rendering, 600+ Raspberry Shake citizen stations + 400+ USGS / IRIS backbone stations, magnitude-coloured quakes, click-to-zoom + add to Pro workbench |
+| 🌍 **3D Globe**            | ECharts-GL Earth with **28,282** ShakeNet stations + **151** USGS / IRIS stations; Devices/Quakes/Both, 1h–30d, pause rotation, Find station search, click-to-zoom + add to Pro workbench |
 | 📊 **Data panel (Live \| Analysis)** | **Two independent pages.** **Live**: top countries, magnitude / depth histograms, timeline, event rate, epicenters (lon × lat), with a region selector (Top-10 stays global). **Analysis**: queries the **USGS fdsnws-event historical catalog** (region + time window + min magnitude, `/count` cap pre-check) and produces **GR/b-value, Mc/b over time, energy release, spatial density, depth cross-section/distribution, magnitude-time, inter-event** pro stats. Time window uses a **draggable range slider** |
 | 🗂 **Event Center**        | Top-level page: quake table (double-click to review) + **nearby major stations** (Δ°/km/distance category); double-click uses the nearest station; ☆ favorite quakes/stations in one click |
 | ⭐ **"My Collection"**     | Top-level page: favorite **quakes / stations** + records (STA/LTA recordings — shown only if any + **review catalog** QuakeML); double-click a catalog row to **reopen a saved review** (restores P/S markers); "Open folder" exports MiniSEED/QuakeML to ObsPy/SeisComP/SAC |
-| 🔬 **Pro Workbench**       | Floating window: 3-channel waveform + spectrogram (toggle) + 24h helicorder + N-E particle motion (polarization azimuth) + STA/LTA triggered recording + MMI/PGV header chip |
+| 🔬 **Pro Workbench**       | Floating window: 3-channel waveform + spectrogram (toggle) + 24h helicorder + N-E particle motion (polarization azimuth) + STA/LTA recording + MMI/PGV chip; **Smooth/Realtime** switch |
+| 🌊 **30 Hz smooth waveform** | 60 s history prefill + 12 s playout cursor; continuous motion even with IRIS 13 s packets (measured 29.8 Hz / 97% frames); detection & MMI stay live |
+| 🔄 **Auto-update L1** | GitHub Releases manifest + startup notice; per-platform download with SHA-256 verification; no silent install (signing/rollback L2) |
 | ⏪ **Replay (rewritten)**  | Professional waveform browser: zoom/pan + absolute UTC axis + band selection + instrument-response removal (VEL/DISP/ACC) + ZNE→ZRT rotation + theoretical P/S via TauP + dB spectrogram + PSD + region cursor measurements + PNG/CSV/QuakeML export |
 | 🔊 **Sonification**        | Play the last 60 seconds of ground motion as audible audio at 1× – 60× speed                                                       |
 | 🌐 **i18n**                | Full 4-language stack (EN / ES / 简中 / FR) with instant switching, including web views, chart internals, tooltips, HTML reports   |
@@ -500,6 +545,16 @@ stateDiagram-v2
 
 ---
 
+### Auto-update (L1)
+
+`services/updater.py` reads the latest GitHub Releases manifest and compares
+semantic versions; it selects the current platform asset (`.dmg/.zip/.AppImage`),
+downloads it to Downloads, and verifies it with the release `SHA256SUMS.txt`.
+`ui/update_dialog.py` shows release notes, download progress and “Open folder”.
+A silent check runs after startup (versions can be skipped), and
+**Help → Check for updates…** is available manually. It **never installs
+silently**; signing, automatic install and rollback are L2.
+
 ### Tech stack & Architectural Decision Records (ADRs)
 
 | Layer            | Choice                                              | Key decision / rationale                                          |
@@ -591,7 +646,8 @@ seismic-shakevision/
 │   │   ├── favorites_store.py            # Favorite earthquakes / stations
 │   │   ├── clear_cache.py                # Wipe all local state in one click
 │   │   ├── github_auth.py                # GitHub Device Flow OAuth; baked-in DEFAULT_CLIENT_ID
-│   │   └── settings_backup.py            # Settings JSON export/import (test-only after v0.7-C)
+│   │   ├── settings_backup.py            # Settings JSON export/import (test-only after v0.7-C)
+│   │   └── updater.py                    # Auto-update L1: GitHub manifest + SHA-256 verified download
 │   │
 │   ├── ui/                               # ── PySide6 (38) ──
 │   │   ├── main_window.py                # Root QMainWindow + global signal hub + menus
@@ -606,7 +662,7 @@ seismic-shakevision/
 │   │   ├── helicorder_widget.py          # 24 h drum recorder view
 │   │   ├── particle_motion_widget.py     # N-E plane particle motion
 │   │   ├── intensity_card.py             # MMI intensity translation card (user-friendly wording)
-│   │   ├── replay_panel.py               # Historical replay UI (datetime picker + speed slider)
+│   │   ├── replay_panel.py               # Historical replay: static waveform browser — response/rotation/TauP/PSD/export
 │   │   ├── audio_player.py               # QAudioSink wrapper + state machine
 │   │   ├── settings_dialog.py            # Settings (General · My Shakes · Reset)
 │   │   ├── profile_dialog.py             # Profile dialog container
@@ -625,7 +681,8 @@ seismic-shakevision/
 │   │   ├── elevation.py                  # Material/macOS shadow helpers (levels 0–3)
 │   │   ├── icons.py                      # Bundled icon loader (svg/png + theme-aware)
 │   │   ├── macos_native.py               # macOS transparent title bar + full-content view (pyobjc)
-│   │   └── pdf_exporter.py               # QWebEnginePage.printToPdf wrapper
+│   │   ├── pdf_exporter.py               # QWebEnginePage.printToPdf wrapper
+│   │   └── update_dialog.py              # Update dialog (version/notes/download/verification)
 │   │
 │   ├── i18n/                             # ── Internationalisation ──
 │   │   ├── service.py                    # LocaleService + t() + language_changed_signal
@@ -706,41 +763,41 @@ all 4 languages aligned at 100 %).
 - ✅ `packaging/build.py` — cross-platform driver
 - ✅ `.github/workflows/release.yml` — tag-triggered auto build + publish
 
-### Release steps (using v0.1.1 as an example)
+### Release steps (using v0.9.0 as an example)
 
 ```bash
 # 1) Bump the three version numbers consistently
-#    a. shakevision/__init__.py    →  __version__ = "0.1.1"
-#    b. pyproject.toml              →  version = "0.1.1"
-#    c. packaging/shakevision.spec  →  version = "0.1.1"  (BUNDLE)
+#    a. shakevision/__init__.py    →  __version__ = "0.9.0"
+#    b. pyproject.toml              →  version = "0.9.0"
+#    c. packaging/shakevision.spec  →  version = "0.9.0"  (BUNDLE)
 
-# 2) Update CHANGELOG.md: prepend a ## [0.1.1] — YYYY-MM-DD section
+# 2) Update CHANGELOG.md: prepend a ## [0.9.0] — YYYY-MM-DD section
 #    The workflow extracts it automatically as the release notes.
 
 # 3) Commit + push
 git add -A
-git commit -m "release: v0.1.1"
+git commit -m "release: v0.9.0"
 git push origin main
 
 # 4) Tag + push tag → triggers the release workflow
-git tag -a v0.1.1 -m "ShakeVision v0.1.1 — binary installers"
-git push origin v0.1.1
+git tag -a v0.9.0 -m "ShakeVision v0.9.0 — binary installers"
+git push origin v0.9.0
 ```
 
 After pushing the tag, GitHub Actions runs:
 
 ```
-release.yml (tag v0.1.1)
-  ├── build-windows  (windows-latest, Py 3.11)      → ShakeVision-0.1.1-windows-x64.zip
-  ├── build-macos    (macos-14 / Apple Silicon)     → ShakeVision-0.1.1-macos-arm64.dmg
-  ├── build-linux    (ubuntu-22.04)                 → ShakeVision-0.1.1-linux-x64.AppImage
+release.yml (tag v0.9.0)
+  ├── build-windows  (windows-latest, Py 3.11)      → ShakeVision-0.9.0-windows-x64.zip
+  ├── build-macos    (macos-14 / Apple Silicon)     → ShakeVision-0.9.0-macos-arm64.dmg
+  ├── build-linux    (ubuntu-22.04)                 → ShakeVision-0.9.0-linux-x64.AppImage
   └── publish        (pulls all 3 artifacts)
-       ├── extracts the [0.1.1] section from CHANGELOG.md as release notes
+       ├── extracts the [0.9.0] section from CHANGELOG.md as release notes
        ├── assembles SHA256SUMS.txt
        └── creates a GitHub Release with all 3 binaries + checksums
 ```
 
-About 15–25 minutes later, **v0.1.1** appears at
+About 15–25 minutes later, **v0.9.0** appears at
 https://github.com/yiaogit/seismic-shakevision/releases.
 
 ### Pre-releases (rc / beta)
@@ -757,11 +814,11 @@ git push origin v0.2.0-rc1
 
 ```bash
 # Delete the remote tag (also delete the Release in the GitHub UI)
-git push --delete origin v0.1.1
-git tag -d v0.1.1
+git push --delete origin v0.9.0
+git tag -d v0.9.0
 # Fix code, retag, push
-git tag -a v0.1.1 -m "..."
-git push origin v0.1.1
+git tag -a v0.9.0 -m "..."
+git push origin v0.9.0
 ```
 
 Full packaging details (local builds, dual-architecture macOS caveats,
@@ -777,7 +834,8 @@ sizes, etc.) live in [`packaging/README.md`](packaging/README.md).
 - [x] **v0.3.0** — custom LAN Raspberry Shake UI ("➕ Add LAN Shake…" dropdown + "My Shakes" tab in Settings)
 - [x] **v0.7.0** — rebrand to SeismicGuard, macOS-Sonoma theming, onboarding wizard, profile + activity timeline, IP geolocation, PDF overflow fix
 - [x] **v0.8.0** — Replay rewritten as a professional waveform browser (response removal/rotation/TauP/PSD/export); top-level Event Center + nearby stations; "My Collection" hub (favorites + recordings + review catalog with reopen & export); button-based favorite entry points; particle-motion stabilization + polarization azimuth
-- [ ] **v1.0.0** — code signing (Windows EV cert + macOS Developer ID + notarisation); eliminate SmartScreen / Gatekeeper warnings entirely; auto-update
+- [x] **v0.9.0** — P0/P1/P2 UX polish, 30 Hz smoothing, globe station search, L1 auto-update, Stop/dialog/kiosk fixes
+- [ ] **v1.0.0** — code signing (Windows EV cert + macOS Developer ID + notarisation); eliminate SmartScreen / Gatekeeper warnings entirely; L2 signed install/rollback
 
 ---
 

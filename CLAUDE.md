@@ -46,19 +46,19 @@ License: MIT.
 
 | Item | Value |
 |---|---|
-| Current version (4 files, see §5) | **0.8.3.0** — tagged + released; `[Unreleased]` holds the validated fix batch |
-| Latest tag pushed to origin | `v0.8.3.0` (commit `dd45523`, 2026-06-28) |
-| HEAD | `main` @ `295adbd` + local docs/fixes on top of the tag |
-| Latest **release with installers** on GitHub Releases | `v0.8.3.0` — macOS arm64 `.dmg`, Windows `.zip`, Linux `.AppImage` + `SHA256SUMS.txt` |
+| Current version (4 files, see §5) | **0.9.0.0** — ready to tag; `[Unreleased]` empty |
+| Latest tag pushed to origin | `v0.8.3.0` (commit `dd45523`, 2026-06-28); `v0.9.0.0` pending |
+| HEAD | `main` @ `9ca4f8f` (release commit; pushed pending write access) |
+| Latest **release with installers** on GitHub Releases | `v0.8.3.0` — macOS arm64 `.dmg`, Windows `.zip`, Linux `.AppImage` + `SHA256SUMS.txt`; `v0.9.0.0` pending |
 | Branch | `main` |
 | Python | 3.10 / 3.11 / 3.12 (CI matrix); 3.14 runs locally but is **off-matrix** |
 | Qt binding | PySide6 |
-| i18n keys | **780** per locale (en/es/fr/zh), aligned |
+| i18n keys | **803** per locale (en/es/fr/zh), aligned |
 
 ### Known issues / unfinished
 
-1. **No auto-update mechanism.** Users must manually download new
-   installers from the GitHub Releases page. (Tracked for v1.0.0.)
+1. **Auto-update L1 exists** (manifest + notification + SHA-256 verified
+   download); silent install/signature/rollback remain L2 for v1.0.
 2. **GUI / obspy tests need full deps + a display.** Pure tests
    (i18n / measurements / recordings_list / response / seismic_stats /
    event_filter…) run headless; the full suite needs the venv from §5
@@ -68,12 +68,12 @@ License: MIT.
    `tests/test_i18n.py` and `tests/test_profile_view.py` assert them as
    a locale contract. The dead-key scan must therefore include `tests/`,
    not just `shakevision/` + web JS. All 4 locales stay aligned
-   (780 keys, same placeholders).
+   (803 keys, same placeholders).
 4. **`ui/sidebar_nav.py` has no runtime consumer** — the shell uses a
    `QTabWidget` (main_window.py); only `tests/test_sidebar_nav.py`
    imports the sidebar. Either re-wire it or delete it in a cleanup.
 5. **Python 3.14 is off the CI matrix.** It installs and runs locally
-   (586/586 tests green, §9), but 3.10–3.12 is the supported
+   (595/595 tests green, §9), but 3.10–3.12 is the supported
    configuration — reproduce any 3.14-only bug on 3.12 before chasing it
    (`brew install python@3.12` if needed).
 6. **Docs drift**: CLAUDE.md and `docs/roadmap.md` had lagged behind
@@ -208,7 +208,7 @@ ShakeVision/
 │  ├─ i18n/                      ← Locale system
 │  │  ├─ __init__.py             ← Public API: t(), LocaleService
 │  │  ├─ service.py              ← Singleton + language_changed signal + t()
-│  │  └─ locales/{en,es,fr,zh}.json   (780 flat dotted keys each)
+│  │  └─ locales/{en,es,fr,zh}.json   (803 flat dotted keys each)
 │  │
 │  ├─ utils/                     ← Pure helpers (no Qt)
 │  │  ├─ logging.py              ← Centralized logger
@@ -401,6 +401,7 @@ Release workflow is `.github/workflows/release.yml` (tag `v*` push).
 
 | Version | Date | One-line summary |
 |---|---|---|
+| **0.9.0.0** | 2026-10-18 | P0/P1/P2 UX batch (placeholder, Smooth/Realtime, 30 Hz, search, guards, progress, ScopeBar, helicorder, reports), auto-update L1, Stop/dialog/kiosk fixes, README screenshot tour + 4 locales. |
 | **0.8.3.0** | 2026-06-28 | Data panel split into **two independent pages** (Live \| Analysis) + draggable `RangeSlider`; historical `fdsnws-event` catalog with `/count` pre-check; pure `seismic_stats` + pro charts (GR/b, energy, Mc(t), Omori, depth sections/spatial density); analysis report (inline SVG, Spanish/4 locales); Event Center historical mode + region presets + offline Flinn–Engdahl/babel search; magnitude colour scale; reworked live report; many table/filter/combo fixes. |
 | **0.8.0.0** | 2026-06-17 | Major: Replay rewritten as pro waveform browser (deconv/rotate/TauP/PSD/export); top-level Event Center + nearby stations; "My collection" tab (favorites + recordings + QuakeML catalog, reopen review + open-folder export); button-based favorites; particle-motion stabilization + polarization azimuth; macOS fullscreen-close fix. Folds in unreleased 0.7.7 audit work. |
 | 0.7.6.1 | 2026-05-21 | Overlay+services i18n cleanup, wizard initial-theme sync fix, removed `auto` theme mode |
@@ -479,7 +480,7 @@ historical query and rendered both reports.
 | # | Check | How | Result |
 |---|---|---|---|
 | 1 | Package compiles | `.venv/bin/python -m compileall -q shakevision/` | ✅ pass |
-| 2 | Full test suite | `.venv/bin/pytest -q` | ✅ **586 passed** in 3.0 s |
+| 2 | Full test suite | `.venv/bin/pytest -q` | ✅ **595 passed** in 3.0 s |
 | 3 | Lint | `.venv/bin/ruff check .` | ✅ fixed: `[tool.ruff.lint] select = ["E4","E7","E9","F"]` — 0.17.1 and 0.12.7 both clean |
 | 4 | App launches, splash → MainWindow | `.venv/bin/python -m shakevision` | ✅ (harness built MainWindow directly; splash path not exercised) |
 | 5 | 4 top tabs render (Globe/Data/Events/Mine) | visual | ✅ |
@@ -634,6 +635,21 @@ Tests: **583 passed**.
 | 62 | Globe station search | ✅ 151 USGS datalist + Enter search; opens same station dialog |
 
 Tests: **586 passed**.
+
+### Eighth pass — remaining P0/P1/P2 polish
+
+| # | Change | Result |
+|---|---|---|
+| 63 | SeedLink connection progress | ✅ indeterminate bar + elapsed time; status text stages |
+| 64 | Legacy activity log migration | ✅ removes old `station ?` / `M? near ?` entries |
+| 65 | Settings gear | ✅ non-blocking ApplicationModal `open()`; visible dialog/header |
+| 66 | ScopeBar collapse | ✅ ▾/▸ hides explanation |
+| 67 | Long-window date | ✅ >365 d uses ISO date |
+| 68 | Helicorder progress | ✅ `x min / 24 h collected` |
+| 69 | Globe marker hitbox | ✅ larger USGS/Shake markers + search |
+| 70 | Auto-update L1 | ✅ manifest + startup notice + SHA-256 verified download; L2 pending |
+| 71 | Aux dialog smoke | ✅ AddShake/GitHubLogin/Settings/Update/Onboarding construction |
+| 72 | Tests | ✅ **595 passed**; i18n 803 × 4 |
 
 ### Sandboxed-agent caveat (not a product issue)
 

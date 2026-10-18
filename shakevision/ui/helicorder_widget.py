@@ -169,6 +169,11 @@ class HelicorderPanel(QFrame):
         self._hint = QLabel(t("helicorder.hint"))
         self._hint.setObjectName("Caption")
         layout.addWidget(self._hint)
+        self._progress_minutes = 0.0
+        self._progress = QLabel("")
+        self._progress.setObjectName("Caption")
+        layout.addWidget(self._progress)
+        self._update_progress_label()
 
         # v0.6 P11: theme-aware
         self._plot = pg.PlotWidget(background=COLOR_BACKGROUND)
@@ -232,7 +237,14 @@ class HelicorderPanel(QFrame):
             "bottom", t("helicorder.axis_x", minutes=self._minutes_per_row),
         )
         self._hint.setText(t("helicorder.hint"))
+        self._update_progress_label()
         self._plot.setLabel("left", t("helicorder.axis_y"))
+
+    def _update_progress_label(self) -> None:
+        self._progress.setText(t(
+            "helicorder.progress",
+            minutes=f"{self._progress_minutes:.1f}",
+            hours=self._hours))
 
     def set_channel(self, channel: str) -> None:
         """Fija el canal mostrado en la cabecera (p. ej. ``BHZ``)."""
@@ -255,6 +267,10 @@ class HelicorderPanel(QFrame):
         if self._buffer.total_written == 0:
             return
 
+        self._progress_minutes = min(
+            self._buffer.total_written / float(self._sample_rate) / 60.0,
+            float(self._hours * 60))
+        self._update_progress_label()
         flat = self._buffer.linearized()
         # Padding por la izquierda con ceros si aún no hay 24 h de datos
         if flat.size < self._n_rows * self._row_samples:
@@ -281,6 +297,8 @@ class HelicorderPanel(QFrame):
         """Limpia el búfer (al cambiar de estación)."""
 
         self._buffer = _HelicorderBuffer(self._buffer.capacity)
+        self._progress_minutes = 0.0
+        self._update_progress_label()
         for fill in self._fills:
             for curve in fill.curves:
                 y = curve.yData

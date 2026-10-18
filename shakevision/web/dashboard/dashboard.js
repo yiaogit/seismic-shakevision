@@ -616,7 +616,7 @@
         latestText = t("web.dashboard.minutes_ago", {n: minsAgo});
       } else if (minsAgo < 48 * 60) {
         latestText = t("web.dashboard.hours_ago", {n: (minsAgo / 60).toFixed(1)});
-      } else if (minsAgo < 2 * 365 * 24 * 60) {
+      } else if (minsAgo < 365 * 24 * 60) {
         latestText = t("web.dashboard.days_ago", {n: Math.round(minsAgo / 1440)});
       } else {
         latestText = dt.toISOString().slice(0, 10);

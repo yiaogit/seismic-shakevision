@@ -4,33 +4,19 @@
 
 [简体中文](README.md) · [English](README.en.md) · [Español](README.es.md) · **Français**
 
-> Anciennement **ShakeVision OpenData Monitor**. L'amélioration phare de la
-> **v0.8.3** est un **catalogue historique de séismes + recherche d'événements
-> multilingue** : le Centre d'événements gagne un commutateur Direct/Historique
-> qui interroge le catalogue complet USGS **fdsnws-event** ANSS (~1900→aujourd'hui),
-> et la recherche fonctionne d'une langue à l'autre (tapez `日本` en chinois pour
-> trouver le Japon ; régions Flinn–Engdahl hors-ligne + noms de pays localisés).
-> Là-dessus : le **Panneau de données** se scinde en pages **Direct | Analyse**
-> (Analyse exécute des **statistiques sismiques professionnelles** sur le catalogue
-> historique — valeur b/GR, Mc/b dans le temps, énergie, densité spatiale, coupe
-> de profondeur) ; l'**export de rapports** arrive en deux mises en page selon le
-> mode (**surveillance / statistique**) ; la sélection du temps utilise un
-> **curseur de plage glissant** et les listes déroulantes se dimensionnent dans
-> toutes les langues. Auparavant, la
-> **v0.8.0** réorganise
-> l'application autour du flux *événement → examen → collection personnelle*
-> et réécrit **Replay** en navigateur de formes d'onde professionnel (zoom/
-> pan, axe UTC absolu, sélection de bande, déconvolution de réponse vers
-> VEL/DISP/ACC, rotation ZNE→ZRT, arrivées théoriques P/S via TauP,
-> spectrogramme en dB, PSD et export PNG/CSV/QuakeML). Elle ajoute un
-> **Centre d'événements** de premier niveau (table de séismes + stations
-> proches) et un onglet **« Ma collection »** (séismes/stations favoris +
-> enregistrements/catalogue d'examen, avec réouverture des examens
-> enregistrés et « Ouvrir le dossier »). Auparavant, la v0.7.0 apportait le
-> rebranding en SeismicGuard, le thème façon macOS Sonoma, l'i18n complète en
-> 4 langues, l'assistant de configuration, le profil avec timeline d'activité
-> et la géolocalisation par IP. Les anciens binaires (v0.1.x) restent
-> disponibles sur la page Releases sous le nom `ShakeVision-*`.
+> **v0.9.0 — plus fluide, plus fiable, plus simple.** Cette version ajoute un
+> placeholder de station avec Connect protégé, une **forme d’onde en direct
+> fluide à 30 Hz** (bascule Smooth/Realtime), la recherche de stations sur le
+> globe, la progression de connexion avec temps écoulé, une ScopeBar repliable,
+> la progression de collecte de l’helicorder, un bouton de rapport dans Data et
+> la **mise à jour automatique L1** (manifest GitHub + téléchargement vérifié
+> SHA-256 ; pas d’installation silencieuse). Elle corrige aussi le **crash
+> QThread au Stop**, les **boîtes de dialogue cachées derrière le Workbench** et
+> les **raccourcis kiosque**. Le catalogue historique/statistiques pro de
+> v0.8.3 et le flux événement → examen → collection de v0.8.0 restent complets.
+>
+> Anciennement **ShakeVision OpenData Monitor** ; les anciens binaires v0.1.x
+> restent sur la page Releases sous le nom `ShakeVision-*`.
 
 **Station de monitoring sismique de bureau, open-source**
 *Cross-platform desktop seismic monitoring workbench*
@@ -47,9 +33,63 @@ spectrogramme / déclenchement dans une seule application desktop.
 [![Platforms](https://img.shields.io/badge/platform-windows%20%7C%20macos%20arm64%20%7C%20linux-lightgrey)](https://github.com/yiaogit/seismic-shakevision/releases/latest)
 [![i18n](https://img.shields.io/badge/i18n-EN%20%7C%20ES%20%7C%20%E4%B8%AD%E6%96%87%20%7C%20FR-brightgreen)](shakevision/i18n/locales/)
 
-[**Télécharger**](#-télécharger) · [**Lancer depuis les sources**](#-lancer-depuis-les-sources) · [**Fonctionnalités**](#-fonctionnalités) · [**Architecture**](#-architecture) · [**Publication**](#-publication)
+[**Télécharger**](#-télécharger) · [**Lancer depuis les sources**](#-lancer-depuis-les-sources) · [**Captures**](#-captures-et-fonctionnalités) · [**Fonctionnalités**](#-fonctionnalités) · [**Architecture**](#-architecture) · [**Publication**](#-publication)
 
 </div>
+
+---
+
+## 🖼 Captures et fonctionnalités
+
+> Captures de **v0.9.0** en session réelle (fenêtre principale 1480×900 / Workbench 1200×800). Sombre par défaut ; le thème clair est à un clic.
+
+### 1. Globe 3D : de « voir » à « utiliser »
+
+<p align="center"><img src="docs/screenshots/globe.png" alt="Globe 3D, calques de stations, périodes et recherche Find station" width="88%"></p>
+
+*28 282 stations ShakeNet + 151 USGS/IRIS ; Devices / Quakes / Both, 1h–30d, pause de rotation, zoom/réinitialisation. Tapez `IU.PAB` dans **Find station** puis Entrée pour ouvrir la même boîte de station.*
+
+- **Station → Workbench :** `Monitor live` → sélection dans le panneau → `Connect` ; ou `Open station in Replay` pour l’historique.
+- **Séisme → Replay :** clic sur un séisme → `Review` → station la plus proche → Replay.
+- Les favoris des deux flux arrivent dans **Mine**.
+
+### 2. Data : situation en direct + statistiques historiques
+
+<p align="center"><img src="docs/screenshots/data-live.png" alt="Data Live, KPI et graphiques" width="88%"></p>
+<p align="center"><img src="docs/screenshots/data-analysis.png" alt="Data Analysis, statistiques historiques et graphiques pro" width="88%"></p>
+
+*Live : agrégation 24h/6h/1h, KPI, Top-10, magnitude/profondeur/chronologie/épicentres. Analyze : requête USGS `fdsnws-event` (ici IS · 1 y · M≥3) avec GR/valeur b, énergie, Mc(t), Omori et statistiques spatiales/profondeur. **Export report** est juste au-dessus des graphiques.*
+
+### 3. Events : un événement à la fois
+
+<p align="center"><img src="docs/screenshots/events.png" alt="Events, catalogue historique, filtres et stations proches" width="88%"></p>
+
+*Modes Live / Historical ; filtres magnitude/profondeur/temps/texte ; catalogue USGS ; stations proches avec Δ°/km. Clic sur un événement pour remplir les stations ; double-clic sur une station pour l’utiliser ; double-clic sur l’événement pour la plus proche.*
+
+### 4. Mine : favoris et catalogue d’examen
+
+<p align="center"><img src="docs/screenshots/mine.png" alt="Mine, événements/stations favoris, enregistrements et catalogue" width="88%"></p>
+
+*Événements/stations favoris, enregistrements STA/LTA et catalogue QuakeML local ; double-clic pour rouvrir un examen (restaure P/S) ou ouvrir le dossier pour exporter MiniSEED/QuakeML.*
+
+### 5. Workbench Live : forme d’onde fluide à 30 Hz
+
+<p align="center"><img src="docs/screenshots/workbench-live.png" alt="Workbench Live, onde fluide 30 Hz, spectrogramme et filtres" width="76%"></p>
+
+*Trois canaux + spectrogramme FFT + lecture fluide (tampon ≈12 s ; `Smooth display` bascule en Realtime) + filtre passe-bande, STA/LTA et 24h Diary/Hodogram. Le chip MMI/PGV reste synchronisé dans l’en-tête.*
+
+### 6. Workbench Replay : de l’événement à l’onde
+
+<p align="center"><img src="docs/screenshots/workbench-replay.png" alt="Workbench Replay, onde, spectrogramme, PSD et exports" width="76%"></p>
+
+*L’événement préremplit station/temps/durée ; Load dessine onde, spectrogramme, PSD et P/S TauP. `Rotate ZRT` exige des composantes horizontales (désactivé à juste titre pour les stations verticales) ; PNG/CSV/QuakeML et le catalogue local sont ici.*
+
+### 7. Réglages, rapports et thème clair
+
+<p align="center"><img src="docs/screenshots/settings.png" alt="Onglets Settings" width="46%"></p>
+<p align="center"><img src="docs/screenshots/light-data.png" alt="Page Data en thème clair" width="88%"></p>
+
+*Langue/fuseau/adresse avec auto-détection, gestion LAN Shake et Reset ; rapports HTML+PDF surveillance/statistique ; thèmes sombre/clair instantanés ; Help → Check for updates pour L1.*
 
 ---
 
@@ -57,11 +97,13 @@ spectrogramme / déclenchement dans une seule application desktop.
 
 | Module                     | Description                                                                                                                       |
 |----------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
-| 🌍 **Globe 3D**            | Rendu temps réel ECharts-GL, 600+ stations citoyennes Raspberry Shake + 400+ stations dorsales USGS / IRIS, séismes colorés par magnitude, click-zoom + ajout au banc Pro |
+| 🌍 **Globe 3D**            | ECharts-GL avec **28 282** stations ShakeNet + **151** USGS / IRIS ; Devices/Quakes/Both, 1h–30d, pause de rotation, recherche Find station, click-zoom + ajout au banc Pro |
 | 📊 **Panneau de données (Direct \| Analyse)** | **Deux pages indépendantes.** **Direct** : top pays, histogrammes magnitude / profondeur, timeline, taux d'événements, épicentres (lon × lat), avec sélecteur de région (le Top-10 reste global). **Analyse** : interroge le **catalogue historique USGS fdsnws-event** (région + fenêtre + magnitude min., pré-vérif `/count`) et produit des stats pro : **valeur b (GR), Mc/b dans le temps, libération d'énergie, densité spatiale, coupe/distribution de profondeur, magnitude-temps, intervalles entre événements**. La fenêtre utilise un **curseur de plage glissant** |
 | 🗂 **Centre d'événements** | Page de premier niveau : table de séismes (double-clic examine) + **grandes stations proches** (Δ°/km/catégorie) ; double-clic utilise la plus proche ; ☆ favori séismes/stations en un clic |
 | ⭐ **« Ma collection »**   | Page de premier niveau : **séismes / stations** favoris + enregistrements (STA/LTA — seulement s'il y en a + **catalogue d'examen** QuakeML) ; double-clic sur le catalogue **rouvre un examen enregistré** (restaure les pointés P/S) ; « Ouvrir le dossier » exporte MiniSEED/QuakeML vers ObsPy/SeisComP/SAC |
-| 🔬 **Banc Pro**            | Fenêtre flottante : formes d'onde 3 canaux + spectrogramme (commutable) + héliographe 24 h + mouvement de particule N-E (azimut de polarisation) + enregistrement STA/LTA + pastille MMI/PGV dans l'en-tête |
+| 🔬 **Banc Pro**            | Fenêtre flottante : onde 3 canaux + spectrogramme + héliographe 24 h + particule N-E + enregistrement STA/LTA + pastille MMI/PGV ; bascule **Smooth/Realtime** |
+| 🌊 **Onde fluide à 30 Hz** | Préfixe historique 60 s + curseur playout 12 s ; mouvement continu même avec des paquets IRIS de 13 s (29,8 Hz / 97 % des frames) ; détection et MMI en direct |
+| 🔄 **Mise à jour auto L1** | Manifest GitHub Releases + avis au démarrage ; téléchargement par plateforme avec SHA-256 ; pas d'installation silencieuse (signature/rollback L2) |
 | ⏪ **Replay (réécrit)**    | Navigateur de formes d'onde professionnel : zoom/pan + axe UTC absolu + sélection de bande + déconvolution de réponse (VEL/DISP/ACC) + rotation ZNE→ZRT + P/S théoriques via TauP + spectrogramme en dB + PSD + mesures au curseur de région + export PNG/CSV/QuakeML |
 | 🔊 **Sonification**        | Joue les 60 dernières secondes du mouvement du sol en audio audible à vitesse 1× – 60×                                            |
 | 🌐 **i18n**                | Stack complète en 4 langues (EN / ES / 简中 / FR) avec changement instantané, y compris vues web, intérieurs de graphiques, tooltips et rapports HTML |
@@ -504,6 +546,17 @@ stateDiagram-v2
 
 ---
 
+### Mise à jour automatique (L1)
+
+`services/updater.py` lit le manifest GitHub Releases le plus récent et compare
+les versions sémantiques ; il choisit l’asset de la plateforme
+(`.dmg/.zip/.AppImage`), le télécharge dans Téléchargements et le vérifie avec
+le `SHA256SUMS.txt` de la release. `ui/update_dialog.py` affiche les notes, la
+progression et « Ouvrir le dossier ». Une vérification silencieuse a lieu au
+démarrage (version ignorable) et **Help → Check for updates…** est disponible
+manuellement. **Aucune installation silencieuse** ; signature, installation
+automatique et rollback sont L2.
+
 ### Stack technique & registres de décisions (ADR)
 
 | Couche           | Choix                                               | Décision clé / justification                                 |
@@ -595,7 +648,8 @@ seismic-shakevision/
 │   │   ├── favorites_store.py            # Séismes / stations favoris
 │   │   ├── clear_cache.py                # Effacer tout l'état local en un clic
 │   │   ├── github_auth.py                # OAuth GitHub Device Flow ; DEFAULT_CLIENT_ID embarqué
-│   │   └── settings_backup.py            # Export/import JSON des réglages (tests uniquement après v0.7-C)
+│   │   ├── settings_backup.py            # Export/import JSON des réglages (tests uniquement après v0.7-C)
+│   │   └── updater.py                    # Mise à jour L1 : manifest GitHub + téléchargement SHA-256
 │   │
 │   ├── ui/                               # ── PySide6 (38) ──
 │   │   ├── main_window.py                # QMainWindow racine + hub global de signaux + menus
@@ -610,7 +664,7 @@ seismic-shakevision/
 │   │   ├── helicorder_widget.py          # Vue tambour 24 h
 │   │   ├── particle_motion_widget.py     # Mouvement de particule plan N-E
 │   │   ├── intensity_card.py             # Carte de traduction MMI (langage convivial)
-│   │   ├── replay_panel.py               # UI de rejeu historique (datetime + slider vitesse)
+│   │   ├── replay_panel.py               # Replay historique : navigateur d’onde statique — réponse/rotation/TauP/PSD/export
 │   │   ├── audio_player.py               # Wrapper QAudioSink + machine à états
 │   │   ├── settings_dialog.py            # Réglages (General · My Shakes · Reset)
 │   │   ├── profile_dialog.py             # Conteneur du dialogue Profile
@@ -629,7 +683,8 @@ seismic-shakevision/
 │   │   ├── elevation.py                  # Helpers d'ombre Material/macOS (niveaux 0–3)
 │   │   ├── icons.py                      # Chargeur d'icônes embarquées (svg/png + thème-aware)
 │   │   ├── macos_native.py               # Barre de titre transparente macOS + vue contenu complet (pyobjc)
-│   │   └── pdf_exporter.py               # Wrapper QWebEnginePage.printToPdf
+│   │   ├── pdf_exporter.py               # Wrapper QWebEnginePage.printToPdf
+│   │   └── update_dialog.py              # Boîte de mise à jour (version/notes/téléchargement/vérification)
 │   │
 │   ├── i18n/                             # ── Internationalisation ──
 │   │   ├── service.py                    # LocaleService + t() + language_changed_signal
@@ -710,41 +765,41 @@ Les dictionnaires vivent dans `shakevision/i18n/locales/*.json`
 - ✅ `packaging/build.py` — driver multi-plateforme
 - ✅ `.github/workflows/release.yml` — build + publication auto
 
-### Étapes de release (avec v0.1.1 comme exemple)
+### Étapes de release (avec v0.9.0 comme exemple)
 
 ```bash
 # 1) Bumper les 3 numéros de version de manière cohérente
-#    a. shakevision/__init__.py    →  __version__ = "0.1.1"
-#    b. pyproject.toml              →  version = "0.1.1"
-#    c. packaging/shakevision.spec  →  version = "0.1.1"  (BUNDLE)
+#    a. shakevision/__init__.py    →  __version__ = "0.9.0"
+#    b. pyproject.toml              →  version = "0.9.0"
+#    c. packaging/shakevision.spec  →  version = "0.9.0"  (BUNDLE)
 
-# 2) Mettre à jour CHANGELOG.md : préfixer un bloc ## [0.1.1] — YYYY-MM-DD
+# 2) Mettre à jour CHANGELOG.md : préfixer un bloc ## [0.9.0] — YYYY-MM-DD
 #    Le workflow l'extrait automatiquement comme release notes.
 
 # 3) Commit + push
 git add -A
-git commit -m "release: v0.1.1"
+git commit -m "release: v0.9.0"
 git push origin main
 
 # 4) Tag + push tag → déclenche le release workflow
-git tag -a v0.1.1 -m "ShakeVision v0.1.1 — binary installers"
-git push origin v0.1.1
+git tag -a v0.9.0 -m "ShakeVision v0.9.0 — binary installers"
+git push origin v0.9.0
 ```
 
 Après le push du tag, GitHub Actions exécute :
 
 ```
-release.yml (tag v0.1.1)
-  ├── build-windows  (windows-latest, Py 3.11)      → ShakeVision-0.1.1-windows-x64.zip
-  ├── build-macos    (macos-14 / Apple Silicon)     → ShakeVision-0.1.1-macos-arm64.dmg
-  ├── build-linux    (ubuntu-22.04)                 → ShakeVision-0.1.1-linux-x64.AppImage
+release.yml (tag v0.9.0)
+  ├── build-windows  (windows-latest, Py 3.11)      → ShakeVision-0.9.0-windows-x64.zip
+  ├── build-macos    (macos-14 / Apple Silicon)     → ShakeVision-0.9.0-macos-arm64.dmg
+  ├── build-linux    (ubuntu-22.04)                 → ShakeVision-0.9.0-linux-x64.AppImage
   └── publish        (récupère les 3 artifacts)
-       ├── extrait le bloc [0.1.1] de CHANGELOG.md comme release notes
+       ├── extrait le bloc [0.9.0] de CHANGELOG.md comme release notes
        ├── assemble SHA256SUMS.txt
        └── crée la Release GitHub avec les 3 binaires + checksums
 ```
 
-Environ 15–25 minutes plus tard, **v0.1.1** apparaît sur
+Environ 15–25 minutes plus tard, **v0.9.0** apparaît sur
 https://github.com/yiaogit/seismic-shakevision/releases.
 
 ### Pré-releases (rc / beta)
@@ -761,11 +816,11 @@ git push origin v0.2.0-rc1
 
 ```bash
 # Supprimer le tag distant (supprimer aussi la Release dans l'UI GitHub)
-git push --delete origin v0.1.1
-git tag -d v0.1.1
+git push --delete origin v0.9.0
+git tag -d v0.9.0
 # Corriger, re-tagger, push
-git tag -a v0.1.1 -m "..."
-git push origin v0.1.1
+git tag -a v0.9.0 -m "..."
+git push origin v0.9.0
 ```
 
 Détails complets sur le packaging (builds locaux, particularités du
@@ -782,7 +837,8 @@ macOS dual-arch, tailles, etc.) dans
 - [x] **v0.3.0** — UI Raspberry Shake LAN personnalisé ("➕ Add LAN Shake…" + onglet "My Shakes")
 - [x] **v0.7.0** — rebranding SeismicGuard, theming macOS-Sonoma, assistant, profil + activité, géolocalisation IP, correctif overflow PDF
 - [x] **v0.8.0** — Replay réécrit en navigateur de formes d'onde professionnel (réponse/rotation/TauP/PSD/export) ; Centre d'événements + stations proches ; « Ma collection » (favoris + enregistrements + catalogue d'examen avec réouverture et export) ; entrées favori par bouton ; stabilisation du mouvement de particule + azimut de polarisation
-- [ ] **v1.0.0** — signature de code (Windows EV cert + macOS Developer ID + notarisation) ; suppression complète des avertissements SmartScreen / Gatekeeper ; mise à jour automatique
+- [x] **v0.9.0** — polish UX P0/P1/P2, lissage 30 Hz, recherche de stations, mise à jour auto L1, correctifs Stop/dialogues/kiosque
+- [ ] **v1.0.0** — signature de code (Windows EV cert + macOS Developer ID + notarisation) ; avertissements SmartScreen / Gatekeeper ; installation L2 signée/rollback
 
 ---
 

@@ -830,7 +830,7 @@
           type: "scatter3D",
           coordinateSystem: "globe",
           blendMode: "source-over",
-          symbolSize: 4,
+          symbolSize: 5,
           itemStyle: { color: "#16a34a", opacity: 0.85 },   // verde profundo
           data: shake.map(d => ({
             value: [d.lng, d.lat],
@@ -853,7 +853,7 @@
           type: "scatter3D",
           coordinateSystem: "globe",
           blendMode: "lighter",   // suma luz → halo visible
-          symbolSize: 11,
+          symbolSize: 14,
           itemStyle: { color: "#86efac", opacity: 0.30 },
           silent: true,           // no roba el click al punto central
           data: usgs.map(d => ({
@@ -867,7 +867,7 @@
           type: "scatter3D",
           coordinateSystem: "globe",
           blendMode: "source-over",
-          symbolSize: 7,
+          symbolSize: 9,
           itemStyle: { color: "#86efac", opacity: 1.0 },
           emphasis: {
             itemStyle: { borderColor: "#ffffff", borderWidth: 2 },

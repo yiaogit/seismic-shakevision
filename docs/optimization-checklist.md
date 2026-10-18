@@ -21,7 +21,7 @@
 | 功能链路 | Globe/Data/Events/Mine 21/21；Workbench 控件 15/15；Replay 下载/PSD/导出通过；报告/Kiosk/连续 Connect-Stop 通过 |
 | 真实缺陷 | 修复 **Stop 时 QThread segfault**、**Workbench 置顶时弹窗被挡**、**Kiosk 快捷键失效** |
 | 测试 | **586 passed**；ruff/compileall clean |
-| P0/P1 进展 | P0-1/P0-2 完成；P1-1/2/3/4/5/6/7 完成；P0-3 部分 |
+| P0/P1 进展 | P0-1/P0-2/P0-3、P1-1…P1-9 完成；P2-1…P2-8/P2-10 完成（P2-8 为 L1，L2 待签名/回滚） |
 
 ---
 
@@ -235,7 +235,7 @@
 |---|---|---|---|
 | P0-1 `[x]` | Workbench 初始 `Mi Shake LAN (rs.local)` 假台站，Connect 可点但通常失败 | 已改为“选择台站…”占位；Connect 禁用；选真实台站后启用 | 消除“为什么连不上”的误导 |
 | P0-2 `[x]` | 平滑模式固定 12 s 视觉延迟 | 已加 **Smooth display** 开关；默认平滑，取消即 Realtime | 让用户按场景选择低延迟或平滑 |
-| P0-3 `[~]` | SeedLink 首包 ~13 s、连接状态只显示“Conectando…” | 已区分“首通道已收到，等待水平分量”和“三分量 streaming”；尚未做完整耗时进度条 | 降低“卡住”的感知 |
+| P0-3 `[x]` | SeedLink 首包 ~13 s、连接状态只显示“Conectando…” | 已加**不确定进度条 + 实时耗时**；保留首通道/三分量状态 | 降低“卡住”的感知 |
 
 ### P1（体验/正确性）
 
@@ -248,8 +248,8 @@
 | P1-5 `[x]` | Rotate ZRT 禁用原因不明 | tooltip/状态说明“需事件+台站坐标+水平分量”；垂直-only 台站明确提示 |
 | P1-6 `[x]` | 回放 9:11/10:00 部分数据 | 状态标明“请求 10:00，实际 9:11”，允许重试/换台站 |
 | P1-7 `[x]` | 动态台站达到 8 个上限无反馈 | 弹窗显示剩余槽位；满时禁用 Monitor live 并提示先删除 |
-| P1-8 `[ ]` | 活动日志旧记录占位符 | 已做通用回退；建议一次性迁移/清空 |
-| P1-9 `[ ]` | Settings 齿轮真实桌面回归 | 在真实桌面点一次；必要时 `raise_/activateWindow` + 可见性检查 |
+| P1-8 `[x]` | 活动日志旧记录占位符 | `_load_entries` 一次性删除 station/place/mag 的 `?` 占位记录 |
+| P1-9 `[x]` | Settings 齿轮真实桌面回归 | 改为非阻塞 `open()` + ApplicationModal + raise/activate；自动化点按钮已见 SettingsDialog |
 
 ### P2（打磨/长期）
 
@@ -258,13 +258,13 @@
 | P2-1 `[x]` | 台站 Favorite 无 toast | 收藏/取消后状态栏提示；My collection 数量徽标 |
 | P2-2 `[x]` | 报告只有 File 菜单 | Data 页增加显式 Export report 按钮 |
 | P2-3 `[x]` | Reset 页 Apply/Cancel 已禁用但仍占位 | 直接隐藏，仅保留 Restore defaults + Reset |
-| P2-4 `[ ]` | Data/Events 双 ScopeBar 占高度 | 可折叠/收进标题 tooltip |
-| P2-5 `[ ]` | 分析页相对时间对长窗口不直观 | >1 年直接显示 `YYYY-MM-DD` |
-| P2-6 `[ ]` | Helicorder 刚连接几乎全空 | 已加提示；可加“已采集 x 分钟/24h”进度 |
+| P2-4 `[x]` | Data/Events 双 ScopeBar 占高度 | 新增 ▾/▸ 折叠说明，标题/链接保留 |
+| P2-5 `[x]` | 分析页相对时间对长窗口不直观 | >365 天直接显示 `YYYY-MM-DD` |
+| P2-6 `[x]` | Helicorder 刚连接几乎全空 | 新增 `x min / 24 h collected` 采集进度 |
 | P2-7 `[x]` | “View history”语义模糊 | 改为“Open station in Replay”/“在回放中打开台站” |
-| P2-8 `[ ]` | 无自动更新 | manifest + 通知 + 应用内下载校验；签名/回滚就绪后再 L2 |
-| P2-9 `[ ]` | Audio/LAN/GitHub/Onboarding 自动化缺口 | 建立独立环境脚本（临时 HOME、rs.local mock、音频 offscreen） |
-| P2-10 `[ ]` | 主窗设置齿轮自动化不稳定 | 增加窗口可见性/激活的回归脚本，避免仅靠 activeModalWidget |
+| P2-8 `[~]` | 无自动更新 | L1 已完成：GitHub manifest + 启动通知 + 平台 asset + SHA-256 下载校验；安装/签名/回滚 L2 待做 |
+| P2-9 `[~]` | Audio/LAN/GitHub/Onboarding 自动化缺口 | 已加构造 smoke：AddShake/GitHubLogin/Settings/Update/Onboarding；真实 OAuth/rs.local/音频仍需环境 |
+| P2-10 `[x]` | 主窗设置齿轮自动化不稳定 | 已用 `open()` 非阻塞 modal；自动化点按钮可见 SettingsDialog 且 header 保持可见 |
 
 ---
 
@@ -272,13 +272,13 @@
 
 | 项目 | 结果 |
 |---|---|
-| `pytest -q` | **586 passed**（3.22 s） |
+| `pytest -q` | **595 passed**（3.04 s） |
 | `ruff check .` | clean |
 | `compileall` | OK |
 | 连续 Connect/Stop | 3 次无崩溃 |
 | 带活动流关闭 | 正常清理 |
 | 报告 HTML | 24–25 KB |
-| i18n | 4 语言各 780 键 |
+| i18n | 4 语言各 803 键 |
 | 提交 | 本批次（P0/P1 优化）、`29c3434`（链路修复 + 审计）、`656acba`（平滑波形）、`58fdb0f`（UI 巡检） |
 | 工作区 | clean；未 push |
 

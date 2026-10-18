@@ -898,7 +898,8 @@ class DashboardPanel(QFrame):
         row.addWidget(self.an_mode_live)
         row.addWidget(self.an_mode_an)
         self.report_btn = QPushButton(t("dashboard.report"))
-        self.report_btn.setObjectName("ChipButton")
+        # Estilo QPushButton estándar: ChipButton hereda text_secondary y en
+        # el tema claro el texto quedaba casi blanco sobre fondo claro.
         self.report_btn.setToolTip(t("dashboard.report"))
         self.report_btn.clicked.connect(self.report_requested.emit)
         row.addWidget(self.report_btn)

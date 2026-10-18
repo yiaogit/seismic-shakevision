@@ -4,15 +4,9 @@
 
 **简体中文** · [English](README.en.md) · [Español](README.es.md) · [Français](README.fr.md)
 
-> 原名 **ShakeVision OpenData Monitor**。**v0.8.3** 的**最大升级是历史地震目录 + 多语言事件搜索**——事件中心新增「实时 / 历史」切换,直查 USGS **fdsnws-event** ANSS 全目录(~1900→今);搜索跨语言(中文搜「日本」即匹配,离线 Flinn–Engdahl 区域 + 本地化国名)。在此之上:**数据面板**拆成**「实时 | 分析」两页**(分析页基于历史目录给出 GR/b 值、Mc/b、能量、空间密度、深度剖面等**专业地震统计**);**报告导出**按模式分**监控 / 统计**两套布局;时间选择改用**拖动滑块**,下拉框按全语言自适应。此前 **v0.8.0** 围绕「事件 → 复核 → 个人收藏」
-> 重新组织了应用,并把**历史回放**彻底重写为专业级波形浏览器(缩放/平移、UTC
-> 绝对时间轴、波段选择、去仪器响应 VEL/DISP/ACC、ZNE→ZRT 旋转、TauP 理论 P/S
-> 到时、dB 频谱图、PSD 功率谱、PNG/CSV/QuakeML 导出);新增顶栏**事件中心**
-> (地震表 + 就近台站)与**「我的」收藏中心**(收藏地震/台站 + 录波/复核目录,
-> 支持重开已存复核与「在文件夹中打开」导出)。早期 v0.7.0 完成了 SeismicGuard
-> 品牌重塑、macOS Sonoma 风格主题、全栈 4 语言 i18n、Onboarding 引导、Profile
-> 活动时间线、IP 地理定位。历史的 v0.1.x 二进制仍以 `ShakeVision-*` 名字保留在
-> Releases 页面。
+> **v0.9.0 — 更顺滑、更可靠、更易上手。** 本版加入台站占位与 Connect 防误连、**30 Hz 平滑实时波形**（Smooth/Realtime 可切）、Globe 台站搜索、连接耗时进度条、可折叠 ScopeBar、Helicorder 采集进度、Data 页报告入口，以及 **L1 自动更新**（GitHub manifest + SHA-256 校验下载，不静默安装）。同时修复 **Stop 时 QThread 崩溃**、**Workbench 置顶时弹窗被挡**、**Kiosk 快捷键失效**。v0.8.3 的历史目录/专业统计、双布局报告，v0.8.0 的「事件 → 复核 → 收藏」工作流完整保留。
+>
+> 原名 **ShakeVision OpenData Monitor**；历史 v0.1.x 二进制仍以 `ShakeVision-*` 名称保留在 Releases。
 
 **桌面级开源地震监测可视化工作站**
 *Cross-platform desktop seismic monitoring workbench*
@@ -27,9 +21,63 @@
 [![Platforms](https://img.shields.io/badge/platform-windows%20%7C%20macos%20arm64%20%7C%20linux-lightgrey)](https://github.com/yiaogit/seismic-shakevision/releases/latest)
 [![i18n](https://img.shields.io/badge/i18n-EN%20%7C%20ES%20%7C%20%E4%B8%AD%E6%96%87%20%7C%20FR-brightgreen)](shakevision/i18n/locales/)
 
-[**下载安装包**](#-下载安装) · [**从源码运行**](#-从源码运行) · [**功能速览**](#-功能速览) · [**架构**](#-架构) · [**发布流程**](#-发布流程)
+[**下载安装包**](#-下载安装) · [**从源码运行**](#-从源码运行) · [**界面与功能**](#-界面与功能) · [**功能速览**](#-功能速览) · [**架构**](#-架构) · [**发布流程**](#-发布流程)
 
 </div>
+
+---
+
+## 🖼 界面与功能
+
+> 截图来自 **v0.9.0** 实机（1480×900 主窗 / 1200×800 Workbench）。默认深色，浅色主题一键切换。
+
+### 1. 3D 地球：从“看”到“用”
+
+<p align="center"><img src="docs/screenshots/globe.png" alt="3D 地球、台站图层、周期与 Find station 搜索" width="88%"></p>
+
+*28,282 个 ShakeNet 台站 + 151 个 USGS/IRIS 台站；Devices / Quakes / Both、1h–30d、暂停自转、缩放/复位。顶部 **Find station** 输入 `IU.PAB` 后回车，打开同一个台站弹窗。*
+
+- **台站 → 工作台**：`Monitor live` → 在 Workbench 选中台站 → `Connect`；或 `Open station in Replay` 进入历史分析。
+- **地震 → 回放**：点地震 → `Review` → 选最近台站 → Replay。
+- 收藏的台站/地震统一进入 **Mine**。
+
+### 2. Data：实时态势 + 历史统计
+
+<p align="center"><img src="docs/screenshots/data-live.png" alt="Data Live KPI 与图表" width="88%"></p>
+<p align="center"><img src="docs/screenshots/data-analysis.png" alt="Data Analysis 历史统计与专业图表" width="88%"></p>
+
+*Live 展示 24h/6h/1h 聚合、KPI、Top-10、震级/深度/时间线/震中；Analyze 查询 USGS `fdsnws-event`（这里 IS · 1 y · M≥3），输出 GR/b、能量、Mc(t)、Omori、空间/深度统计。右上角可直接 **Export report**。*
+
+### 3. Events：逐条复核
+
+<p align="center"><img src="docs/screenshots/events.png" alt="Events 历史目录、过滤与最近台站" width="88%"></p>
+
+*Live / Historical 双模式；震级/深度/时间/文本过滤；USGS 历史目录；右侧按 Δ°/km 列出最近台站。单击事件查看台站，双击台站用该台站进入 Replay，双击事件用最近台站快速复核。*
+
+### 4. Mine：收藏与复核目录
+
+<p align="center"><img src="docs/screenshots/mine.png" alt="Mine 收藏事件、台站、录音与复核目录" width="88%"></p>
+
+*收藏事件/台站、STA/LTA 录音、本地 QuakeML 复核目录；双击重开已存复核（恢复 P/S），也可在文件夹中打开导出 MiniSEED/QuakeML。*
+
+### 5. Workbench Live：30 Hz 平滑波形
+
+<p align="center"><img src="docs/screenshots/workbench-live.png" alt="Workbench Live 30 Hz 平滑波形、频谱和滤波器" width="76%"></p>
+
+*三通道波形 + FFT 频谱 + 平滑播放（约 12 s 缓冲；左侧 `Smooth display` 可切 Realtime）+ 带通滤波 + STA/LTA + 24h Diary/Hodogram。MMI/PGV 芯片在顶栏同步显示。*
+
+### 6. Workbench Replay：从事件到波形
+
+<p align="center"><img src="docs/screenshots/workbench-replay.png" alt="Workbench Replay 波形、频谱、PSD 与导出" width="76%"></p>
+
+*事件自动预填台站/时间/时长；Load 后显示波形、频谱、PSD、TauP 理论 P/S。`Rotate ZRT` 需要水平分量（垂直-only 台站会正确禁用）；PNG/CSV/QuakeML 与本地复核目录均在一处。*
+
+### 7. 设置、报告与浅色主题
+
+<p align="center"><img src="docs/screenshots/settings.png" alt="Settings 三页签" width="46%"></p>
+<p align="center"><img src="docs/screenshots/light-data.png" alt="浅色主题 Data" width="88%"></p>
+
+*语言/时区/地址自动检测、LAN Shake 管理与 Reset；报告 HTML/PDF 分监控/统计两套布局；深色/浅色主题即时切换；Help → Check for updates 检查 L1 更新。*
 
 ---
 
@@ -37,11 +85,13 @@
 
 | 模块                       | 内容                                                                                                                            |
 |---------------------------|---------------------------------------------------------------------------------------------------------------------------------|
-| 🌍 **3D Globe**           | ECharts-GL 实时渲染地球，叠加 600+ Raspberry Shake 公民台站 + 400+ USGS / IRIS 骨干台站，地震按震级分色，可点击缩放并加入 Pro 工作台 |
+| 🌍 **3D Globe**           | ECharts-GL 实时渲染地球，叠加 **28,282** 个 ShakeNet 公民台站 + **151** 个 USGS / IRIS 骨干台站；Devices/Quakes/Both、1h–30d、暂停自转、Find station 搜索，点台站可加入 Pro 工作台 |
 | 📊 **数据面板（实时 \| 分析）** | **两套独立页**。**实时**:Top 国家、震级/深度直方图、时间线、事件率、震中分布（经×纬），带区域选择器（Top-10 保持全球）。**分析**:查 **USGS fdsnws-event 历史目录**（区域 + 时间窗 + 最小震级，`/count` 上限预检），给出 **GR/b 值、Mc/b 随时间、能量释放、空间密度、深度剖面/分布、震级-时间、事件间隔** 等专业统计。时间窗用**拖动式区间滑块** |
 | 🗂 **事件中心**           | 顶栏页面:地震表 + 双击复核;右侧自动列出**就近大台站**（Δ°/km/距离类别），双击即用最近台站在回放里复核；☆ 一键收藏地震/台站      |
 | ⭐ **「我的」收藏中心**    | 顶栏页面:收藏的**地震 / 台站** + 记录区（STA/LTA 触发录波，有才显示 + **复核目录** QuakeML）；双击目录**重开已存复核**（恢复 P/S 标记）；「在文件夹中打开」导出 MiniSEED/QuakeML 给 ObsPy/SeisComP/SAC |
-| 🔬 **Pro Workbench**      | 独立浮窗：实时三通道波形 + 频谱图（可开关）+ 24h 鼓式记录 + N-E 质点轨迹（极化方位角）+ STA/LTA 触发录波 + 顶栏 MMI/PGV 芯片            |
+| 🔬 **Pro Workbench**      | 独立浮窗：实时三通道波形 + 频谱图（可开关）+ 24h 鼓式记录 + N-E 质点轨迹（极化方位角）+ STA/LTA 触发录波 + 顶栏 MMI/PGV 芯片；**Smooth/Realtime** 可切 |
+| 🌊 **30 Hz 平滑波形** | 60 s 历史预填充 + 12 s playout 游标；IRIS 13 s 分包也能连续滚动，实测 29.8 Hz/97% 帧推进；检测与 MMI 仍用最新数据 |
+| 🔄 **自动更新 L1** | GitHub Releases manifest + 启动通知；按平台下载安装包并用 SHA-256 校验；不静默安装（签名/回滚留 L2） |
 | ⏪ **历史回放（重写）**   | 专业波形浏览器:缩放/平移 + UTC 绝对时间轴 + 波段选择 + 去仪器响应（VEL/DISP/ACC）+ ZNE→ZRT 旋转 + TauP 理论 P/S 到时 + dB 频谱图 + PSD + 区段游标量取 + PNG/CSV/QuakeML 导出 |
 | 🔊 **Sonification**       | 把最近 60 秒的地动信号变速并播放成可听音频（1× – 60×）                                                                            |
 | 🌐 **i18n**               | 全栈 4 语言（EN / ES / 简中 / FR）即时切换，包括 Web 视图、图表内部、tooltip、HTML 报告                                          |
@@ -473,6 +523,10 @@ stateDiagram-v2
 
 ---
 
+### 自动更新（L1）
+
+`services/updater.py` 读取 GitHub Releases 最新 manifest，按语义版本比较；根据当前平台选择 `.dmg/.zip/.AppImage`，下载到 Downloads，并用 release 的 `SHA256SUMS.txt` 校验。`ui/update_dialog.py` 展示 release notes、下载进度和“打开文件夹”。启动后静默检查（可跳过版本），也可从 **Help → Check for updates…** 手动检查。**不会静默安装**；签名、自动安装和回滚属于 L2。
+
 ### 技术栈与决策记录（ADR）
 
 | 层               | 选型                                                | 关键决策 / 理由                                              |
@@ -567,7 +621,8 @@ seismic-shakevision/
 │   │   ├── response.py                   # StationXML 仪器响应（去响应 + 台站坐标）
 │   │   ├── clear_cache.py                # 一键清空所有本地状态（含录波 + 目录）
 │   │   ├── github_auth.py                # GitHub Device Flow OAuth；烘焙 DEFAULT_CLIENT_ID
-│   │   └── settings_backup.py            # 设置 JSON 导出/导入（v0.7-C 后仅测试使用）
+│   │   ├── settings_backup.py            # 设置 JSON 导出/导入（v0.7-C 后仅测试）
+│   │   └── updater.py                    # 自动更新 L1：GitHub manifest + SHA-256 校验下载
 │   │
 │   ├── ui/                               # ── PySide6 (38) ──
 │   │   ├── main_window.py                # 根 QMainWindow + 全局 signal hub + 菜单
@@ -583,7 +638,7 @@ seismic-shakevision/
 │   │   ├── particle_motion_widget.py     # N-E 平面质点轨迹 + 极化方位角（稳定化刷新）
 │   │   ├── spectrum_panel.py             # PSD 功率谱面板（power dB vs freq）
 │   │   ├── intensity_card.py             # MMI 烈度翻译卡（用户友好语言）
-│   │   ├── replay_panel.py               # 历史回放（重写）：静态波形浏览器 — 去响应/旋转/TauP/PSD/导出
+│   │   ├── replay_panel.py               # 历史回放：静态波形浏览器 — 去响应/旋转/TauP/PSD/导出/平滑事件预填
 │   │   ├── event_center_panel.py         # 顶栏「事件中心」：地震表 + 就近台站（Δ°/km/类别）+ ☆收藏
 │   │   ├── event_list_panel.py           # 可排序事件表组件（事件中心内复用）
 │   │   ├── my_data_panel.py              # 顶栏「我的」：收藏（地震/台站）+ 记录（录波/复核目录）
@@ -605,7 +660,8 @@ seismic-shakevision/
 │   │   ├── elevation.py                  # Material/macOS 阴影 helper（0–3 级）
 │   │   ├── icons.py                      # 资源图标加载（svg/png + 主题感知）
 │   │   ├── macos_native.py               # macOS 透明标题栏 + 全屏内容视图（pyobjc）
-│   │   └── pdf_exporter.py               # QWebEnginePage.printToPdf 包装
+│   │   ├── pdf_exporter.py               # QWebEnginePage.printToPdf 包装
+│   │   └── update_dialog.py              # 自动更新对话框（版本/说明/下载/校验）
 │   │
 │   ├── i18n/                             # ── 国际化 ──
 │   │   ├── service.py                    # LocaleService + t() + language_changed_signal
@@ -683,41 +739,41 @@ CI 在每次 push / PR 跑：Ubuntu / macOS / Windows × Python 3.10 / 3.11 / 3.
 - ✅ `packaging/build.py` — 跨平台驱动
 - ✅ `.github/workflows/release.yml` — tag 触发自动构建 + 发布
 
-### 发版步骤（以 v0.1.1 为例）
+### 发版步骤（以 v0.9.0 为例）
 
 ```bash
 # 1) bump 三处版本号一致
-#    a. shakevision/__init__.py    →  __version__ = "0.1.1"
-#    b. pyproject.toml              →  version = "0.1.1"
-#    c. packaging/shakevision.spec  →  version = "0.1.1"  (BUNDLE)
+#    a. shakevision/__init__.py    →  __version__ = "0.9.0"
+#    b. pyproject.toml              →  version = "0.9.0"
+#    c. packaging/shakevision.spec  →  version = "0.9.0"  (BUNDLE)
 
-# 2) 写 CHANGELOG.md：在最上面加 ## [0.1.1] — YYYY-MM-DD 区块
+# 2) 写 CHANGELOG.md：在最上面加 ## [0.9.0] — YYYY-MM-DD 区块
 #    workflow 会自动从中抽取作为 Release 描述。
 
 # 3) 提交 + 推
 git add -A
-git commit -m "release: v0.1.1"
+git commit -m "release: v0.9.0"
 git push origin main
 
 # 4) 打 tag + 推 tag → 触发 release workflow
-git tag -a v0.1.1 -m "ShakeVision v0.1.1 — binary installers"
-git push origin v0.1.1
+git tag -a v0.9.0 -m "ShakeVision v0.9.0 — binary installers"
+git push origin v0.9.0
 ```
 
 推完 tag 后，GitHub Actions 自动执行：
 
 ```
-release.yml (tag v0.1.1)
-  ├── build-windows  (windows-latest, Py 3.11)      → ShakeVision-0.1.1-windows-x64.zip
-  ├── build-macos    (macos-14 / Apple Silicon)     → ShakeVision-0.1.1-macos-arm64.dmg
-  ├── build-linux    (ubuntu-22.04)                 → ShakeVision-0.1.1-linux-x64.AppImage
+release.yml (tag v0.9.0)
+  ├── build-windows  (windows-latest, Py 3.11)      → ShakeVision-0.9.0-windows-x64.zip
+  ├── build-macos    (macos-14 / Apple Silicon)     → ShakeVision-0.9.0-macos-arm64.dmg
+  ├── build-linux    (ubuntu-22.04)                 → ShakeVision-0.9.0-linux-x64.AppImage
   └── publish        (拉取 3 个 artifacts)
-       ├── 从 CHANGELOG.md 抽取 [0.1.1] 区块作为 release notes
+       ├── 从 CHANGELOG.md 抽取 [0.9.0] 区块作为 release notes
        ├── 拼接 SHA256SUMS.txt
        └── 在 GitHub Releases 创建 release，3 个二进制 + checksums 全部挂上
 ```
 
-约 15–25 分钟后在 https://github.com/yiaogit/seismic-shakevision/releases 出现 **v0.1.1**。
+约 15–25 分钟后在 https://github.com/yiaogit/seismic-shakevision/releases 出现 **v0.9.0**。
 
 ### 预发布（rc / beta）
 
@@ -732,11 +788,11 @@ git push origin v0.2.0-rc1
 
 ```bash
 # 删远端 tag（同时撤销 Release，需在 GitHub UI 也删一下 Release）
-git push --delete origin v0.1.1
-git tag -d v0.1.1
+git push --delete origin v0.9.0
+git tag -d v0.9.0
 # 修代码、重新打 tag、推
-git tag -a v0.1.1 -m "..."
-git push origin v0.1.1
+git tag -a v0.9.0 -m "..."
+git push origin v0.9.0
 ```
 
 详细打包说明（本地构建、双架构 macOS 注意事项、tamaños 等）见 [`packaging/README.md`](packaging/README.md)。
@@ -751,7 +807,8 @@ git push origin v0.1.1
 - [x] **v0.3.0** — 自定义 LAN Raspberry Shake 连接 UI（下拉 "➕ Add LAN Shake…" + Settings "My Shakes" 标签页）
 - [x] **v0.7.0** — 品牌重塑为 SeismicGuard、macOS Sonoma 风格主题、Onboarding 引导、Profile 活动时间线、IP 地理定位、PDF 溢出修复
 - [x] **v0.8.0** — 历史回放重写为专业波形浏览器（去响应/旋转/TauP/PSD/导出）；顶栏事件中心 + 就近台站；「我的」收藏中心（收藏 + 录波 + 复核目录，支持重开与导出）；按钮式收藏入口；质点运动稳定化 + 极化方位角
-- [ ] **v1.0.0** — 代码签名（Windows EV cert + macOS Developer ID + 公证）；彻底移除 SmartScreen / Gatekeeper 警告；自动更新机制
+- [x] **v0.9.0** — P0/P1/P2 UX 收尾、30 Hz 平滑、Globe 台站搜索、L1 自动更新、Stop 崩溃/弹窗/Kiosk 修复
+- [ ] **v1.0.0** — 代码签名（Windows EV cert + macOS Developer ID + 公证）；彻底移除 SmartScreen / Gatekeeper 警告；L2 自动安装 + 签名/回滚
 
 ---
 

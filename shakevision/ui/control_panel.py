@@ -14,6 +14,7 @@ aplicación (fuente de datos, procesador, etc.).
 from __future__ import annotations
 
 from collections import deque
+import time
 from typing import Iterable, Optional
 
 from PySide6.QtCore import Qt, QTimer, Signal, Slot
@@ -25,6 +26,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QProgressBar,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -245,14 +247,34 @@ class ControlPanel(QFrame):
         self._conn_status.setObjectName("StatusValue")
         self._conn_status.setWordWrap(True)
         row.addWidget(self._conn_status, stretch=1)
+        self._conn_elapsed = QLabel("")
+        self._conn_elapsed.setObjectName("Caption")
+        self._conn_elapsed.setAlignment(Qt.AlignTop | Qt.AlignRight)
+        row.addWidget(self._conn_elapsed)
         self._conn_row.setVisible(False)
         outer.addWidget(self._conn_row)
+
+        # Barra indeterminada: el tiempo real hasta el primer batch depende
+        # de IRIS/grace, no se puede predecir; el valor útil es el elapsed.
+        self._conn_progress = QProgressBar()
+        self._conn_progress.setRange(0, 0)
+        self._conn_progress.setTextVisible(False)
+        self._conn_progress.setFixedHeight(3)
+        self._conn_progress.setObjectName("ConnProgress")
+        self._conn_progress.setVisible(False)
+        outer.addWidget(self._conn_progress)
 
         # Temporizador del spinner.
         self._spinner_idx = 0
         self._conn_spinner_timer = QTimer(self)
         self._conn_spinner_timer.setInterval(90)
         self._conn_spinner_timer.timeout.connect(self._tick_spinner)
+
+        # Elapsed de conexión (se actualiza 4 veces/s).
+        self._conn_started_mono: Optional[float] = None
+        self._conn_elapsed_timer = QTimer(self)
+        self._conn_elapsed_timer.setInterval(250)
+        self._conn_elapsed_timer.timeout.connect(self._tick_elapsed)
 
         return outer
 
@@ -262,6 +284,13 @@ class ControlPanel(QFrame):
     def _tick_spinner(self) -> None:
         self._spinner_idx = (self._spinner_idx + 1) % len(self._SPINNER_FRAMES)
         self._conn_spinner.setText(self._SPINNER_FRAMES[self._spinner_idx])
+
+    def _tick_elapsed(self) -> None:
+        if self._conn_started_mono is None:
+            return
+        elapsed = max(0.0, time.monotonic() - self._conn_started_mono)
+        self._conn_elapsed.setText(t(
+            "controls.connecting_elapsed", seconds=f"{elapsed:.1f}"))
 
     def set_connection_status(self, text: str, busy: bool = True) -> None:
         """Muestra ``text`` en la fila de progreso.
@@ -274,12 +303,22 @@ class ControlPanel(QFrame):
         self._conn_status.setText(text)
         self._conn_row.setVisible(True)
         if busy:
+            if self._conn_started_mono is None:
+                self._conn_started_mono = time.monotonic()
+            self._conn_elapsed.setVisible(True)
+            self._conn_progress.setVisible(True)
             self._conn_spinner.setVisible(True)
             if not self._conn_spinner_timer.isActive():
                 self._conn_spinner_timer.start()
+            if not self._conn_elapsed_timer.isActive():
+                self._conn_elapsed_timer.start()
+            self._tick_elapsed()
         else:
             self._conn_spinner_timer.stop()
+            self._conn_elapsed_timer.stop()
             self._conn_spinner.setVisible(False)
+            self._conn_progress.setVisible(False)
+            self._conn_elapsed.setVisible(False)
 
     def set_source_active(self, active: bool) -> None:
         """El controlador informa si hay una fuente activa.
@@ -299,6 +338,10 @@ class ControlPanel(QFrame):
         """Oculta la fila de progreso (al desconectar)."""
 
         self._conn_spinner_timer.stop()
+        self._conn_elapsed_timer.stop()
+        self._conn_started_mono = None
+        self._conn_elapsed.clear()
+        self._conn_progress.setVisible(False)
         self._conn_status.clear()
         self._conn_row.setVisible(False)
 

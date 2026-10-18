@@ -119,6 +119,21 @@ def _settings():
 # ============================================================
 # Implementación
 # ============================================================
+def _is_legacy_placeholder(entry: dict) -> bool:
+    """Entradas antiguas grabadas sin network/code/place/mag."""
+
+    kind = entry.get("kind")
+    params = entry.get("params", {}) or {}
+    if kind == KIND_STATION_CLICKED:
+        return str(params.get("station", "")) in ("", "?")
+    if kind == KIND_EARTHQUAKE_VIEWED:
+        return (str(params.get("place", "")) in ("", "?")
+                or str(params.get("mag", "")) in ("", "?"))
+    if kind == KIND_STATION_STREAMED:
+        return str(params.get("station", "")) in ("", "?")
+    return False
+
+
 class _Log:
     """Singleton interno; toda la API pública pasa por ``ActivityLog``."""
 
@@ -214,7 +229,17 @@ class _Log:
                         and isinstance(e.get("kind"), str)
                         and isinstance(e.get("params"), dict)):
                     valid.append(e)
-            return valid
+            # Migración única: borrar entradas antiguas con placeholders
+            # ("Inspected station ?" / "M? near ?"). No son datos útiles.
+            cleaned = [e for e in valid if not _is_legacy_placeholder(e)]
+            if len(cleaned) != len(valid):
+                try:
+                    s.setValue(
+                        _QSETTINGS_KEY,
+                        json.dumps(cleaned, ensure_ascii=False))
+                except Exception:  # noqa: BLE001
+                    pass
+            return cleaned
         except (json.JSONDecodeError, Exception) as exc:  # noqa: BLE001
             logger.debug("ActivityLog: load falló (%s)", exc)
             return []

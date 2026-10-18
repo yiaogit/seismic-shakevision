@@ -57,6 +57,14 @@ class ScopeBar(QFrame):
         self._hint.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         layout.addWidget(self._hint, stretch=1)
 
+        # Plegar la explicación: el nombre de la pestaña ya está arriba;
+        # en pantallas bajas la barra puede ocupar dos líneas.
+        self._toggle_hint = QPushButton("▾")
+        self._toggle_hint.setObjectName("ChipButton")
+        self._toggle_hint.setFixedSize(22, 22)
+        self._toggle_hint.clicked.connect(self._toggle_hint_visibility)
+        layout.addWidget(self._toggle_hint)
+
         self._link = QPushButton()
         self._link.setObjectName("ChipButton")
         self._link.setFixedHeight(22)
@@ -67,7 +75,17 @@ class ScopeBar(QFrame):
         subscribe(self, LocaleService.language_changed_signal(),
                   self._retranslate)
 
+    def _toggle_hint_visibility(self) -> None:
+        visible = self._hint.isHidden()
+        self._hint.setVisible(visible)
+        self._toggle_hint.setText("▾" if visible else "▸")
+        self._toggle_hint.setToolTip(t(
+            "scope.hide_hint" if visible else "scope.show_hint"))
+
     def _retranslate(self) -> None:
         self._title.setText(t(self._title_key))
         self._hint.setText(t(self._hint_key))
         self._link.setText(t(self._link_key))
+        self._toggle_hint.setToolTip(t(
+            "scope.hide_hint" if not self._hint.isHidden()
+            else "scope.show_hint"))
