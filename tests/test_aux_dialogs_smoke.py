@@ -17,9 +17,17 @@ from shakevision.ui.settings_dialog import SettingsDialog
 from shakevision.ui.update_dialog import UpdateDialog
 
 
-@pytest.fixture(scope="module")
+# Mantener una referencia global: si el wrapper de QApplication se libera
+# antes de que Qt termine, Python 3.10/3.11 puede abortar en el finalizador
+# con "none_dealloc: deallocating None" (solo Ubuntu en CI).
+_APP = None
+
+
+@pytest.fixture(scope="session")
 def qapp():
-    yield QApplication.instance() or QApplication([])
+    global _APP
+    _APP = QApplication.instance() or QApplication([])
+    yield _APP
 
 
 def test_aux_dialogs_construct(qapp) -> None:
