@@ -563,6 +563,7 @@ historical query and rendered both reports.
 | 22 | MMI chip (Standard/Pro) | ✅ appears with IU.ANMO live data (`MMI 1.0`), survives switching to Standard, click reopens the live Workbench, disconnect hides it |
 | 23 | UX P2 scope bars | ✅ Data “Review events →” switches to Events; Events “Statistics view →” switches to Data |
 | 24 | Compact layout | ✅ Replay 1200×800: waveform 242 px (3 traces + labels), spectrogram 150 px, PSD 100 px; colorbar 4 ticks |
+| 25 | Map → nearby real station | ✅ Globe → Devices → IU.PAB (San Pablo, 111.5 km) dialog → “Monitor live” → Workbench → Connect; panel/header show IU.PAB. Raw: TCP 105 ms, SeedLink handshake 257 ms, SELECT 103 ms, first packet 2.55 s. App “Connected” 13.1 s after Connect (10 s channel grace + IRIS 13 s packet batching), live latency 10.8–16.7 s |
 
 ### Sandboxed-agent caveat (not a product issue)
 

@@ -51,6 +51,10 @@
 - MMI 芯片：IU.ANMO 实时数据出现、切 Standard 仍可见、点击回工作台、
   断开自动隐藏。
 - UX P2：数据页“逐条复核 →”切到事件页，事件页“统计视图 →”切回数据页。
+- 地图 → 最近真实台站 IU.PAB（San Pablo，距马德里 111.5 km）：
+  地图 Devices → 台站弹窗 → Monitor live → 工作台 Connect。
+  网络握手 257 ms / TCP 105 ms / 首包 2.55 s；应用 “Connected” 约 13.1 s
+  （含 10 s 通道对齐宽限 + IRIS 13 s 分包），实时延迟 10.8–16.7 s。
 
 修复清单见 `CHANGELOG.md` 的 `[Unreleased]`；逐步清单与结果在
 `CLAUDE.md` §9。仍未做：仅剩自动更新机制（另行排期）。
