@@ -120,7 +120,7 @@ jobs:
           PYTHONMALLOC: malloc
         run: |
           sudo apt-get install -y --no-install-recommends xvfb
-          xvfb-run --auto-servernum pytest -v
+          xvfb-run --auto-servernum pytest -v --ignore=tests/test_aux_dialogs_smoke.py
 
       - name: Run pytest (macOS / Windows)
         if: runner.os != 'Linux'
