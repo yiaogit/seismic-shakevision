@@ -25,10 +25,12 @@ misma que tenía en ``MainWindow`` antes de v0.7.7.
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from typing import TYPE_CHECKING, Optional
 
-from PySide6.QtCore import QObject, QTimer, Signal
+import numpy as np
+from PySide6.QtCore import QObject, QTimer, Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QGraphicsDropShadowEffect
 
@@ -63,6 +65,15 @@ logger = logging.getLogger(__name__)
 # Periodo de refresco del helicorder (más lento que el oscilograma).
 HELICORDER_REFRESH_MS: int = 5000
 
+# Playout suave: IRIS/RingServer entrega paquetes de ~13 s, así que el
+# oscilograma se congelaba entre paquetes aunque el timer corriera a 30 Hz.
+# Mantenemos un cursor de tiempo que avanza con el reloj real y leemos el
+# búfer 12 s por detrás; un prefijo de 60 s pedido a FDSN dataselect llena la
+# ventana inicial. La detección/MMI siguen usando el dato más reciente.
+SMOOTH_TARGET_DELAY_S: float = 12.0
+SMOOTH_MAX_DELAY_S: float = 30.0
+SMOOTH_PREFILL_S: float = 60.0
+
 
 class WorkbenchController(QObject):
     """Orquesta la canalización Workbench y conduce una vista ``ProWindow``."""
@@ -82,6 +93,8 @@ class WorkbenchController(QObject):
     #: v0.7.7: sensibilidad (counts/(m/s)) obtenida en un hilo de fondo;
     #: ``None`` si no disponible. Se aplica en el hilo de la UI.
     _sensitivity_ready = Signal(object)
+    #: Prefijo histórico listo (token, (z,n,e,end_ts) | None), desde un hilo.
+    _prefill_ready = Signal(object)
 
     def __init__(
         self,
@@ -97,6 +110,7 @@ class WorkbenchController(QObject):
         # la sensibilidad obtenida en hilo de fondo al hilo de la UI.
         self._response_service = None
         self._sensitivity_ready.connect(self._apply_sensitivity)
+        self._prefill_ready.connect(self._on_prefill_ready)
 
         # Estación actualmente seleccionada (la primera por defecto)
         self._current_station: "StationPreset" = config.stations[0]
@@ -157,6 +171,13 @@ class WorkbenchController(QObject):
         # Contador para limitar el cómputo del espectrograma a 1/3 frames.
         self._spectrum_frame_skip: int = 0
 
+        # Estado del playout suave (ver constantes SMOOTH_*).
+        self._smooth_end_ts: Optional[float] = None
+        self._smooth_last_mono: Optional[float] = None
+        self._smooth_ready: bool = False
+        self._prefill_started: bool = False
+        self._prefill_token: int = 0
+
         # Fuente de datos activa (None mientras esté desconectado)
         self._source: Optional[DataSource] = None
 
@@ -179,6 +200,9 @@ class WorkbenchController(QObject):
 
         # Temporizador de refresco de las vistas en vivo (oscilograma…)
         self._refresh_timer = QTimer(self)
+        # PreciseTimer evita el jitter del CoarseTimer por defecto (30 Hz
+        # reales en vez de ~28-29 Hz con picos de 40 ms).
+        self._refresh_timer.setTimerType(Qt.PreciseTimer)
         self._refresh_timer.setInterval(1000 // max(1, config.stream.refresh_fps))
         self._refresh_timer.timeout.connect(self._on_refresh_tick)
         self._refresh_timer.start()
@@ -271,6 +295,7 @@ class WorkbenchController(QObject):
 
         self._stop_source()
         self._buffer.clear()
+        self._reset_smooth_state()
         self._start_source_for(preset)
 
     def on_filter_changed(self, cfg: "FilterConfig") -> None:
@@ -307,6 +332,7 @@ class WorkbenchController(QObject):
             return
 
         self._buffer.clear()
+        self._reset_smooth_state()
         self._start_source_for(self._current_station)
 
     def on_disconnect_clicked(self) -> None:
@@ -407,6 +433,15 @@ class WorkbenchController(QObject):
     # ------------------------------------------------------------------
     # Gestión de la fuente de datos
     # ------------------------------------------------------------------
+    def _reset_smooth_state(self) -> None:
+        """Cancela el playout/prefijo al cambiar de fuente o desconectar."""
+
+        self._prefill_token += 1
+        self._smooth_end_ts = None
+        self._smooth_last_mono = None
+        self._smooth_ready = False
+        self._prefill_started = False
+
     def _start_source_for(self, preset: "StationPreset") -> None:
         """Crea e inicia la fuente apropiada para el preset dado."""
 
@@ -480,6 +515,7 @@ class WorkbenchController(QObject):
         # PASO 1: quitar la referencia de inmediato (segundo Detener = no-op)
         src = self._source
         self._source = None
+        self._reset_smooth_state()
         # El chip de intensidad no debe quedar con el último valor: al parar
         # (o reconectar a otra estación) se oculta hasta el primer dato nuevo.
         self.intensity_updated.emit(None)
@@ -525,6 +561,12 @@ class WorkbenchController(QObject):
         # Alimentar también el búfer largo del helicorder con el canal Z.
         self._view.helicorder_panel.ingest(batch.z)
 
+        # Playout suave: el primer paquete de IRIS llega ~13 s después de
+        # conectar. Pedimos 60 s de histórico para que el cursor tenga datos
+        # detrás; si falla, el oscilograma sigue con el comportamiento normal.
+        if not self._prefill_started and self._source is not None:
+            self._start_prefill(batch)
+
         # Al recibir el primer batch, marcar la conexión como activa.
         if not self._connected:
             self._connected = True
@@ -545,6 +587,147 @@ class WorkbenchController(QObject):
                           f"{self._current_station.station}"),
                 busy=False,
             )
+
+    # ------------------------------------------------------------------
+    # Prefijo histórico + playout suave
+    # ------------------------------------------------------------------
+    def _start_prefill(self, batch: SampleBatch) -> None:
+        """Pide a FDSN dataselect los segundos previos al primer paquete."""
+
+        self._prefill_started = True
+        sr = self._config.stream.sample_rate_hz
+        first_start = float(batch.timestamp_unix) - (
+            max(1, len(batch.z)) - 1
+        ) / float(sr)
+        end = first_start - 0.5
+        start = end - SMOOTH_PREFILL_S
+        if end - start < 5.0:
+            return
+
+        from shakevision.config import (
+            seedlink_channels_for,
+            seedlink_location_for,
+        )
+        st = self._current_station
+        net, sta = st.network, st.station
+        loc = (st.location or "").strip() or seedlink_location_for(net)
+        # Mismo trío que usa el source en vivo (seedlink_channels_for);
+        # ``preset.channel`` es solo una etiqueta y no debe desviar el prefijo.
+        band = seedlink_channels_for(net)[0][:2]
+        channel = f"{band}?"
+        token = self._prefill_token
+        threading.Thread(
+            target=self._prefill_worker,
+            args=(token, net, sta, loc, channel, start, end),
+            daemon=True,
+            name="sg-prefill",
+        ).start()
+
+    def _prefill_worker(
+        self, token: int, net: str, sta: str, loc: str,
+        channel: str, start: float, end: float,
+    ) -> None:
+        """Descarga el prefijo en un hilo (nunca bloquea la UI)."""
+
+        data = None
+        try:
+            from shakevision.services.dataselect import DataselectClient
+            stream = DataselectClient().fetch_stream(
+                net, sta, loc, channel, start, end,
+            )
+            data = self._stream_to_arrays(
+                stream, self._config.stream.sample_rate_hz)
+        except Exception:  # noqa: BLE001
+            logger.debug("Prefijo histórico no disponible", exc_info=True)
+        try:
+            self._prefill_ready.emit((token, data))
+        except RuntimeError:
+            pass
+
+    @staticmethod
+    def _stream_to_arrays(stream, target_sr: int):
+        """Convierte un Stream ZNE a arrays a ``target_sr`` + fin UTC."""
+
+        traces: dict[str, object] = {}
+        for tr in stream:
+            last = str(tr.stats.channel)[-1].upper()
+            # GSN usa BH1/BH2 para las horizontales (igual que el source
+            # SeedLink en vivo); sin este mapeo el prefijo N/E quedaba a 0.
+            comp = {"Z": "Z", "N": "N", "E": "E",
+                    "1": "N", "2": "E"}.get(last)
+            if comp is not None and comp not in traces:
+                traces[comp] = tr
+        z_tr = traces.get("Z")
+        if z_tr is None or int(getattr(z_tr.stats, "npts", 0)) < 2:
+            return None
+
+        starts = []
+        ends = []
+        for tr in traces.values():
+            starts.append(float(tr.stats.starttime.timestamp))
+            ends.append(float(tr.stats.endtime.timestamp))
+        start = max(starts)
+        end = min(ends)
+        if end <= start:
+            return None
+        n = int(round((end - start) * float(target_sr))) + 1
+        if n < 2:
+            return None
+        grid = start + np.arange(n, dtype=np.float64) / float(target_sr)
+
+        out: dict[str, np.ndarray] = {}
+        for comp in ("Z", "N", "E"):
+            tr = traces.get(comp)
+            if tr is None:
+                out[comp] = np.zeros(n, dtype=np.float32)
+                continue
+            sr = float(tr.stats.sampling_rate)
+            src_t = float(tr.stats.starttime.timestamp) + (
+                np.arange(int(tr.stats.npts), dtype=np.float64) / sr
+            )
+            out[comp] = np.interp(
+                grid, src_t, np.asarray(tr.data, dtype=np.float64),
+            ).astype(np.float32)
+        return out["Z"], out["N"], out["E"], float(grid[-1])
+
+    def _on_prefill_ready(self, payload: object) -> None:
+        """Inserta el prefijo y activa el cursor suave (hilo UI)."""
+
+        try:
+            token, data = payload  # type: ignore[misc]
+        except (TypeError, ValueError):
+            return
+        if token != self._prefill_token or self._source is None or data is None:
+            return
+        z, n, e, end_ts = data
+        latest = self._buffer.latest_timestamp_unix
+        if latest <= 0.0 or len(z) < 2:
+            return
+        sr = self._config.stream.sample_rate_hz
+        earliest = latest - max(0, self._buffer.available - 1) / sr
+        # El histórico debe terminar antes del bloque vivo; recortar si el
+        # dataselect devolvió algún segundo de más.
+        if end_ts >= earliest - (0.5 / sr):
+            cut = int(round((end_ts - earliest) * sr)) + 1
+            if cut > 0:
+                if cut >= len(z):
+                    return
+                z, n, e = z[:-cut], n[:-cut], e[:-cut]
+                end_ts = float(end_ts - cut / sr)
+        if len(z) < int(sr):
+            return
+        self._buffer.prepend_history(end_ts, z, n, e)
+        self._smooth_ready = True
+        self._smooth_end_ts = latest - SMOOTH_TARGET_DELAY_S
+        self._smooth_last_mono = time.monotonic()
+        logger.info(
+            "Playout suave activo: prefijo %.1f s, retardo %.1f s",
+            len(z) / sr, SMOOTH_TARGET_DELAY_S,
+        )
+        self.status_message.emit(
+            t("status.smooth_buffer", delay=int(SMOOTH_TARGET_DELAY_S)),
+            5000,
+        )
 
     def _on_source_status(self, message: str) -> None:
         """Muestra los mensajes de la fuente en la barra de estado + panel."""
@@ -573,7 +756,8 @@ class WorkbenchController(QObject):
         if self._buffer.total_written == 0:
             return
 
-        # 1. Leer la ventana de visualización del búfer circular.
+        # 1. Ventana "en vivo" (siempre termina en el último dato). Se usa
+        # para detección/MMI: los avisos no deben esperar al playout suave.
         raw = self._buffer.read_window(
             seconds=self._config.stream.display_window_seconds
         )
@@ -581,19 +765,49 @@ class WorkbenchController(QObject):
         # 2. Pasarla por la cadena DSP (detrend + Butterworth pasa-banda).
         processed = self._processor.apply_snapshot(raw)
 
+        # 2b. Playout suave: si el prefijo histórico está listo, avanzamos
+        # un cursor con el reloj real y pintamos 12 s por detrás. Así el
+        # oscilograma se mueve a 30 Hz aunque SeedLink entregue 13 s de
+        # golpe; el borde derecho ya tiene datos en el búfer.
+        display_raw = raw
+        display_processed = processed
+        if self._smooth_ready and self._smooth_end_ts is not None:
+            now = time.monotonic()
+            if self._smooth_last_mono is None:
+                self._smooth_last_mono = now
+            dt = max(0.0, min(0.25, now - self._smooth_last_mono))
+            self._smooth_last_mono = now
+            latest = self._buffer.latest_timestamp_unix
+            self._smooth_end_ts += dt
+            # No avanzar más allá del dato disponible (hold suave).
+            if self._smooth_end_ts > latest - 0.2:
+                self._smooth_end_ts = latest - 0.2
+            # Si el desfase crece demasiado (red lenta/parada), resincronizar
+            # una sola vez en lugar de acumular minutos de retraso.
+            if latest - self._smooth_end_ts > SMOOTH_MAX_DELAY_S:
+                self._smooth_end_ts = latest - SMOOTH_TARGET_DELAY_S
+            offset = max(0.0, latest - self._smooth_end_ts)
+            display_raw = self._buffer.read_window(
+                seconds=self._config.stream.display_window_seconds,
+                end_offset_s=offset,
+            )
+            display_processed = self._processor.apply_snapshot(display_raw)
+
         # 3. Pintar las trazas — solo si la VENTANA Pro está visible.
         if self._view.isVisible():
             if self._view.is_live_subtab_visible():
-                self._view.waveform_panel.update_from_snapshot(processed)
+                self._view.waveform_panel.update_from_snapshot(
+                    display_processed)
                 # Espectrograma: solo cada 3 frames (≈ 10 Hz).
                 self._spectrum_frame_skip = (self._spectrum_frame_skip + 1) % 3
                 if self._spectrum_frame_skip == 0:
                     spectrum = self._spectrum_computer.compute(
-                        processed.samples["Z"]
+                        display_processed.samples["Z"]
                     )
                     self._view.spectrogram_panel.update_from_spectrum(spectrum)
             elif self._view.is_particle_subtab_visible():
-                self._view.particle_panel.update_from_snapshot(processed)
+                self._view.particle_panel.update_from_snapshot(
+                    display_processed)
         # La pestaña helicorder se refresca con su propio temporizador.
 
         # 3b. Actualizar la tarjeta de intensidad — siempre visible.
@@ -622,8 +836,10 @@ class WorkbenchController(QObject):
         elif result.signal == EventSignal.RELEASED:
             self._on_event_released()
 
-        # Actualizar la latencia entre la última muestra y "ahora".
-        latency_s = max(0.0, time.time() - raw.latest_timestamp_unix)
+        # Actualizar la latencia de lo que el usuario VE. En modo suave el
+        # borde derecho del oscilograma va ~12 s por detrás del último paquete;
+        # usar ``raw`` (en vivo) mostraría una latencia menor que la visual.
+        latency_s = max(0.0, time.time() - display_raw.latest_timestamp_unix)
         if latency_s < 10.0:
             self.latency_text.emit(
                 t("status.latency_ms", value=latency_s * 1000)

@@ -175,3 +175,38 @@ def test_concurrent_writes_do_not_corrupt_counter() -> None:
 
     # 8 hilos × 20 iteraciones × 50 muestras = 8000
     assert buf.total_written == 8 * 20 * 50
+
+
+# ============================================================
+# Lectura con retardo (playout suave) y prefijo histórico
+# ============================================================
+def test_read_window_offset_ends_before_latest() -> None:
+    """``end_offset_s`` desplaza la ventana hacia el pasado."""
+
+    buf = RingBuffer(sample_rate_hz=100, capacity_seconds=10)
+    buf.write(timestamp_unix=1000.0, z=np.arange(300, dtype=np.float32))
+
+    snap = buf.read_window(1.0, end_offset_s=1.0)
+
+    # La ventana termina en 999.0 y contiene las muestras 100..199.
+    assert snap.latest_timestamp_unix == pytest.approx(999.0)
+    assert snap.samples["Z"][0] == pytest.approx(100.0)
+    assert snap.samples["Z"][-1] == pytest.approx(199.0)
+    assert snap.times[-1] == pytest.approx(0.0)
+    assert snap.times[0] == pytest.approx(-0.99, abs=1e-6)
+
+
+def test_prepend_history_keeps_chronology_and_latest() -> None:
+    """El histórico queda antes del bloque vivo sin mover el borde derecho."""
+
+    buf = RingBuffer(sample_rate_hz=100, capacity_seconds=10)
+    buf.write(timestamp_unix=1000.0, z=np.arange(100, dtype=np.float32))
+    history = np.arange(-50, 0, dtype=np.float32)
+    buf.prepend_history(999.0, history)
+
+    assert buf.available == 150
+    assert buf.latest_timestamp_unix == pytest.approx(1000.0)
+
+    snap = buf.read_window(1.5)
+    assert snap.samples["Z"][0] == pytest.approx(-50.0)
+    assert snap.samples["Z"][-1] == pytest.approx(99.0)

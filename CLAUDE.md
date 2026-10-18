@@ -53,7 +53,7 @@ License: MIT.
 | Branch | `main` |
 | Python | 3.10 / 3.11 / 3.12 (CI matrix); 3.14 runs locally but is **off-matrix** |
 | Qt binding | PySide6 |
-| i18n keys | **761** per locale (en/es/fr/zh), aligned |
+| i18n keys | **762** per locale (en/es/fr/zh), aligned |
 
 ### Known issues / unfinished
 
@@ -68,12 +68,12 @@ License: MIT.
    `tests/test_i18n.py` and `tests/test_profile_view.py` assert them as
    a locale contract. The dead-key scan must therefore include `tests/`,
    not just `shakevision/` + web JS. All 4 locales stay aligned
-   (761 keys, same placeholders).
+   (762 keys, same placeholders).
 4. **`ui/sidebar_nav.py` has no runtime consumer** — the shell uses a
    `QTabWidget` (main_window.py); only `tests/test_sidebar_nav.py`
    imports the sidebar. Either re-wire it or delete it in a cleanup.
 5. **Python 3.14 is off the CI matrix.** It installs and runs locally
-   (580/580 tests green, §9), but 3.10–3.12 is the supported
+   (583/583 tests green, §9), but 3.10–3.12 is the supported
    configuration — reproduce any 3.14-only bug on 3.12 before chasing it
    (`brew install python@3.12` if needed).
 6. **Docs drift**: CLAUDE.md and `docs/roadmap.md` had lagged behind
@@ -208,7 +208,7 @@ ShakeVision/
 │  ├─ i18n/                      ← Locale system
 │  │  ├─ __init__.py             ← Public API: t(), LocaleService
 │  │  ├─ service.py              ← Singleton + language_changed signal + t()
-│  │  └─ locales/{en,es,fr,zh}.json   (761 flat dotted keys each)
+│  │  └─ locales/{en,es,fr,zh}.json   (762 flat dotted keys each)
 │  │
 │  ├─ utils/                     ← Pure helpers (no Qt)
 │  │  ├─ logging.py              ← Centralized logger
@@ -463,7 +463,7 @@ See `CHANGELOG.md` for the source-of-truth detail.
 | Analysis time window / range slider | `ui/range_slider.py` + `utils/timescale.py` |
 | Quake filtering (mag/depth/text) | `processing/event_filter.py` + `ui/event_filter_bar.py` |
 | Inspect what got released | `curl -s https://api.github.com/repos/yiaogit/seismic-shakevision/releases` |
-| **Design docs index** | `docs/`: `dashboard-pro.md` · `workbench-restructure.md` · `events-i18n-timezone.md` · `replay-redesign.md` · `roadmap.md` · `ux-review.md` · `audit-0.7.7.md` · `seismic-software-survey.md` |
+| **Design docs index** | `docs/`: `dashboard-pro.md` · `workbench-restructure.md` · `smooth-live-waveform.md` · `events-i18n-timezone.md` · `replay-redesign.md` · `roadmap.md` · `ux-review.md` · `audit-0.7.7.md` · `seismic-software-survey.md` |
 | **Workbench station/event flow & 2-mode restructure** | **`docs/workbench-restructure.md`** — source of truth for how stations/events route into Live vs Replay; read BEFORE changing `pro_window` / `control_panel` / `replay_panel` station wiring |
 
 ---
@@ -479,7 +479,7 @@ historical query and rendered both reports.
 | # | Check | How | Result |
 |---|---|---|---|
 | 1 | Package compiles | `.venv/bin/python -m compileall -q shakevision/` | ✅ pass |
-| 2 | Full test suite | `.venv/bin/pytest -q` | ✅ **580 passed** in 3.2 s |
+| 2 | Full test suite | `.venv/bin/pytest -q` | ✅ **583 passed** in 3.0 s |
 | 3 | Lint | `.venv/bin/ruff check .` | ✅ fixed: `[tool.ruff.lint] select = ["E4","E7","E9","F"]` — 0.17.1 and 0.12.7 both clean |
 | 4 | App launches, splash → MainWindow | `.venv/bin/python -m shakevision` | ✅ (harness built MainWindow directly; splash path not exercised) |
 | 5 | 4 top tabs render (Globe/Data/Events/Mine) | visual | ✅ |
@@ -582,6 +582,19 @@ Replay empty, plus light Data/Events).
 | 30 | Settings/Profile | ✅ Reset labels transparent/padded, Apply/Cancel disabled on Reset, address field wider; activity station/quake/stream logging fixed (no more “?”) |
 | 31 | Analysis/History dates | ✅ “13 d ago” instead of 311.5 h; slider last date inset; historical no-query hint |
 | 32 | Light theme spot check | ✅ Data/Events remain readable, charts render after initial paint |
+
+### Fifth pass — 30 Hz live waveform smoothness
+
+| # | Check | Result |
+|---|---|---|
+| 33 | Refresh rate / draw cost | ✅ timer 30.78 Hz, draw 0.24 ms — not the bottleneck |
+| 34 | Data cadence | ❌ IRIS SeedLink sends ~13 s per packet; timestamp changed only 2×/30 s |
+| 35 | Alternative servers | ❌ EIDA IPGP/KNMI/INGV unreachable; BGR rejects IU.PAB |
+| 36 | Prefill + playout | ✅ 60 s dataselect prefill, 12 s delayed cursor; IU.PAB **29.8 Hz**, 655/676 frames advance (was 2/641), 20 358 waveform pixels change in 200 ms |
+| 37 | N/E prefill mapping | ✅ dataselect returns BH1/BH2; mapped to N/E (before: BHN/BHE flat zeros) |
+| 38 | Detection/MMI | ✅ still use latest window; only the visual waveform is delayed |
+
+Design/trade-offs: `docs/smooth-live-waveform.md`.
 
 ### Sandboxed-agent caveat (not a product issue)
 

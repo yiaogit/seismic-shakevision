@@ -122,3 +122,30 @@ def test_shutdown_is_safe_without_source(qapp):
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+def test_prefill_stream_maps_bh1_bh2_to_n_e() -> None:
+    """El histórico FDSN puede venir como BH1/BH2, no solo BHN/BHE."""
+
+    import numpy as np
+    from obspy import Stream, Trace, UTCDateTime
+
+    start = UTCDateTime(2026, 1, 1, 0, 0, 0)
+    stream = Stream()
+    for cha, offset in (("BHZ", 0.0), ("BH1", 10.0), ("BH2", 20.0)):
+        tr = Trace(data=np.arange(40, dtype=np.float32) + offset)
+        tr.stats.network = "IU"
+        tr.stats.station = "PAB"
+        tr.stats.location = "00"
+        tr.stats.channel = cha
+        tr.stats.sampling_rate = 40.0
+        tr.stats.starttime = start
+        stream += tr
+
+    data = WorkbenchController._stream_to_arrays(stream, 100)
+    assert data is not None
+    z, n, e, _end = data
+    assert z.size == n.size == e.size
+    assert np.count_nonzero(n) > 0
+    assert np.count_nonzero(e) > 0
+    assert float(n.max()) > float(z.max())  # BH1 (offset 10) → N

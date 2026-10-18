@@ -188,11 +188,16 @@ class RingBuffer:
     # ------------------------------------------------------------------
     # Lectura
     # ------------------------------------------------------------------
-    def read_window(self, seconds: float) -> BufferSnapshot:
-        """Devuelve la ventana más reciente de ``seconds`` segundos.
+    def read_window(
+        self, seconds: float, end_offset_s: float = 0.0
+    ) -> BufferSnapshot:
+        """Devuelve una ventana de ``seconds`` segundos.
 
-        Si todavía no hay suficientes datos, la ventana se rellena
-        con ceros a la izquierda para mantener una longitud constante.
+        ``end_offset_s`` permite terminar la ventana antes de la muestra
+        más reciente (0 = ventana en vivo). Es la base del *playout*
+        suave: el controlador avanza un cursor de tiempo a 30 Hz y lee
+        siempre la ventana que termina en ese cursor, aunque el último
+        paquete SeedLink haya llegado varios segundos antes.
         """
 
         if seconds <= 0:
@@ -202,13 +207,18 @@ class RingBuffer:
         if n_samples > self._capacity:
             n_samples = self._capacity
 
-        # Eje temporal: 0 = muestra más reciente, valores negativos hacia el pasado.
+        offset = max(0, int(round(float(end_offset_s) * self._sample_rate)))
+        # Leemos n_samples + offset y descartamos las ``offset`` más
+        # recientes; así la ventana termina exactamente en el cursor.
+        n_total = min(n_samples + offset, self._capacity)
+
+        # Eje temporal relativo al final de la ventana (0 = cursor).
         times = np.arange(-n_samples + 1, 1, dtype=np.float32) / self._sample_rate
 
         with self._lock:
             # Posición justo después de la última muestra escrita
             write_pos = self._total_written % self._capacity
-            valid = min(self._total_written, n_samples)
+            valid = min(self._total_written, n_total)
 
             # Si aún no hay datos, devolver ceros
             if valid == 0:
@@ -220,26 +230,32 @@ class RingBuffer:
                 return BufferSnapshot(
                     times=times,
                     samples=samples,
-                    latest_timestamp_unix=self._latest_timestamp_unix,
+                    latest_timestamp_unix=(
+                        self._latest_timestamp_unix - offset / self._sample_rate
+                    ),
                 )
 
             # Posición de inicio de la lectura (envuelta)
             start = (write_pos - valid) % self._capacity
 
             # Extraer cada canal contiguo (gestionando envoltura)
-            out = np.zeros((len(CHANNELS), n_samples), dtype=np.float32)
+            out = np.zeros((len(CHANNELS), n_total), dtype=np.float32)
             if start + valid <= self._capacity:
                 # De una pieza
-                out[:, n_samples - valid :] = self._data[:, start : start + valid]
+                out[:, n_total - valid :] = self._data[:, start : start + valid]
             else:
                 # Dos piezas (cola del array + cabeza)
                 first = self._capacity - start
-                out[:, n_samples - valid : n_samples - valid + first] = self._data[
+                out[:, n_total - valid : n_total - valid + first] = self._data[
                     :, start:
                 ]
-                out[:, n_samples - valid + first :] = self._data[: , : valid - first]
+                out[:, n_total - valid + first :] = self._data[:, : valid - first]
 
             latest_ts = self._latest_timestamp_unix
+
+        # Descartar las muestras más nuevas (más cercanas a ``latest``)
+        # para que la ventana termine en ``latest - offset``.
+        out = out[:, :n_samples]
 
         return BufferSnapshot(
             times=times,
@@ -248,7 +264,70 @@ class RingBuffer:
                 "N": out[1],
                 "E": out[2],
             },
-            latest_timestamp_unix=latest_ts,
+            latest_timestamp_unix=latest_ts - offset / self._sample_rate,
+        )
+
+    def prepend_history(
+        self,
+        end_timestamp_unix: float,
+        z: np.ndarray,
+        n: np.ndarray | None = None,
+        e: np.ndarray | None = None,
+    ) -> None:
+        """Coloca un bloque histórico ANTES de los datos actuales.
+
+        Se usa una sola vez al conectar: el primer paquete SeedLink llega
+        ~13 s después de la conexión, así que pedimos 60 s de histórico a
+        FDSN dataselect para que el cursor de reproducción tenga datos
+        detrás desde el primer frame. El bloque debe terminar antes de la
+        muestra más antigua actual; el controlador recorta si hace falta.
+        """
+
+        z_arr = np.asarray(z, dtype=np.float32).reshape(-1)
+        if z_arr.size == 0:
+            return
+        n_arr = (
+            np.asarray(n, dtype=np.float32).reshape(-1)
+            if n is not None
+            else np.zeros(z_arr.size, dtype=np.float32)
+        )
+        e_arr = (
+            np.asarray(e, dtype=np.float32).reshape(-1)
+            if e is not None
+            else np.zeros(z_arr.size, dtype=np.float32)
+        )
+        if n_arr.size != z_arr.size or e_arr.size != z_arr.size:
+            raise ValueError(
+                "Los tres canales deben tener el mismo número de muestras"
+            )
+
+        with self._lock:
+            old_n = min(self._total_written, self._capacity)
+            old = self._chronological_locked(old_n)
+            hist = np.vstack([z_arr, n_arr, e_arr])
+            combined = np.concatenate([hist, old], axis=1)
+            if combined.shape[1] > self._capacity:
+                combined = combined[:, -self._capacity :]
+            self._data.fill(0)
+            self._data[:, : combined.shape[1]] = combined
+            # ``total_written`` pasa a representar el contenido actual;
+            # la siguiente escritura en vivo empieza justo después.
+            self._total_written = int(combined.shape[1])
+            # ``_latest_timestamp_unix`` se mantiene: el bloque histórico
+            # es más antiguo y no debe mover el borde derecho.
+
+    def _chronological_locked(self, n: int) -> np.ndarray:
+        """Copia las últimas ``n`` muestras en orden cronológico (lock)."""
+
+        if n <= 0:
+            return np.zeros((len(CHANNELS), 0), dtype=np.float32)
+        write_pos = self._total_written % self._capacity
+        start = (write_pos - n) % self._capacity
+        if start + n <= self._capacity:
+            return self._data[:, start : start + n].copy()
+        first = self._capacity - start
+        return np.concatenate(
+            [self._data[:, start:], self._data[:, : n - first]], axis=1
         )
 
     # ------------------------------------------------------------------

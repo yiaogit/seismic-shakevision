@@ -759,5 +759,6 @@
   "report.live.cap.timeline": "Événements des dernières 24 h ; taille et couleur du point varient avec la magnitude.",
   "activity.quake_viewed_generic": "A consulté un séisme",
   "helicorder.hint": "Collecte des données — le journal 24 h se remplit en temps réel.",
-  "replay.empty_hint": "Choisissez une station et une fenêtre, puis cliquez sur Charger."
+  "replay.empty_hint": "Choisissez une station et une fenêtre, puis cliquez sur Charger.",
+  "status.smooth_buffer": "Tampon d’affichage fluide +{delay} s (forme d’onde retardée)"
 }

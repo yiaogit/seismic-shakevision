@@ -759,5 +759,6 @@
   "report.live.cap.timeline": "过去 24 小时的事件;点的大小与颜色随震级变化。",
   "activity.quake_viewed_generic": "查看了一次地震",
   "helicorder.hint": "正在采集数据——24 小时记录会实时填充。",
-  "replay.empty_hint": "选择台站与时间窗，然后点击「加载」。"
+  "replay.empty_hint": "选择台站与时间窗，然后点击「加载」。",
+  "status.smooth_buffer": "平滑显示缓冲 +{delay} 秒（波形稍延迟）"
 }

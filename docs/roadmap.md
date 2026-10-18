@@ -54,6 +54,9 @@
 - 全 UI 巡检：逐页截图主窗四页/弹窗/工作台各子页，修复空态轴、顶栏
   版本 chip、Mine 空态、Settings Reset、活动日志占位符、
   Helicorder 波段、分析日期等显示问题。
+- Live 波形平滑：预填充 60 s 历史 + 12 s playout 缓冲，IU.PAB 实测
+  29.8 Hz、97% 帧有时间推进；检测/MMI 仍用最新数据。见
+  `docs/smooth-live-waveform.md`。
 - 地图 → 最近真实台站 IU.PAB（San Pablo，距马德里 111.5 km）：
   地图 Devices → 台站弹窗 → Monitor live → 工作台 Connect。
   网络握手 257 ms / TCP 105 ms / 首包 2.55 s；应用 “Connected” 约 13.1 s

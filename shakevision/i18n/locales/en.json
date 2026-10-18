@@ -759,5 +759,6 @@
   "report.live.cap.timeline": "Events over the last 24 h; dot size and color scale with magnitude.",
   "activity.quake_viewed_generic": "Viewed an earthquake",
   "helicorder.hint": "Collecting data — the 24 h diary fills in real time.",
-  "replay.empty_hint": "Choose a station and time window, then click Load."
+  "replay.empty_hint": "Choose a station and time window, then click Load.",
+  "status.smooth_buffer": "Smooth display buffer +{delay} s (waveform delayed)"
 }

@@ -97,6 +97,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   “Viewed an earthquake” / “station —”。
 
 ### Added
+- **Live waveform — 30 Hz smooth playout.** Medido: el timer ya corría a
+  30.8 Hz y cada frame tardaba 0.24 ms, pero IRIS entrega ~13 s de datos por
+  paquete y el oscilograma solo cambiaba 2 veces en 30 s. Ahora, tras el
+  primer paquete, se piden 60 s de histórico a FDSN dataselect y se insertan
+  **antes** del búfer vivo; un cursor monotónico lee 12 s por detrás y avanza
+  con el reloj real, de modo que la traza se mueve a ~30 Hz. Detección
+  STA/LTA y chip MMI siguen usando el dato más reciente (sin retardo).
+  Medición con IU.PAB: **29.8 Hz**, 655/676 frames con avance de tiempo
+  (antes 2/641), 20 358 píxeles de onda distintos entre dos frames a 200 ms.
+  Nuevos `RingBuffer.read_window(end_offset_s=…)` / `prepend_history()`;
+  `BH1/BH2` del dataselect se mapean a N/E. Trade-off documentado en
+  `docs/smooth-live-waveform.md`.
+
 - **Panel de datos — estado vacío de Análisis.** Al entrar en “Analizar” sin
   catálogo histórico (o si `/count` supera 20 000) ya no se muestran los KPIs
   del feed en vivo (“EARTHQUAKES / 24 H”) ni sus gráficas: contenido y cabecera
