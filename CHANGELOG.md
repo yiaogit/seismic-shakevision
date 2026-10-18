@@ -68,9 +68,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   a los percentiles del dato y el eje X UTC ya no muestra `(x1e+09)`.
 - **Replay — layout y sugerencia tardía.** Con espectrograma + PSD el splitter
   aplastaba las trazas (la inferior desaparecía); ahora cada traza tiene altura
-  mínima, el splitter no colapsa bloques y los paneles usan mínimos de 110 px.
-  Si la ventana P/S sugerida termina de calcularse **después** de la descarga,
-  ya no cambia el formulario ni pisa el estado “P/S overlayed” con “click Load”.
+  mínima, el splitter no colapsa bloques y los paneles usan mínimos propios
+  (espectrograma 150 px, PSD 100 px). El formulario usa 4 px de separación para
+  devolver altura a las trazas. Si la ventana P/S sugerida termina de calcularse
+  **después** de la descarga, ya no cambia el formulario ni pisa el estado
+  “P/S overlayed” con “click Load”.
 - **Lint reproducible.** `[tool.ruff.lint] select = ["E4", "E7", "E9", "F"]`
   fija el conjunto histórico: ruff 0.17.1 reportaba 576 hallazgos con su
   selección por defecto ampliada, mientras 0.12.7 daba el árbol limpio.
@@ -82,10 +84,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   se ocultan y aparece una guía “elige región, ventana y magnitud y pulsa
   Buscar”. Al volver a “En vivo” se restaura; al reentrar en Análisis sin nueva
   consulta se vuelve a mostrar el estado vacío (no datos viejos).
+- **Espectrograma — eje de frecuencia logarítmico y ventana FFT ajustable.**
+  Nuevo botón **Log freq** (re-muestrea la matriz a filas log-espaciadas; ticks
+  1/2/5×10ⁿ) y selector de ventana **0.5 / 1 / 2 / 4 s** en la cabecera del
+  panel, tanto en vivo como en Replay. `SpectrumComputer` acepta
+  `window_seconds` (8–8192 muestras, 75 % solape) y expone
+  `frequency_resolution_hz`; el Replay recrea el espectrograma al cambiar la
+  ventana y conserva los marcadores P/S. En paneles compactos el colorbar usa
+  4 etiquetas y fuente 8 pt para no solaparse.
+- **Chip MMI/PGV en la cabecera global.** La tarjeta grande del Workbench se
+  sustituye por una píldora compacta en `AppHeader` con color del nivel, MMI y
+  PGV; está visible en **Standard y Professional**, se oculta al desconectar y
+  al pulsarla abre el Workbench en vivo. La tarjeta antigua queda como objeto
+  oculto por compatibilidad, sin ocupar layout.
+- **UX P2 — alcance explícito de Datos vs Eventos.** Cada pestaña incorpora
+  una barra de alcance (`ScopeBar`): Datos = gráficas/métricas agregadas por
+  región y ventana; Eventos = revisión individual + estación cercana +
+  Workbench. Incluyen enlaces cruzados “Review events →” / “Statistics view →”.
 - Tests: `tests/test_event_list_panel.py` (recorte + aviso tras retraducir),
   caché no escribible en `tests/test_cache.py`, independencia de amplitud del
-  espectrograma en `tests/test_spectrum.py`, y alineación/huecos/solapes del
-  agregador SeedLink en `tests/test_seedlink.py`.
+  espectrograma y ventana/rebins logarítmicos en `tests/test_spectrum.py`, y
+  alineación/huecos/solapes del agregador SeedLink en `tests/test_seedlink.py`.
 
 ## [0.8.3.0] - 2026-06-28
 

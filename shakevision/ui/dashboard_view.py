@@ -44,6 +44,7 @@ from shakevision.i18n import LocaleService, t
 from shakevision.services.data_models import Earthquake, ShakeStation
 from shakevision.ui.combo_utils import fit_combo
 from shakevision.ui.loading_overlay import LoadingOverlay
+from shakevision.ui.scope_bar import ScopeBar
 from shakevision.ui.signal_safety import subscribe
 from shakevision.ui.theme import (
     COLOR_PANEL,
@@ -770,6 +771,8 @@ class DashboardPanel(QFrame):
     # Reenvío de la selección del usuario al main_window
     period_changed = Signal(str)
     pager_region_changed = Signal(str)
+    #: El usuario pulsó "revisar eventos" en la barra de alcance.
+    events_requested = Signal()
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -803,6 +806,16 @@ class DashboardPanel(QFrame):
         self._status_key: Optional[str] = None
         self._status_kwargs: dict = {}
         self._status_raw: str = ""
+
+        # Barra de alcance: deja claro que Datos = visión agregada.
+        self._scope_bar = ScopeBar(
+            "dashboard.scope_title",
+            "dashboard.scope_hint",
+            "dashboard.scope_link",
+            self,
+        )
+        self._scope_bar.link_clicked.connect(self.events_requested.emit)
+        layout.addWidget(self._scope_bar)
 
         # Barra de análisis (región + ventana + magnitud mín) ANTES de la web.
         layout.addWidget(self._build_analysis_bar())

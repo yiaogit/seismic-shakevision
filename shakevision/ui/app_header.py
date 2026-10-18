@@ -41,6 +41,7 @@ from PySide6.QtWidgets import (
 from shakevision.i18n import LocaleService, t
 from shakevision.ui.animations import clear_opacity_effect, make_pulse_opacity
 from shakevision.ui.icons import clear_icon_cache, get_icon, logo_pixmap
+from shakevision.ui.intensity_chip import IntensityChip
 from shakevision.ui.layer_mode_manager import LayerModeManager
 from shakevision.ui.signal_safety import subscribe
 # Las 5 constantes COLOR_ACCENT / COLOR_PANEL / COLOR_PANEL_BORDER /
@@ -121,6 +122,8 @@ class AppHeader(QFrame):
     theme_toggle_clicked = Signal()
     pro_clicked = Signal()
     profile_clicked = Signal()
+    #: El chip MMI de la cabecera se pulsó (abrir Workbench en vivo).
+    intensity_clicked = Signal()
 
     HEIGHT_PX: int = 56
 
@@ -156,6 +159,11 @@ class AppHeader(QFrame):
         # Empuja todo lo siguiente al borde derecho
         layout.addStretch(1)
 
+        # ---------- Chip MMI/PGV (compartido Standard/Professional) ----------
+        self.intensity_chip = IntensityChip(self)
+        self.intensity_chip.clicked.connect(self.intensity_clicked.emit)
+        layout.addWidget(self.intensity_chip)
+
         # ---------- Sección derecha: acciones ----------
         layout.addLayout(self._build_actions_section())
 
@@ -180,6 +188,11 @@ class AppHeader(QFrame):
         """Actualiza el texto de la estación seleccionada."""
 
         self._station_label.setText(label or "—")
+
+    def set_intensity(self, snapshot) -> None:
+        """Actualiza (o limpia con ``None``) el chip MMI de la cabecera."""
+
+        self.intensity_chip.set_snapshot(snapshot)
 
     def set_connection_state(self, state: ConnectionState) -> None:
         """Cambia el LED y el texto del estado de conexión."""

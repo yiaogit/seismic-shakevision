@@ -224,6 +224,7 @@ def _build_qss(p: dict[str, str]) -> str:
     /* ── TÍTULOS / TEXTO ────────────────────────────────── */
     QLabel#SectionTitle {{
         color: {p["text_secondary"]};
+        background-color: transparent;
         font-weight: 600;
         font-size: {FONT_SIZE_LABEL}px;
         letter-spacing: 0.6px;
@@ -244,6 +245,7 @@ def _build_qss(p: dict[str, str]) -> str:
        no tenía regla → caía al estilo por defecto. */
     QLabel#Caption {{
         color: {p["text_muted"]};
+        background-color: transparent;
         font-size: {FONT_SIZE_LABEL}px;
     }}
 
@@ -397,6 +399,12 @@ def _build_qss(p: dict[str, str]) -> str:
         background-color: {p["accent"]};
         color: white;
         border-color: {p["accent"]};
+    }}
+    QPushButton#ChipButton:checked {{
+        background-color: {p["accent"]};
+        color: white;
+        border-color: {p["accent"]};
+        font-weight: 600;
     }}
     QPushButton#ChipButton:pressed {{
         background-color: {p["accent_glow"]};

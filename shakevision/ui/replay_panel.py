@@ -196,8 +196,11 @@ class ReplayPanel(QWidget):
     # ------------------------------------------------------------------
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
-        root.setContentsMargins(8, 8, 8, 8)
-        root.setSpacing(8)
+        # v0.9: densidad vertical. El formulario tiene 6 filas; con 8 px de
+        # separación el splitter de 800 px dejaba el waveform en 218 px y las
+        # etiquetas de canal se solapaban. 4 px recupera ~20 px para las trazas.
+        root.setContentsMargins(6, 6, 6, 6)
+        root.setSpacing(4)
 
         # ─── Banner del evento en revisión (oculto si no hay evento) ───
         self._event_banner = QLabel("")
@@ -457,6 +460,8 @@ class ReplayPanel(QWidget):
         # (igual que el oscilograma), no segundos relativos.
         self.spectrogram_panel = SpectrogramPanel(
             parent=splitter, absolute_time=True)
+        self.spectrogram_panel.fft_window_changed.connect(
+            self._on_fft_window_changed)
         self.spectrum_panel = SpectrumPanel(parent=splitter)
         splitter.addWidget(self.waveform_panel)
         splitter.addWidget(self.spectrogram_panel)
@@ -1160,12 +1165,21 @@ class ReplayPanel(QWidget):
         try:
             zc = next((a for a in (zf, nf, ef) if a is not None and a.size), None)
             if zc is not None:
-                spec = SpectrumComputer(sample_rate_hz=sr_int).compute(zc)
+                spec = SpectrumComputer(
+                    sample_rate_hz=sr_int,
+                    window_seconds=self.spectrogram_panel.fft_window_seconds(),
+                ).compute(zc)
                 if spec is not None:
                     self.spectrogram_panel.update_from_spectrum(
                         spec, t0_abs=start_ts)
         except Exception:  # noqa: BLE001
             logger.debug("Replay: espectrograma estático omitido", exc_info=True)
+
+    def _on_fft_window_changed(self, _seconds: float) -> None:
+        """Re-pinta el espectrograma de Replay con la nueva ventana FFT."""
+
+        if self._loaded_arrays is not None:
+            self._render()
 
     def _on_replay_filter_changed(self, *_a) -> None:
         """Filtro PROPIO de Replay (v0.8.0): reconstruye ``_filt`` desde sus

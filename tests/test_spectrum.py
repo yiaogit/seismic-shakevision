@@ -9,6 +9,7 @@ provocan errores.
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from shakevision.processing.spectrum import (
     DB_FLOOR,
@@ -90,3 +91,39 @@ def test_db_is_independent_of_amplitude_units() -> None:
     a = comp.compute(_sine(5.0))
     b = comp.compute(_sine(5.0) * 1e-7)
     assert np.allclose(a.power_db, b.power_db, atol=1e-4)
+
+
+def test_fft_window_is_configurable() -> None:
+    """La ventana FFT en segundos controla nperseg y la resolución."""
+
+    comp = SpectrumComputer(SAMPLE_RATE, window_seconds=2.0)
+    assert comp.window_seconds == pytest.approx(2.0)
+    assert comp.frequency_resolution_hz == pytest.approx(0.5)
+
+    out = comp.compute(_sine(5.0))
+    assert out.freqs[1] == pytest.approx(0.5)
+
+    comp.set_window_seconds(0.5)
+    assert comp.window_seconds == pytest.approx(0.5)
+    out2 = comp.compute(_sine(5.0))
+    assert out2.freqs[1] == pytest.approx(2.0)
+
+
+def test_update_sample_rate_preserves_explicit_window() -> None:
+    comp = SpectrumComputer(SAMPLE_RATE, window_seconds=2.0)
+    comp.update_sample_rate(50)
+    assert comp.window_seconds == pytest.approx(2.0)
+
+
+def test_rebin_log_frequency_keeps_peak_and_is_monotonic() -> None:
+    from shakevision.processing.spectrum import rebin_log_frequency
+
+    comp = SpectrumComputer(SAMPLE_RATE, window_seconds=1.0)
+    out = comp.compute(_sine(7.0, duration_s=4.0))
+    log_f, log_p = rebin_log_frequency(out.freqs, out.power_db, n_bins=128)
+
+    assert log_f.size == 128
+    assert log_p.shape == (128, out.times.size)
+    assert np.all(np.diff(log_f) > 0)
+    peak = float(log_f[np.argmax(log_p.mean(axis=1))])
+    assert abs(peak - 7.0) < 1.0

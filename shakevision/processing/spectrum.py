@@ -45,14 +45,42 @@ class SpectrumResult:
 class SpectrumComputer:
     """Calcula espectrogramas Hann sobre la ventana visible."""
 
-    def __init__(self, sample_rate_hz: int) -> None:
+    def __init__(self, sample_rate_hz: int,
+                 window_seconds: float | None = None) -> None:
+        """``window_seconds=None`` conserva el tamaño histórico
+        (``max(64, fs)``); un valor explícito fija la ventana FFT en segundos
+        (0.1–10 s, acotado a 8–8192 muestras)."""
+
         if sample_rate_hz <= 0:
             raise ValueError("sample_rate_hz debe ser positivo")
         self._sample_rate = int(sample_rate_hz)
+        self._window_seconds = (
+            None if window_seconds is None
+            else max(0.1, min(float(window_seconds), 10.0))
+        )
+        self._rebuild_window()
 
-        # Parámetros del análisis: ventana de 1 s, 75 % de solape
-        self._nperseg = max(64, self._sample_rate)        # 1 s
-        self._noverlap = int(self._nperseg * 0.75)        # 75 %
+    # ------------------------------------------------------------------
+    # Configuración
+    # ------------------------------------------------------------------
+    def _rebuild_window(self) -> None:
+        if self._window_seconds is None:
+            nperseg = max(64, self._sample_rate)
+        else:
+            nperseg = int(round(self._sample_rate * self._window_seconds))
+            nperseg = max(8, min(nperseg, 8192))
+        self._nperseg = int(nperseg)
+        self._noverlap = int(self._nperseg * 0.75)   # 75 % de solape
+
+    @property
+    def window_seconds(self) -> float:
+        """Duración efectiva de la ventana FFT, en segundos."""
+
+        return self._nperseg / float(self._sample_rate)
+
+    @property
+    def frequency_resolution_hz(self) -> float:
+        return self._sample_rate / float(self._nperseg)
 
     # ------------------------------------------------------------------
     # API pública
@@ -117,5 +145,58 @@ class SpectrumComputer:
         if sample_rate_hz <= 0:
             raise ValueError("sample_rate_hz debe ser positivo")
         self._sample_rate = int(sample_rate_hz)
-        self._nperseg = max(64, self._sample_rate)
-        self._noverlap = int(self._nperseg * 0.75)
+        self._rebuild_window()
+
+    def set_window_seconds(self, window_seconds: float | None) -> None:
+        """Fija (o vuelve a ``None`` = automático) la ventana FFT."""
+
+        self._window_seconds = (
+            None if window_seconds is None
+            else max(0.1, min(float(window_seconds), 10.0))
+        )
+        self._rebuild_window()
+
+
+def rebin_log_frequency(
+    freqs: np.ndarray,
+    power_db: np.ndarray,
+    *,
+    n_bins: int = 256,
+    f_min: float | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Remuestrea un espectrograma a frecuencia logarítmica.
+
+    ``ImageItem`` pinta píxeles equiespaciados. Para un eje logarítmico hay
+    que interpolar las filas de potencia a frecuencias log-espaciadas; el
+    widget pinta después en coordenadas ``log10(f)``.
+
+    Devuelve ``(log_freqs, log_power_db)`` con la misma dimensión temporal.
+    Si no hay frecuencias positivas o la forma no cuadra, devuelve arrays
+    vacíos (el llamador mantiene la vista lineal).
+    """
+
+    f = np.asarray(freqs, dtype=np.float64).reshape(-1)
+    p = np.asarray(power_db, dtype=np.float64)
+    if f.size < 2 or p.ndim != 2 or p.shape[0] != f.size:
+        return np.zeros(0, dtype=np.float32), np.zeros((0, 0), dtype=np.float32)
+
+    positive = f[f > 0]
+    if positive.size == 0:
+        return np.zeros(0, dtype=np.float32), np.zeros((0, p.shape[1]), dtype=np.float32)
+
+    lo = float(f_min) if f_min is not None else float(positive[0])
+    hi = float(f[-1])
+    if not (lo > 0 and hi > lo):
+        return np.zeros(0, dtype=np.float32), np.zeros((0, p.shape[1]), dtype=np.float32)
+
+    target = np.geomspace(lo, hi, max(8, int(n_bins)))
+
+    # Interpolación lineal por filas, vectorizada sobre el tiempo.
+    idx = np.searchsorted(f, target, side="right") - 1
+    idx = np.clip(idx, 0, f.size - 2)
+    f0 = f[idx]
+    f1 = f[idx + 1]
+    frac = np.clip((target - f0) / np.maximum(f1 - f0, 1e-12), 0.0, 1.0)
+    out = (p[idx] * (1.0 - frac[:, None])
+           + p[idx + 1] * frac[:, None])
+    return target.astype(np.float32), out.astype(np.float32)

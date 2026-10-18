@@ -74,6 +74,8 @@ class WorkbenchController(QObject):
     latency_text = Signal(str)
     #: Etiqueta de estación para el header (``"RED.ESTACION"``).
     station_changed = Signal(str)
+    #: Snapshot de intensidad para el chip de la cabecera (``None`` = limpiar).
+    intensity_updated = Signal(object)
     #: Estado de conexión: (texto, object_name QSS). MainWindow lo traduce
     #: en label inferior + LED del header (ver ``_set_connection_status``).
     connection_status_changed = Signal(str, str)
@@ -111,10 +113,19 @@ class WorkbenchController(QObject):
             filt=config.filt,
         )
 
-        # Calculador de espectrograma para el panel inferior derecho
+        # Calculador de espectrograma para el panel inferior derecho.
+        # Los stubs de test pueden no exponer el panel: en ese caso se usa el
+        # tamaño histórico (None) y no se conecta la señal.
+        _spec_panel = getattr(self._view, "spectrogram_panel", None)
+        _window = None
+        if _spec_panel is not None and hasattr(_spec_panel, "fft_window_seconds"):
+            _window = _spec_panel.fft_window_seconds()
         self._spectrum_computer = SpectrumComputer(
-            sample_rate_hz=config.stream.sample_rate_hz
+            sample_rate_hz=config.stream.sample_rate_hz,
+            window_seconds=_window,
         )
+        if _spec_panel is not None and hasattr(_spec_panel, "fft_window_changed"):
+            _spec_panel.fft_window_changed.connect(self._on_fft_window_changed)
 
         # Suavizador del PGV para la tarjeta de intensidad (estilo VU meter)
         self._intensity_smoother = IntensitySmoother(
@@ -192,6 +203,15 @@ class WorkbenchController(QObject):
         """``True`` si hay una fuente de datos activa."""
 
         return self._source is not None
+
+    def _on_fft_window_changed(self, seconds: float) -> None:
+        """Recrea el espectrograma cuando el usuario cambia la ventana FFT."""
+
+        self._spectrum_computer = SpectrumComputer(
+            sample_rate_hz=self._config.stream.sample_rate_hz,
+            window_seconds=float(seconds),
+        )
+        self._spectrum_frame_skip = 0
 
     def shutdown(self) -> None:
         """Detiene temporizadores, audio, alerta y la fuente activa.
@@ -325,6 +345,7 @@ class WorkbenchController(QObject):
         self._view.particle_panel.reset()
         self._view.helicorder_panel.reset()
         self._view.intensity_card.reset()
+        self.intensity_updated.emit(None)
         self._intensity_smoother.reset()
         self._stop_alert_blink()
         self._detector.reset()
@@ -458,6 +479,9 @@ class WorkbenchController(QObject):
         # PASO 1: quitar la referencia de inmediato (segundo Detener = no-op)
         src = self._source
         self._source = None
+        # El chip de intensidad no debe quedar con el último valor: al parar
+        # (o reconectar a otra estación) se oculta hasta el primer dato nuevo.
+        self.intensity_updated.emit(None)
         # Ya no hay fuente activa: añadir estaciones vuelve a auto-seleccionar.
         self._view.control_panel.set_source_active(False)
 
@@ -573,6 +597,7 @@ class WorkbenchController(QObject):
             smoother=self._intensity_smoother,
         )
         self._view.intensity_card.update_from_snapshot(intensity_snap)
+        self.intensity_updated.emit(intensity_snap)
 
         # 5. Detección STA/LTA y, si dispara, grabación + alerta.
         result = self._detector.process(processed)

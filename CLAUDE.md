@@ -17,8 +17,8 @@ charts + traditional waveform / helicorder / spectrogram panels.
 
 The audience is two-tier:
 
-* **Standard mode** — non-experts: 3D globe with live quakes, MMI
-  intensity card, KPI dashboard, exportable HTML/PDF report.
+* **Standard mode** — non-experts: 3D globe with live quakes, MMI/PGV chip in the
+  header, KPI dashboard, exportable HTML/PDF report.
 * **Professional mode (Workbench)** — researchers / Shake hobbyists:
   real-time waveform from a chosen station (SeedLink) or replay from
   IRIS dataselect, STA/LTA event trigger, MiniSEED recording, FFT
@@ -41,6 +41,8 @@ License: MIT.
 > 2. **本机冒烟验证 + 修复**（已完成，结果见 §9）：分析页空状态、SeedLink
 >    实时链路、工作台/回放，以及“地图→台站→工作台”“历史事件回顾”“收藏→
 >    工作台”三条端到端流程；修复见 `CHANGELOG.md` 的 `[Unreleased]`。
+> 3. **第三轮功能**（已完成）：频谱图对数轴 / FFT 窗长、顶栏 MMI 芯片、
+>    Datos vs Eventos 职责说明与互跳（ux-review P2）。
 
 | Item | Value |
 |---|---|
@@ -51,7 +53,7 @@ License: MIT.
 | Branch | `main` |
 | Python | 3.10 / 3.11 / 3.12 (CI matrix); 3.14 runs locally but is **off-matrix** |
 | Qt binding | PySide6 |
-| i18n keys | **739** per locale (en/es/fr/zh), aligned |
+| i18n keys | **752** per locale (en/es/fr/zh), aligned |
 
 ### Known issues / unfinished
 
@@ -66,12 +68,12 @@ License: MIT.
    `tests/test_i18n.py` and `tests/test_profile_view.py` assert them as
    a locale contract. The dead-key scan must therefore include `tests/`,
    not just `shakevision/` + web JS. All 4 locales stay aligned
-   (739 keys, same placeholders).
+   (752 keys, same placeholders).
 4. **`ui/sidebar_nav.py` has no runtime consumer** — the shell uses a
    `QTabWidget` (main_window.py); only `tests/test_sidebar_nav.py`
    imports the sidebar. Either re-wire it or delete it in a cleanup.
 5. **Python 3.14 is off the CI matrix.** It installs and runs locally
-   (577/577 tests green, §9), but 3.10–3.12 is the supported
+   (580/580 tests green, §9), but 3.10–3.12 is the supported
    configuration — reproduce any 3.14-only bug on 3.12 before chasing it
    (`brew install python@3.12` if needed).
 6. **Docs drift**: CLAUDE.md and `docs/roadmap.md` had lagged behind
@@ -97,7 +99,8 @@ ShakeVision/
 │  │  ├─ workbench_controller.py ← Owns the realtime pipeline (source, buffer,
 │  │  │                             detector, timers, audio) and drives ProWindow;
 │  │  │                             MainWindow only wires 6 control signals
-│  │  ├─ app_header.py           ← Top bar: theme cycle, layer toggle, Pro, gear
+│  │  ├─ app_header.py           ← Top bar: theme cycle, layer toggle, Pro, gear,
+│  │  │                             MMI/PGV chip (Standard + Professional)
 │  │  ├─ sidebar_nav.py          ← Legacy vertical nav — runtime-unused, only
 │  │  │                             tests/test_sidebar_nav.py imports it
 │  │  ├─ globe_view.py           ← QWebEngineView wrapping ECharts-GL globe
@@ -112,11 +115,14 @@ ShakeVision/
 │  │  ├─ control_panel.py        ← Workbench control surface (station/filter/audio)
 │  │  ├─ waveform_widget.py      ← Scrolling 3-channel pyqtgraph trace
 │  │  ├─ helicorder_widget.py    ← Drum recorder (24h)
-│  │  ├─ spectrogram_widget.py   ← Sliding-window FFT image
+│  │  ├─ spectrogram_widget.py   ← Sliding-window FFT image — linear/log
+│  │  │                             frequency axis + FFT window 0.5–4 s
 │  │  ├─ particle_motion_widget.py ← N-E plane particle trajectory + polarization azimuth (stabilized redraw, v0.8.0)
 │  │  ├─ spectrum_panel.py       ← PSD power-spectrum panel (power dB vs freq, v0.8.0)
-│  │  ├─ intensity_card.py       ← MMI translation card (lay user)
-│  │  ├─ replay_panel.py         ← Historical review: static waveform browser (0.8.0 rewrite — zoom/pan + UTC axis + band select + deconv VEL/DISP/ACC + ZNE→ZRT rotate + TauP P/S + dB spectrogram + PSD + spec/PSD toggles + PNG/CSV/QuakeML export + reopen saved catalog review; ReplaySource no longer used by UI)
+│  │  ├─ intensity_card.py       ← Legacy MMI card (hidden; superseded by chip)
+│  │  ├─ intensity_chip.py       ← Header MMI/PGV pill (Standard + Professional)
+│  │  ├─ scope_bar.py            ← "Datos vs Eventos" scope bar + cross-link
+│  │  ├─ replay_panel.py         ← Historical review: static waveform browser (0.8.0 rewrite — zoom/pan + UTC axis + band select + deconv VEL/DISP/ACC + ZNE→ZRT rotate + TauP P/S + dB spectrogram (FFT window + log axis) + PSD + spec/PSD toggles + PNG/CSV/QuakeML export + reopen saved catalog review; ReplaySource no longer used by UI)
 │  │  ├─ event_center_panel.py   ← TOP-LEVEL "Events" tab: quake table + nearby stations (Δ°/km/category) + ☆favorite (v0.8.0)
 │  │  ├─ event_list_panel.py     ← Sortable quake-table component reused inside event center (v0.8.0)
 │  │  ├─ my_data_panel.py        ← TOP-LEVEL "我的/My collection" tab: favorites (quakes/stations) + records (recordings/catalog), reopen review, open-folder (v0.8.0; replaces local_data_panel)
@@ -202,7 +208,7 @@ ShakeVision/
 │  ├─ i18n/                      ← Locale system
 │  │  ├─ __init__.py             ← Public API: t(), LocaleService
 │  │  ├─ service.py              ← Singleton + language_changed signal + t()
-│  │  └─ locales/{en,es,fr,zh}.json   (739 flat dotted keys each)
+│  │  └─ locales/{en,es,fr,zh}.json   (752 flat dotted keys each)
 │  │
 │  ├─ utils/                     ← Pure helpers (no Qt)
 │  │  ├─ logging.py              ← Centralized logger
@@ -304,6 +310,22 @@ ShakeVision/
 - Live waveform Y auto-ranges (IRIS counts are not ±2); X is driven by Z only.
 - Spectrogram dB is peak-normalised (unit independent), so counts and m/s
   render the same.
+
+### Spectrogram / intensity / scope
+- `SpectrogramPanel` owns the FFT-window combo (0.5/1/2/4 s) and the **Log
+  freq** toggle. Log mode re-bins the matrix with the pure
+  `processing.spectrum.rebin_log_frequency()` and draws in `log10(f)`
+  coordinates (`_FreqAxisItem`); the live controller and Replay recreate their
+  `SpectrumComputer` on `fft_window_changed`.
+- The Replay panel is height-constrained: keep the form at 4 px spacing, the
+  spectrogram at 150 px min and the PSD at 100 px; the colorbar shows only 4
+  ticks and the frequency label is just `Hz` to fit.
+- MMI lives in the **`AppHeader` chip** (`ui/intensity_chip.py`), fed by
+  `WorkbenchController.intensity_updated`. It is shared by Standard/Pro and
+  opens the live Workbench on click; the old `IntensityCard` is hidden.
+- `ScopeBar` states the division of labour: **Data = aggregate**, **Events =
+  per-event review**; its link emits `events_requested` / `data_requested`,
+  wired in `MainWindow` to switch tabs.
 
 ### Error overlays
 - `LoadingOverlay` is the standard "loading / error + retry" widget.
@@ -457,7 +479,7 @@ historical query and rendered both reports.
 | # | Check | How | Result |
 |---|---|---|---|
 | 1 | Package compiles | `.venv/bin/python -m compileall -q shakevision/` | ✅ pass |
-| 2 | Full test suite | `.venv/bin/pytest -q` | ✅ **577 passed** in 2.9 s |
+| 2 | Full test suite | `.venv/bin/pytest -q` | ✅ **580 passed** in 3.2 s |
 | 3 | Lint | `.venv/bin/ruff check .` | ✅ fixed: `[tool.ruff.lint] select = ["E4","E7","E9","F"]` — 0.17.1 and 0.12.7 both clean |
 | 4 | App launches, splash → MainWindow | `.venv/bin/python -m shakevision` | ✅ (harness built MainWindow directly; splash path not exercised) |
 | 5 | 4 top tabs render (Globe/Data/Events/Mine) | visual | ✅ |
@@ -492,7 +514,7 @@ historical query and rendered both reports.
 7. ✅ **Ruff drift** — explicit `[tool.ruff.lint] select`; 0.17.1 and 0.12.7
    both pass.
 
-> Re-verified after the fixes: **577 tests**, compile + both ruff versions
+> Re-verified after the fixes: **580 tests**, compile + both ruff versions
 > clean; light+zh run shows the light tab bar, `全球(不限地区)`, the translated
 > over-cap status, `已筛选 10,163 / 10,163`, and the capped hint
 > `显示最新 2000 条(共 10163 条)`; no font warnings.
@@ -502,7 +524,7 @@ historical query and rendered both reports.
 | # | Flow | Result |
 |---|---|---|
 | 14 | SeedLink direct (IU.ANMO 00BH?) | ✅ Hello 0.2 s, SELECT accepted, BH1/BH2/BHZ @40 Hz; 7 packets/30 s |
-| 15 | Map → nearest station → “Monitor live” → Workbench | ✅ dialog auto-confirmed, IU.OTAV added, Pro opens in Live, connect + data (1,420 samples in 15 s), 3 traces + spectrogram + MMI card |
+| 15 | Map → nearest station → “Monitor live” → Workbench | ✅ dialog auto-confirmed, IU.OTAV added, Pro opens in Live, connect + data (1,420 samples in 15 s), 3 traces + spectrogram + MMI chip |
 | 16 | Event Center **Historical** → event → nearest station → Replay | ✅ JP M≥5 (2 y) → 50 events; M7.6 Aomori + IU.MAJO; picker 8 stations; download 24k @40 Hz; 6 TauP P/S markers |
 | 17 | Event **favorite** → My collection → open Workbench | ✅ M5.2 Mexico + IU.TEIG; favorite button + My tab row; station picker accepted; download 24k @40 Hz; 6 markers; cleanup leaves 0 favorites |
 | 18 | Replay tools | ✅ VEL deconvolution, ZNE→ZRT, PSD 129 points, spectrogram, CSV 854 KB / QuakeML 1.3 KB / PNG |
@@ -531,6 +553,16 @@ historical query and rendered both reports.
     suggestion finishing after the download no longer rewrites the form/status.
 14. **Font stacks** — Qt warnings came from CSS families that do not exist in
     Qt; use bundled `Inter` / `JetBrains Mono` only.
+
+### Third pass — spectrogram / chip / UX P2
+
+| # | Check | Result |
+|---|---|---|
+| 20 | FFT window (live + Replay) | ✅ Live 1→2 s recreates `SpectrumComputer`; Replay 1 s → 4 s changed the map from (21×2397) to (81×597) and kept the 6 P/S markers |
+| 21 | Log frequency axis | ✅ 256 log-spaced rows, ticks 0.5/1/2/5/10; live and Replay screenshots verified |
+| 22 | MMI chip (Standard/Pro) | ✅ appears with IU.ANMO live data (`MMI 1.0`), survives switching to Standard, click reopens the live Workbench, disconnect hides it |
+| 23 | UX P2 scope bars | ✅ Data “Review events →” switches to Events; Events “Statistics view →” switches to Data |
+| 24 | Compact layout | ✅ Replay 1200×800: waveform 242 px (3 traces + labels), spectrogram 150 px, PSD 100 px; colorbar 4 ticks |
 
 ### Sandboxed-agent caveat (not a product issue)
 

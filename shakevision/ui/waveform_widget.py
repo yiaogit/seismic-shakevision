@@ -151,7 +151,7 @@ class WaveformPanel(QFrame):
             curve = plot.plot(pen=pg.mkPen(WAVEFORM_COLORS[channel], width=1.2))
             # Mínimo por traza: en Replay el splitter también reparte con
             # espectrograma + PSD; sin esto una traza podía quedar a 0 px.
-            plot.setMinimumHeight(56)
+            plot.setMinimumHeight(54)
             self._plots[channel] = plot
             self._curves[channel] = curve
             layout.addWidget(plot, stretch=1)

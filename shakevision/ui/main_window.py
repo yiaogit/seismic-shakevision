@@ -173,6 +173,12 @@ class MainWindow(QMainWindow):
         from shakevision.ui.event_center_panel import EventCenterPanel
         self.event_center = EventCenterPanel(parent=self._tabs)
         self.event_center.review_requested.connect(self._on_event_review_requested)
+        # UX P2: enlaces cruzados entre "Datos" (agregado) y "Eventos"
+        # (revisión individual), con una barra de alcance en cada pestaña.
+        self.dashboard_panel.events_requested.connect(
+            lambda: self._tabs.setCurrentIndex(TAB_EVENTS))
+        self.event_center.data_requested.connect(
+            lambda: self._tabs.setCurrentIndex(TAB_DATA))
         self._tabs.addTab(
             self.event_center,
             _get_icon_n("events", theme=_theme_n, size=64),
@@ -300,8 +306,12 @@ class MainWindow(QMainWindow):
         self._workbench.status_message.connect(self._status_bar.showMessage)
         self._workbench.latency_text.connect(self._latency_label.setText)
         self._workbench.station_changed.connect(self.app_header.set_station)
+        self._workbench.intensity_updated.connect(self.app_header.set_intensity)
         self._workbench.connection_status_changed.connect(
             self._set_connection_status)
+        # Chip MMI → abrir Workbench en modo En vivo.
+        self.app_header.intensity_clicked.connect(
+            self._on_intensity_chip_clicked)
 
         # Re-traducir cuando cambie el idioma: tabs, menús, status bar
         subscribe(self, LocaleService.language_changed_signal(),
@@ -1325,6 +1335,12 @@ class MainWindow(QMainWindow):
         # show_and_focus es idempotente: si ya estaba visible solo la
         # trae al frente; si estaba oculta la muestra. Nunca recrea.
         self.pro_window.show_and_focus()
+
+    def _on_intensity_chip_clicked(self) -> None:
+        """Chip MMI de la cabecera → Workbench en vivo, al frente."""
+
+        self.pro_window.show_and_focus()
+        self.pro_window.show_live()
 
     # ------------------------------------------------------------------
     # Modo kiosko (pantalla completa de monitorización)

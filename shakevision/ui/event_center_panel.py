@@ -44,6 +44,7 @@ from shakevision.ui.event_filter_bar import EventFilterBar
 from shakevision.ui.event_list_panel import _MAX_ROWS, EventListPanel, _NumericItem
 from shakevision.ui.historical_search_bar import HistoricalSearchBar
 from shakevision.ui.icons import get_icon
+from shakevision.ui.scope_bar import ScopeBar
 from shakevision.ui.signal_safety import subscribe
 
 #: Modos del Centro de eventos.
@@ -92,6 +93,8 @@ class EventCenterPanel(QFrame):
     period_changed = Signal(str)
     #: El usuario pidió refrescar el catálogo ahora.
     refresh_requested = Signal()
+    #: El usuario pulsó "vista estadística" en la barra de alcance.
+    data_requested = Signal()
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -112,6 +115,16 @@ class EventCenterPanel(QFrame):
         root = QVBoxLayout(self)
         root.setContentsMargins(8, 8, 8, 8)
         root.setSpacing(8)
+
+        # Barra de alcance: Eventos = revisión evento a evento.
+        self._scope_bar = ScopeBar(
+            "events.scope_title",
+            "events.scope_hint",
+            "events.scope_link",
+            self,
+        )
+        self._scope_bar.link_clicked.connect(self.data_requested.emit)
+        root.addWidget(self._scope_bar)
 
         # ── Conmutador de modo: En vivo / Histórico ──
         self._mode = MODE_LIVE

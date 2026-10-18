@@ -154,8 +154,12 @@ class ProWindow(QMainWindow):
         live_mode_l.setContentsMargins(0, 0, 0, 0)
         live_mode_l.setSpacing(8)
 
+        # v0.9: la tarjeta grande de intensidad se sustituyó por el chip
+        # MMI/PGV de AppHeader (compartido Standard/Professional). Se mantiene
+        # el objeto por compatibilidad con el controlador, pero NO se añade al
+        # layout: así no ocupa 112 px ni se superpone al ocultarse.
         self.intensity_card = IntensityCard(parent=live_mode)
-        live_mode_l.addWidget(self.intensity_card)
+        self.intensity_card.setVisible(False)
 
         self.subtabs = QTabWidget(parent=live_mode)
         self.subtabs.setDocumentMode(True)
@@ -335,12 +339,11 @@ class ProWindow(QMainWindow):
             pass
 
     def _on_subtab_changed(self, index: int) -> None:
-        """Tarjeta de intensidad (MMI) solo en la sub-pestaña 'En vivo'."""
+        """La intensidad vive ahora en el chip de AppHeader (siempre visible)."""
 
-        try:
-            self.intensity_card.setVisible(index == PRO_LIVE)
-        except (RuntimeError, AttributeError):
-            pass
+        # No mostrar la tarjeta antigua: ya no está en el layout y aparecería
+        # flotando sobre la primera sub-pestaña.
+        pass
 
     def _on_mode_changed(self, index: int) -> None:
         """Cambio de modo: el ControlPanel lateral (台站/连接/滤波/STA-LTA/声音)
