@@ -19,20 +19,19 @@ from shakevision.ui.settings_dialog import SettingsDialog
 from shakevision.ui.update_dialog import UpdateDialog
 
 
-# Mantener una referencia global: si el wrapper de QApplication se libera
-# antes de que Qt termine, Python 3.10/3.11 puede abortar en el finalizador
-# con "none_dealloc: deallocating None" (solo Ubuntu en CI).
-_APP = None
+def _qt_app():
+    """QApplication de vida corta (como el resto de tests Qt de la suite).
+
+    No la guardamos en una fixture de módulo/sesión: en Linux + Python
+    3.10/3.11 una QApplication viva hasta el finalizador de CPython provoca
+    "none_dealloc: deallocating None" después de que pytest ya terminó.
+    """
+
+    return QApplication.instance() or QApplication([])
 
 
-@pytest.fixture(scope="session")
-def qapp():
-    global _APP
-    _APP = QApplication.instance() or QApplication([])
-    yield _APP
-
-
-def test_aux_dialogs_construct(qapp) -> None:
+def test_aux_dialogs_construct() -> None:
+    qapp = _qt_app()
     dialogs = [
         AddShakeDialog(),
         GitHubLoginDialog(),
@@ -45,7 +44,8 @@ def test_aux_dialogs_construct(qapp) -> None:
     qapp.processEvents()
 
 
-def test_update_dialog_construct(qapp) -> None:
+def test_update_dialog_construct() -> None:
+    _qt_app()
     info = UpdateInfo(
         version="0.9.1", tag="v0.9.1", notes="notes", html_url="",
         assets=(), checksums_url="")
@@ -59,7 +59,8 @@ def test_update_dialog_construct(qapp) -> None:
 @pytest.mark.skipif(
     sys.platform.startswith("linux"),
     reason="PySide6/Qt finalizer crash on Linux Python 3.10/3.11; covered on macOS/Windows")
-def test_onboarding_construct(qapp) -> None:
+def test_onboarding_construct() -> None:
+    qapp = _qt_app()
     # No ejecutamos exec(): solo comprobamos que el wizard se construye y
     # puede cerrarse sin tocar QSettings del usuario.
     dlg = OnboardingWizard()
