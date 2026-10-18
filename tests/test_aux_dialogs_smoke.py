@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-
 import pytest
 
 try:
@@ -56,9 +54,6 @@ def test_update_dialog_construct() -> None:
     dlg.deleteLater()
 
 
-@pytest.mark.skipif(
-    sys.platform.startswith("linux"),
-    reason="PySide6/Qt finalizer crash on Linux Python 3.10/3.11; covered on macOS/Windows")
 def test_onboarding_construct() -> None:
     qapp = _qt_app()
     # No ejecutamos exec(): solo comprobamos que el wizard se construye y

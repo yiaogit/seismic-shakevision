@@ -121,14 +121,9 @@ jobs:
       # -----------------------------------------------------------------
       - name: Run pytest (Linux con xvfb)
         if: runner.os == 'Linux'
-        env:
-          # Python 3.10/3.11 + PySide6 abortan en el finalizador de CPython
-          # ("none_dealloc") DESPUÉS de que pytest termine; el allocator
-          # estándar evita ese teardown defectuoso.
-          PYTHONMALLOC: malloc
         run: |
           sudo apt-get install -y --no-install-recommends xvfb
-          xvfb-run --auto-servernum pytest -v --ignore=tests/test_aux_dialogs_smoke.py
+          xvfb-run --auto-servernum pytest -v
 
       - name: Run pytest (macOS / Windows)
         if: runner.os != 'Linux'
