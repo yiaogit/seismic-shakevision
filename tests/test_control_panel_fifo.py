@@ -114,3 +114,35 @@ def test_config_presets_never_evicted(panel) -> None:
     assert ("AM", "LOCAL") in nslc, "LAN Shake no debe ser desalojada"
     # Total presets reales = presets fijos iniciales + MAX_DYNAMIC_STATIONS
     assert len(presets_in_combo) == initial_real_count + panel.MAX_DYNAMIC_STATIONS
+
+
+def test_placeholder_station_gates_connect(panel) -> None:
+    """No fake station is selected initially; Connect needs a real preset."""
+
+    assert panel.station_combo.currentIndex() == 0
+    assert panel.current_station() is None
+    assert panel.connect_button.isEnabled() is False
+    assert panel.disconnect_button.isEnabled() is False
+
+    idx = next(
+        i for i in range(panel.station_combo.count())
+        if isinstance(panel.station_combo.itemData(i), StationPreset)
+        and panel.station_combo.itemData(i).station == "LOCAL"
+    )
+    panel.station_combo.setCurrentIndex(idx)
+    assert panel.current_station() is not None
+    assert panel.connect_button.isEnabled() is True
+
+    panel.set_source_active(True)
+    assert panel.connect_button.isEnabled() is False
+    assert panel.disconnect_button.isEnabled() is True
+    panel.set_source_active(False)
+
+
+def test_smooth_checkbox_emits(panel) -> None:
+    seen: list[bool] = []
+    panel.smooth_changed.connect(seen.append)
+    panel.smooth_check.setChecked(False)
+    assert seen[-1] is False
+    panel.smooth_check.setChecked(True)
+    assert seen[-1] is True

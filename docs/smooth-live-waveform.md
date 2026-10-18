@@ -70,6 +70,12 @@ Same IU.PAB session, after prefill:
 Screenshots: `23_workbench_smooth_a.png` / `24_workbench_smooth_b.png`
 (two frames 200 ms apart; waveform + spectrogram both moved).
 
+## 3b. Toggle
+
+The Workbench sidebar now exposes **Smooth display** (checked by default).
+Unchecking it switches to Realtime immediately (no playout delay); checking it
+again resets the cursor to `latest - 12 s` when history is available.
+
 ## 4. Trade-offs / limits
 
 * **Visual latency ≈ 12–15 s** on IRIS stations. This is the unavoidable cost

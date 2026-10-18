@@ -20,7 +20,8 @@
 | 波形平滑 | 已实现 **60 s 历史预填充 + 12 s playout**；IU.PAB 实测 **29.8 Hz**，676 帧中 655 帧时间推进（97%），200 ms 两帧波形差 20,358 像素 |
 | 功能链路 | Globe/Data/Events/Mine 21/21；Workbench 控件 15/15；Replay 下载/PSD/导出通过；报告/Kiosk/连续 Connect-Stop 通过 |
 | 真实缺陷 | 修复 **Stop 时 QThread segfault**、**Workbench 置顶时弹窗被挡**、**Kiosk 快捷键失效** |
-| 测试 | **583 passed**；ruff/compileall clean |
+| 测试 | **586 passed**；ruff/compileall clean |
+| P0/P1 进展 | P0-1/P0-2 完成；P1-1/2/3/4/5/6/7 完成；P0-3 部分 |
 
 ---
 
@@ -151,7 +152,7 @@
 | General/My Shakes/Reset 三页签 | `[x]` | 直接构造验证 |
 | Reset 标签透明/内边距 | `[x]` | 黑底/贴边修复 |
 | 地址输入框 | `[x]` | 加宽，占位不再截断 |
-| Reset 页 Apply/Cancel | `[x]` | 已禁用（仍占位，可隐藏） |
+| Reset 页 Apply/Cancel | `[x]` | 已隐藏（仅保留 Restore defaults + Reset） |
 | Profile 统计/活动 | `[x]` | 活动记录不再出现 “?” |
 | 活动日志 station/quake/stream | `[x]` | 参数补齐 + 旧记录回退 |
 | Kiosk F11/Esc | `[x]` | ApplicationShortcut |
@@ -181,7 +182,7 @@
 | 视口延迟 | `[x]` | 约 12–15 s；状态栏提示 `Smooth display buffer +12 s` |
 | 本地 Shake/无历史 | `[x]` | 自动回退到原跳包行为，无假数据 |
 | 断流 >30 s | `[x]` | 光标一次性重同步，避免无限累积 |
-| 平滑/实时开关 | `[ ]` | 建议增加，让用户自选延迟（P0） |
+| 平滑/实时开关 | `[x]` | 已加 **Smooth display**；关闭即时回 Realtime，开启恢复 +12s |
 | 视觉延迟标注 | `[x]` | Latency 标签改为显示波形延迟 |
 
 **结论**：30 Hz 已达成，而且是“真实平滑”，不是靠提高 FPS 或插值假数据；代价是最多约 12–15 s 的视觉延迟。
@@ -232,38 +233,38 @@
 
 | ID | 问题 | 建议 | 预期收益 |
 |---|---|---|---|
-| P0-1 | Workbench 初始 `Mi Shake LAN (rs.local)` 假台站，Connect 可点但通常失败 | 改为“未选择台站”占位；Connect 禁用；引导从地图/事件添加 | 消除“为什么连不上”的误导 |
-| P0-2 | 平滑模式固定 12 s 视觉延迟 | 增加 **Smooth / Realtime** 开关；默认 Smooth，实时模式回原行为 | 让用户按场景选择低延迟或平滑 |
-| P0-3 | SeedLink 首包 ~13 s、连接状态只显示“Conectando…” | 进度拆分：TCP/握手 → 等待水平通道 → 首包；或先发 Z 通道 | 降低“卡住”的感知 |
+| P0-1 `[x]` | Workbench 初始 `Mi Shake LAN (rs.local)` 假台站，Connect 可点但通常失败 | 已改为“选择台站…”占位；Connect 禁用；选真实台站后启用 | 消除“为什么连不上”的误导 |
+| P0-2 `[x]` | 平滑模式固定 12 s 视觉延迟 | 已加 **Smooth display** 开关；默认平滑，取消即 Realtime | 让用户按场景选择低延迟或平滑 |
+| P0-3 `[~]` | SeedLink 首包 ~13 s、连接状态只显示“Conectando…” | 已区分“首通道已收到，等待水平分量”和“三分量 streaming”；尚未做完整耗时进度条 | 降低“卡住”的感知 |
 
 ### P1（体验/正确性）
 
 | ID | 问题 | 建议 |
 |---|---|---|
-| P1-1 | 地图标记点击目标小、无搜索 | 加台站搜索/最近台站列表；增大点击半径；键盘可达 |
-| P1-2 | 历史事件未查询显示 `Filtered 0/0` | 显示 `—` 或“未查询” |
-| P1-3 | Replay 空态 PSD 提示“Select a segment…” | 空态改为“加载数据后选择一段” |
-| P1-4 | Replay 无 P/S 时 Catalog/QuakeML 仍可点 | 无 picks 禁用，tooltip 提示先放 P/S |
-| P1-5 | Rotate ZRT 禁用原因不明 | tooltip/状态说明“需事件+台站坐标+水平分量”；垂直-only 台站明确提示 |
-| P1-6 | 回放 9:11/10:00 部分数据 | 状态标明“请求 10:00，实际 9:11”，允许重试/换台站 |
-| P1-7 | 动态台站达到 8 个上限无反馈 | 弹窗显示剩余槽位；满时禁用 Monitor live 并提示先删除 |
-| P1-8 | 活动日志旧记录占位符 | 已做通用回退；建议一次性迁移/清空 |
-| P1-9 | Settings 齿轮真实桌面回归 | 在真实桌面点一次；必要时 `raise_/activateWindow` + 可见性检查 |
+| P1-1 `[x]` | 地图标记点击目标小、无搜索 | 已加 Globe **Find station** 搜索（输入 IU.PAB/站点名 + Enter），仍走同一台站弹窗；标记点击半径仍可继续优化 |
+| P1-2 `[x]` | 历史事件未查询显示 `Filtered 0/0` | 显示 `—` 或“未查询” |
+| P1-3 `[x]` | Replay 空态 PSD 提示“Select a segment…” | 空态改为“加载数据后选择一段” |
+| P1-4 `[x]` | Replay 无 P/S 时 Catalog/QuakeML 仍可点 | 无 picks 禁用，tooltip 提示先放 P/S |
+| P1-5 `[x]` | Rotate ZRT 禁用原因不明 | tooltip/状态说明“需事件+台站坐标+水平分量”；垂直-only 台站明确提示 |
+| P1-6 `[x]` | 回放 9:11/10:00 部分数据 | 状态标明“请求 10:00，实际 9:11”，允许重试/换台站 |
+| P1-7 `[x]` | 动态台站达到 8 个上限无反馈 | 弹窗显示剩余槽位；满时禁用 Monitor live 并提示先删除 |
+| P1-8 `[ ]` | 活动日志旧记录占位符 | 已做通用回退；建议一次性迁移/清空 |
+| P1-9 `[ ]` | Settings 齿轮真实桌面回归 | 在真实桌面点一次；必要时 `raise_/activateWindow` + 可见性检查 |
 
 ### P2（打磨/长期）
 
 | ID | 问题 | 建议 |
 |---|---|---|
-| P2-1 | 台站 Favorite 无 toast | 收藏/取消后状态栏提示；My collection 数量徽标 |
-| P2-2 | 报告只有 File 菜单 | Data 页增加显式 Export report 按钮 |
-| P2-3 | Reset 页 Apply/Cancel 已禁用但仍占位 | 直接隐藏，仅保留 Restore defaults + Reset |
-| P2-4 | Data/Events 双 ScopeBar 占高度 | 可折叠/收进标题 tooltip |
-| P2-5 | 分析页相对时间对长窗口不直观 | >1 年直接显示 `YYYY-MM-DD` |
-| P2-6 | Helicorder 刚连接几乎全空 | 已加提示；可加“已采集 x 分钟/24h”进度 |
-| P2-7 | “View history”语义模糊 | 改为“Open station in Replay”/“在回放中打开台站” |
-| P2-8 | 无自动更新 | manifest + 通知 + 应用内下载校验；签名/回滚就绪后再 L2 |
-| P2-9 | Audio/LAN/GitHub/Onboarding 自动化缺口 | 建立独立环境脚本（临时 HOME、rs.local mock、音频 offscreen） |
-| P2-10 | 主窗设置齿轮自动化不稳定 | 增加窗口可见性/激活的回归脚本，避免仅靠 activeModalWidget |
+| P2-1 `[x]` | 台站 Favorite 无 toast | 收藏/取消后状态栏提示；My collection 数量徽标 |
+| P2-2 `[x]` | 报告只有 File 菜单 | Data 页增加显式 Export report 按钮 |
+| P2-3 `[x]` | Reset 页 Apply/Cancel 已禁用但仍占位 | 直接隐藏，仅保留 Restore defaults + Reset |
+| P2-4 `[ ]` | Data/Events 双 ScopeBar 占高度 | 可折叠/收进标题 tooltip |
+| P2-5 `[ ]` | 分析页相对时间对长窗口不直观 | >1 年直接显示 `YYYY-MM-DD` |
+| P2-6 `[ ]` | Helicorder 刚连接几乎全空 | 已加提示；可加“已采集 x 分钟/24h”进度 |
+| P2-7 `[x]` | “View history”语义模糊 | 改为“Open station in Replay”/“在回放中打开台站” |
+| P2-8 `[ ]` | 无自动更新 | manifest + 通知 + 应用内下载校验；签名/回滚就绪后再 L2 |
+| P2-9 `[ ]` | Audio/LAN/GitHub/Onboarding 自动化缺口 | 建立独立环境脚本（临时 HOME、rs.local mock、音频 offscreen） |
+| P2-10 `[ ]` | 主窗设置齿轮自动化不稳定 | 增加窗口可见性/激活的回归脚本，避免仅靠 activeModalWidget |
 
 ---
 
@@ -271,14 +272,14 @@
 
 | 项目 | 结果 |
 |---|---|
-| `pytest -q` | **583 passed**（3.27 s） |
+| `pytest -q` | **586 passed**（3.22 s） |
 | `ruff check .` | clean |
 | `compileall` | OK |
 | 连续 Connect/Stop | 3 次无崩溃 |
 | 带活动流关闭 | 正常清理 |
 | 报告 HTML | 24–25 KB |
-| i18n | 4 语言各 762 键 |
-| 提交 | `29c3434`（链路修复 + 审计）、`656acba`（平滑波形）、`58fdb0f`（UI 巡检） |
+| i18n | 4 语言各 780 键 |
+| 提交 | 本批次（P0/P1 优化）、`29c3434`（链路修复 + 审计）、`656acba`（平滑波形）、`58fdb0f`（UI 巡检） |
 | 工作区 | clean；未 push |
 
 延伸文档：

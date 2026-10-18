@@ -149,3 +149,12 @@ def test_prefill_stream_maps_bh1_bh2_to_n_e() -> None:
     assert np.count_nonzero(n) > 0
     assert np.count_nonzero(e) > 0
     assert float(n.max()) > float(z.max())  # BH1 (offset 10) → N
+
+
+def test_smooth_toggle_state(qapp):
+    ctrl = _make_controller()
+    assert ctrl._smooth_enabled is True
+    ctrl.on_smooth_changed(False)
+    assert ctrl._smooth_enabled is False
+    ctrl.on_smooth_changed(True)
+    assert ctrl._smooth_enabled is True

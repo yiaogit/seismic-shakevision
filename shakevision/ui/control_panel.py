@@ -71,6 +71,7 @@ class ControlPanel(QFrame):
     connect_clicked = Signal()               # Solicita iniciar la fuente
     disconnect_clicked = Signal()            # Solicita detener la fuente
     listen_clicked = Signal(int, int)        # (seconds_to_play, speed_factor)
+    smooth_changed = Signal(bool)            # playout suave on/off
 
     # Máximo de estaciones añadidas dinámicamente desde el globo. Los
     # presets que vienen de AppConfig (Demo + LAN Shake) están EXENTOS
@@ -153,6 +154,7 @@ class ControlPanel(QFrame):
 
         # Aplicar textos traducidos + suscribirse a cambios de idioma
         self._retranslate()
+        self._update_connection_buttons()
         subscribe(self, LocaleService.language_changed_signal(),
                   self._retranslate)  # v0.7.7 (B1)
 
@@ -168,6 +170,10 @@ class ControlPanel(QFrame):
         layout.addWidget(self._station_section_title)
 
         self.station_combo = QComboBox()
+        # Placeholder explícito: no arrancamos con una estación ficticia
+        # seleccionada (AM.LOCAL) y Connect deshabilitado hasta elegir una
+        # real. Los presets de config siguen disponibles debajo.
+        self.station_combo.addItem(t("controls.station.placeholder"), userData=None)
         for s in stations:
             # Guardar el preset entero en userData para recuperarlo al cambiar
             self.station_combo.addItem(s.label, userData=s)
@@ -178,6 +184,7 @@ class ControlPanel(QFrame):
         # ── Sentinela "+ Add LAN Shake..." al final ──
         self._add_lan_sentinel_to_combo()
         self.station_combo.currentIndexChanged.connect(self._on_station_changed)
+        self.station_combo.setCurrentIndex(0)
         layout.addWidget(self.station_combo)
 
         # Información detallada del preset seleccionado
@@ -215,6 +222,11 @@ class ControlPanel(QFrame):
         self.disconnect_button.clicked.connect(self.disconnect_clicked.emit)
         buttons.addWidget(self.disconnect_button)
         outer.addLayout(buttons)
+
+        self.smooth_check = QCheckBox()
+        self.smooth_check.setChecked(True)
+        self.smooth_check.toggled.connect(self.smooth_changed.emit)
+        outer.addWidget(self.smooth_check)
 
         # v0.7.7: fila de progreso de conexión (spinner + estado en vivo).
         # Oculta mientras estamos desconectados; el WorkbenchController la
@@ -278,6 +290,10 @@ class ControlPanel(QFrame):
         """
 
         self._source_active = bool(active)
+        try:
+            self._update_connection_buttons()
+        except (RuntimeError, AttributeError):
+            pass
 
     def clear_connection_status(self) -> None:
         """Oculta la fila de progreso (al desconectar)."""
@@ -285,6 +301,15 @@ class ControlPanel(QFrame):
         self._conn_spinner_timer.stop()
         self._conn_status.clear()
         self._conn_row.setVisible(False)
+
+    def _update_connection_buttons(self) -> None:
+        """Connect solo con estación real; Stop solo con fuente activa."""
+
+        if not hasattr(self, "connect_button"):
+            return
+        has_station = self.current_station() is not None
+        self.connect_button.setEnabled(bool(has_station) and not self._source_active)
+        self.disconnect_button.setEnabled(bool(self._source_active))
 
     def _build_filter_section(self, filt: FilterConfig) -> QVBoxLayout:
         """Controles del filtro Butterworth pasa banda."""
@@ -510,6 +535,15 @@ class ControlPanel(QFrame):
         for header, title_key, content in self._collapsibles:
             self._apply_collapsible_text(header, title_key, content.isVisible())
 
+        # Placeholder (userData None) al inicio.
+        for i in range(self.station_combo.count()):
+            if self.station_combo.itemData(i) is None:
+                self.station_combo.setItemText(
+                    i, t("controls.station.placeholder"))
+                break
+        if self.current_station() is None:
+            self.station_detail.setText(t("controls.station.placeholder_hint"))
+
         # Re-etiquetar el item sentinela ("+ Add LAN Shake...") tras
         # cambio de idioma. Localizarlo por userData en lugar de índice.
         for i in range(self.station_combo.count()):
@@ -519,6 +553,8 @@ class ControlPanel(QFrame):
 
         self.connect_button.setText(t("controls.connect"))
         self.disconnect_button.setText(t("controls.disconnect"))
+        self.smooth_check.setText(t("controls.smooth"))
+        self.smooth_check.setToolTip(t("controls.smooth_tooltip"))
 
         self.filter_enabled_check.setText(t("controls.filter.enable"))
         self._lowcut_label.setText(t("controls.filter.lowcut"))
@@ -686,7 +722,7 @@ class ControlPanel(QFrame):
 
         preset = self.station_combo.currentData()
         if not isinstance(preset, StationPreset):
-            self.station_detail.setText("—")
+            self.station_detail.setText(t("controls.station.placeholder_hint"))
             return
         self.station_detail.setText(
             f"{preset.network}.{preset.station}."
@@ -721,6 +757,7 @@ class ControlPanel(QFrame):
             return
 
         self._refresh_station_detail()
+        self._update_connection_buttons()
         if isinstance(data, StationPreset):
             self.station_changed.emit(data)
 

@@ -476,6 +476,7 @@ class SeedLinkSource(DataSource):
         # Sirve para emitir un solo "streaming" en cuanto llegue, en
         # lugar de spamear el statusbar con cada batch.
         self._got_first_packet: bool = False
+        self._all_components_announced: bool = False
 
         # Worker + hilo dedicado
         self._worker = _SeedLinkWorker(
@@ -594,6 +595,7 @@ class SeedLinkSource(DataSource):
             self._emit_end = None
             self._first_data_wall = None
         self._got_first_packet = False
+        self._all_components_announced = False
 
     @Slot()
     def _on_thread_finished(self) -> None:
@@ -626,7 +628,10 @@ class SeedLinkSource(DataSource):
             self._got_first_packet = True
             self._first_data_wall = time.monotonic()
             try:
-                self.status_changed.emit("🟢 Streaming activo")
+                self.status_changed.emit(t(
+                    "source.seedlink.first_partial",
+                    channel=channel,
+                    seconds=int(CHANNEL_WAIT_GRACE_S)))
             except Exception:
                 pass
 
@@ -685,6 +690,16 @@ class SeedLinkSource(DataSource):
             end_ts = start_ts + samples.size / rate
             if end_ts > self._latest_ts:
                 self._latest_ts = end_ts
+            all_seen = all(
+                self._ch_start[ch] is not None for ch in ("Z", "N", "E"))
+            announce_all = all_seen and not self._all_components_announced
+            if announce_all:
+                self._all_components_announced = True
+        if announce_all:
+            try:
+                self.status_changed.emit(t("source.seedlink.streaming_all"))
+            except Exception:
+                pass
 
     @Slot()
     def _emit_pending(self) -> None:

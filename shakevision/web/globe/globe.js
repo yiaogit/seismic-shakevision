@@ -77,6 +77,12 @@
         el.title = i18nTable[key];
       }
     });
+    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
+      const key = el.getAttribute("data-i18n-placeholder");
+      if (i18nTable[key] != null) {
+        el.placeholder = i18nTable[key];
+      }
+    });
   }
 
   // ============================================================
@@ -1448,11 +1454,71 @@
   }
 
   // ============================================================
+  // Búsqueda de estación (alternativa accesible al click del marcador)
+  // ============================================================
+  function refreshStationSearchList() {
+    const list = document.getElementById("station-search-list");
+    if (!list) return;
+    // Solo USGS/IRIS en el datalist (151), no los 28k Shake; la búsqueda
+    // manual por Enter sí recorre todos.
+    const usgs = state.devices.filter(d => d.provider === "usgs");
+    list.innerHTML = "";
+    for (const d of usgs) {
+      const opt = document.createElement("option");
+      opt.value = `${d.network}.${d.code}`;
+      opt.label = d.site || "";
+      list.appendChild(opt);
+    }
+  }
+
+  function setupStationSearch() {
+    const input = document.getElementById("station-search");
+    const status = document.getElementById("station-search-status");
+    if (!input) return;
+    let lastHit = "";
+    let lastAt = 0;
+    const run = () => {
+      const q = String(input.value || "").trim().toUpperCase();
+      if (!q) return;
+      const matches = (d) => (
+        `${d.network}.${d.code}`.toUpperCase().includes(q)
+        || String(d.site || "").toUpperCase().includes(q)
+      );
+      // Preferir USGS/IRIS (conectables) sobre Shake.
+      const hit = state.devices.find(d => d.provider === "usgs" && matches(d))
+        || state.devices.find(matches);
+      if (!hit) {
+        if (status) status.textContent = "—";
+        return;
+      }
+      const hitKey = `${hit.network}.${hit.code}`;
+      const now = Date.now();
+      if (hitKey === lastHit && now - lastAt < 800) return;
+      lastHit = hitKey;
+      lastAt = now;
+      if (status) status.textContent = hitKey;
+      if (state.bridge) {
+        state.bridge.on_station_clicked(hit.network, hit.code);
+      }
+    };
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); run(); }
+    });
+    input.addEventListener("change", () => {
+      // Elegir una sugerencia del datalist también abre la estación.
+      run();
+    });
+    input.addEventListener("focus", refreshStationSearchList);
+    refreshStationSearchList();
+  }
+
+  // ============================================================
   // API expuesta a Python
   // ============================================================
   window.shakevisionGlobe = {
     setDevices(json) {
       state.devices = (typeof json === "string" ? JSON.parse(json) : json) || [];
+      refreshStationSearchList();
       applyActiveLayer();
     },
     setEarthquakes(json) {
@@ -1542,5 +1608,6 @@
   }
 
   setupBridge();
+  setupStationSearch();
   applyActiveLayer();
 })();

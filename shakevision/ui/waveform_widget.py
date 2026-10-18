@@ -92,6 +92,7 @@ class WaveformPanel(QFrame):
     #: El usuario pidió cambiar de unidades; el controlador obtiene la
     #: sensibilidad (red) y llama de vuelta a ``set_units``.
     units_requested = Signal(bool)
+    picks_changed = Signal()
     #: La región (caja amarilla) cambió → recalcular PSD del tramo. v0.7.7.
     region_changed = Signal()
 
@@ -759,6 +760,7 @@ class WaveformPanel(QFrame):
                 self._plots[ch].addItem(ln)
                 lines.append(ln)
             self._picks[phase] = lines
+        self.picks_changed.emit()
         self._update_readout()
 
     def _sync_pick(self, phase: str, src: pg.InfiniteLine) -> None:
@@ -779,6 +781,7 @@ class WaveformPanel(QFrame):
             for ln, ch in zip(lines, _CHANNELS):
                 self._plots[ch].removeItem(ln)
         self._picks.clear()
+        self.picks_changed.emit()
         self._update_readout()
 
     # ------------------------------------------------------------------

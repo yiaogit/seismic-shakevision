@@ -83,6 +83,29 @@ html, body {
   gap: 4px;
 }
 
+.station-search {
+  width: 210px;
+  box-sizing: border-box;
+  margin-top: 2px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.28);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  outline: none;
+}
+.station-search:focus {
+  border-color: var(--accent);
+}
+.station-search-status {
+  min-height: 12px;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
 .seg-btn {
   background: transparent;
   border: 1px solid transparent;

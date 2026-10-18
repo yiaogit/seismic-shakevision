@@ -419,6 +419,9 @@ class ReplayPanel(QWidget):
         self.export_btn.setEnabled(False)
         self._export_buttons = [self.export_btn]
         btn_row.addWidget(self.export_btn)
+        for act in (self._act_png, self._act_csv,
+                    self._act_quakeml, self._act_catalog):
+            act.setEnabled(False)
 
         # Mostrar/ocultar paneles inferiores: con 3 gráficas apretadas, el
         # usuario elige cuáles ver (la de ondas siempre está). Al ocultar una,
@@ -454,6 +457,8 @@ class ReplayPanel(QWidget):
         # el espectrograma con ventanas de 800 px), cada traza tiene su
         # mínimo y el splitter no deja colapsar ningún bloque.
         self.waveform_panel.units_requested.connect(self._on_units_requested)
+        self.waveform_panel.picks_changed.connect(
+            self._update_export_actions)
         # v0.7.7: PSD del tramo seleccionado (caja amarilla) → 2.º bloque.
         self.waveform_panel.region_changed.connect(self._update_psd)
         # absolute_time=True: en Replay el espectrograma usa hora UTC absoluta
@@ -463,6 +468,7 @@ class ReplayPanel(QWidget):
         self.spectrogram_panel.fft_window_changed.connect(
             self._on_fft_window_changed)
         self.spectrum_panel = SpectrumPanel(parent=splitter)
+        self.spectrum_panel.set_hint_key("spectrum.load_hint")
         # Etiquetas iniciales del estado vacío: sin esto el navegador mostraba
         # EHZ/EHN/EHE y "STATION: —" aunque el combo ya dijera IU.ANMO/BH.
         _band = (self._cha or "BHZ")[:2]
@@ -484,6 +490,7 @@ class ReplayPanel(QWidget):
         self._overlay.hide_overlay()
 
         self._retranslate()
+        self._update_export_actions()
 
     # ------------------------------------------------------------------
     # i18n
@@ -1047,13 +1054,20 @@ class ReplayPanel(QWidget):
         self.rotate_btn.setEnabled(False)   # hasta tener coords (TauP)
         self.rotate_btn.blockSignals(False)
         self._render()                       # filtra + dibuja + espectrograma
-        for b in self._export_buttons:
-            b.setEnabled(True)
+        self._update_export_actions()
         self.clear_btn.setEnabled(True)
 
         self._loaded = True
-        self.status_label.setText(
-            t("replay.ready", duration=_format_mm_ss(duration)))
+        self.spectrum_panel.set_hint_key("spectrum.hint")
+        requested = int(round(float(self.dur_spin.value())))
+        if requested > 0 and duration + 2.0 < requested:
+            self.status_label.setText(t(
+                "replay.ready_partial",
+                loaded=_format_mm_ss(duration),
+                requested=_format_mm_ss(requested)))
+        else:
+            self.status_label.setText(
+                t("replay.ready", duration=_format_mm_ss(duration)))
 
         # Reabrir desde el catálogo: re-dibujar los picks P/S guardados (tienen
         # prioridad sobre TauP — son la revisión que el usuario quiere recuperar).
@@ -1494,12 +1508,12 @@ class ReplayPanel(QWidget):
         self.rotate_btn.setChecked(False)
         self.rotate_btn.setEnabled(False)
         self.rotate_btn.blockSignals(False)
-        for b in self._export_buttons:
-            b.setEnabled(False)
+        self._update_export_actions()
         try:
             self.waveform_panel.reset()
             self.spectrogram_panel.reset()   # v0.8.0 fix: faltaba al limpiar
             self.spectrum_panel.reset()
+            self.spectrum_panel.set_hint_key("spectrum.load_hint")
         except (RuntimeError, AttributeError):
             pass
 
@@ -1571,6 +1585,29 @@ class ReplayPanel(QWidget):
                 ts = datetime.fromtimestamp(start_ts + i / sr, tz=timezone.utc)
                 w.writerow([ts.isoformat(),
                             f"{zc[i]:.6g}", f"{nc[i]:.6g}", f"{ec[i]:.6g}"])
+
+    def _update_export_actions(self) -> None:
+        """Catálogo/QuakeML necesitan picks; PNG/CSV solo traza."""
+
+        has_trace = bool(self._display_arrays)
+        try:
+            has_picks = bool(self.waveform_panel.get_picks())
+        except (RuntimeError, AttributeError):
+            has_picks = False
+        self._act_png.setEnabled(has_trace)
+        self._act_csv.setEnabled(has_trace)
+        self._act_quakeml.setEnabled(has_trace and has_picks)
+        self._act_catalog.setEnabled(has_trace and has_picks)
+        try:
+            self.export_btn.setEnabled(has_trace)
+        except (RuntimeError, AttributeError):
+            pass
+        if not has_picks:
+            self._act_quakeml.setToolTip(t("replay.picks_required"))
+            self._act_catalog.setToolTip(t("replay.picks_required"))
+        else:
+            self._act_quakeml.setToolTip("")
+            self._act_catalog.setToolTip("")
 
     def _on_save_catalog(self) -> None:
         """Guarda las fases P/S marcadas en el catálogo local persistente."""

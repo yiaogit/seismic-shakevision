@@ -196,6 +196,12 @@ class EventFilterBar(QWidget):
         self.count_lbl.setText(
             t("events.filter_count", shown=shown, total=total))
 
+    def clear_count(self) -> None:
+        """Sin consulta todavía: no mostrar un engañoso 0/0."""
+
+        self._last_count = None
+        self.count_lbl.clear()
+
     def reset(self) -> None:
         self.mag_combo.blockSignals(True)
         self.mag_combo.setCurrentIndex(0)

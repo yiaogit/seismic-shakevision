@@ -47,6 +47,14 @@
       <button class="period-btn-globe" data-period="all_week">7d</button>
       <button class="period-btn-globe" data-period="all_month">30d</button>
     </div>
+
+    <div class="card-label" style="margin-top:10px;" data-i18n="web.globe.search_label">Find station</div>
+    <input id="station-search" class="station-search" list="station-search-list"
+           autocomplete="off" spellcheck="false"
+           data-i18n-placeholder="web.globe.search_placeholder"
+           placeholder="IU.PAB or site">
+    <datalist id="station-search-list"></datalist>
+    <div id="station-search-status" class="station-search-status"></div>
   </div>
 
   <!-- Esquina superior derecha: controles de cámara -->

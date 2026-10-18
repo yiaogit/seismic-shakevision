@@ -175,6 +175,7 @@ class WorkbenchController(QObject):
         self._smooth_end_ts: Optional[float] = None
         self._smooth_last_mono: Optional[float] = None
         self._smooth_ready: bool = False
+        self._smooth_enabled: bool = True
         self._prefill_started: bool = False
         self._prefill_token: int = 0
 
@@ -190,7 +191,15 @@ class WorkbenchController(QObject):
         self._connected: bool = False
 
         # Mostrar la estación inicial en la cabecera del panel de ondas.
-        self._view.waveform_panel.set_station_label(self._current_station.label)
+        # Si el combo está en el placeholder, no mostrar AM.LOCAL como si
+        # estuviera seleccionada.
+        try:
+            _initial = self._view.control_panel.current_station()
+            _label = _initial.label if _initial is not None else t(
+                "controls.station.placeholder")
+        except (RuntimeError, AttributeError):
+            _label = self._current_station.label
+        self._view.waveform_panel.set_station_label(_label)
 
         # Temporizador independiente para el helicorder (refresco lento)
         self._helicorder_timer = QTimer(self)
@@ -324,12 +333,36 @@ class WorkbenchController(QObject):
             3000,
         )
 
+    def on_smooth_changed(self, enabled: bool) -> None:
+        """Activa/desactiva el playout suave sin tocar la adquisición."""
+
+        self._smooth_enabled = bool(enabled)
+        if not enabled:
+            self._smooth_last_mono = None
+            self.status_message.emit(t("status.smooth_off"), 3500)
+            return
+        if self._smooth_ready and self._buffer.total_written:
+            self._smooth_end_ts = (
+                self._buffer.latest_timestamp_unix - SMOOTH_TARGET_DELAY_S)
+            self._smooth_last_mono = time.monotonic()
+        self.status_message.emit(t("status.smooth_on"), 3500)
+
     def on_connect_clicked(self) -> None:
         """Arranca la fuente de datos correspondiente al preset actual."""
 
         if self._source is not None:
             self.status_message.emit(t("status.source_already_active"), 2000)
             return
+
+        # Placeholder / sin estación elegida → no conectar.
+        try:
+            selected = self._view.control_panel.current_station()
+        except (RuntimeError, AttributeError):
+            selected = self._current_station
+        if selected is None:
+            self.status_message.emit(t("status.select_station"), 3500)
+            return
+        self._current_station = selected
 
         self._buffer.clear()
         self._reset_smooth_state()
@@ -771,7 +804,8 @@ class WorkbenchController(QObject):
         # golpe; el borde derecho ya tiene datos en el búfer.
         display_raw = raw
         display_processed = processed
-        if self._smooth_ready and self._smooth_end_ts is not None:
+        if (self._smooth_enabled and self._smooth_ready
+                and self._smooth_end_ts is not None):
             now = time.monotonic()
             if self._smooth_last_mono is None:
                 self._smooth_last_mono = now

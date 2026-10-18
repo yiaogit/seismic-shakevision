@@ -53,7 +53,7 @@ License: MIT.
 | Branch | `main` |
 | Python | 3.10 / 3.11 / 3.12 (CI matrix); 3.14 runs locally but is **off-matrix** |
 | Qt binding | PySide6 |
-| i18n keys | **762** per locale (en/es/fr/zh), aligned |
+| i18n keys | **780** per locale (en/es/fr/zh), aligned |
 
 ### Known issues / unfinished
 
@@ -68,12 +68,12 @@ License: MIT.
    `tests/test_i18n.py` and `tests/test_profile_view.py` assert them as
    a locale contract. The dead-key scan must therefore include `tests/`,
    not just `shakevision/` + web JS. All 4 locales stay aligned
-   (762 keys, same placeholders).
+   (780 keys, same placeholders).
 4. **`ui/sidebar_nav.py` has no runtime consumer** — the shell uses a
    `QTabWidget` (main_window.py); only `tests/test_sidebar_nav.py`
    imports the sidebar. Either re-wire it or delete it in a cleanup.
 5. **Python 3.14 is off the CI matrix.** It installs and runs locally
-   (583/583 tests green, §9), but 3.10–3.12 is the supported
+   (586/586 tests green, §9), but 3.10–3.12 is the supported
    configuration — reproduce any 3.14-only bug on 3.12 before chasing it
    (`brew install python@3.12` if needed).
 6. **Docs drift**: CLAUDE.md and `docs/roadmap.md` had lagged behind
@@ -208,7 +208,7 @@ ShakeVision/
 │  ├─ i18n/                      ← Locale system
 │  │  ├─ __init__.py             ← Public API: t(), LocaleService
 │  │  ├─ service.py              ← Singleton + language_changed signal + t()
-│  │  └─ locales/{en,es,fr,zh}.json   (762 flat dotted keys each)
+│  │  └─ locales/{en,es,fr,zh}.json   (780 flat dotted keys each)
 │  │
 │  ├─ utils/                     ← Pure helpers (no Qt)
 │  │  ├─ logging.py              ← Centralized logger
@@ -479,7 +479,7 @@ historical query and rendered both reports.
 | # | Check | How | Result |
 |---|---|---|---|
 | 1 | Package compiles | `.venv/bin/python -m compileall -q shakevision/` | ✅ pass |
-| 2 | Full test suite | `.venv/bin/pytest -q` | ✅ **583 passed** in 3.0 s |
+| 2 | Full test suite | `.venv/bin/pytest -q` | ✅ **586 passed** in 3.0 s |
 | 3 | Lint | `.venv/bin/ruff check .` | ✅ fixed: `[tool.ruff.lint] select = ["E4","E7","E9","F"]` — 0.17.1 and 0.12.7 both clean |
 | 4 | App launches, splash → MainWindow | `.venv/bin/python -m shakevision` | ✅ (harness built MainWindow directly; splash path not exercised) |
 | 5 | 4 top tabs render (Globe/Data/Events/Mine) | visual | ✅ |
@@ -617,6 +617,23 @@ Design/trade-offs: `docs/smooth-live-waveform.md`.
 
 Full inventory/paths/limitations: `docs/functional-paths-audit.md`.
 Tests: **583 passed**.
+
+### Seventh pass — P0/P1 optimization batch
+
+| # | Change | Result |
+|---|---|---|
+| 53 | Workbench station placeholder | ✅ default “Select a station…”, Connect disabled until real preset; 12 tests |
+| 54 | Smooth/Realtime toggle | ✅ sidebar Smooth display; off→realtime, on→+12 s cursor |
+| 55 | Historical count before query | ✅ blank instead of `0/0`; after search `Filtered 5 / 5` |
+| 56 | Replay PSD empty hint | ✅ “Load a time window…” before load, “Select a segment…” after |
+| 57 | Catalog/QuakeML gating | ✅ disabled until P/S picks; enabled after picks |
+| 58 | Partial replay window | ✅ “Ready · 8:28 of 10:00 loaded” |
+| 59 | Rotate tooltip / View history label | ✅ mentions horizontal components; “Open station in Replay” |
+| 60 | Reset Apply/Cancel / report button / favorite toast | ✅ hidden; Data Export report 25 KB; station toast |
+| 61 | SeedLink channel progress | ✅ first-channel waiting vs 3-component streaming |
+| 62 | Globe station search | ✅ 151 USGS datalist + Enter search; opens same station dialog |
+
+Tests: **586 passed**.
 
 ### Sandboxed-agent caveat (not a product issue)
 

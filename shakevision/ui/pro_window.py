@@ -101,6 +101,7 @@ class ProWindow(QMainWindow):
     connect_clicked = Signal()
     disconnect_clicked = Signal()
     listen_clicked = Signal(int, int)       # (seconds, speed_factor)
+    smooth_changed = Signal(bool)           # visualización suave on/off
 
     # Constantes expuestas (MainWindow / controller las leen).
     MODE_LIVE: int = MODE_LIVE
@@ -234,7 +235,9 @@ class ProWindow(QMainWindow):
         # tenía ninguna (default inicial). Replay tiene su propio selector y NO
         # es secuestrado por cambios del combo en vivo.
         self.control_panel.station_changed.connect(self.replay_panel.set_station)
-        self.replay_panel.set_station(self.control_panel.current_station())
+        _live_station = self.control_panel.current_station()
+        if _live_station is not None:
+            self.replay_panel.set_station(_live_station)
         self.control_panel.filter_changed.connect(self.filter_changed)
         # v0.8.0: el filtro de la barra lateral YA NO toca Replay — el modo
         # histórico tiene su propio paso de banda (independiente). Ver
@@ -243,6 +246,7 @@ class ProWindow(QMainWindow):
         self.control_panel.connect_clicked.connect(self.connect_clicked)
         self.control_panel.disconnect_clicked.connect(self.disconnect_clicked)
         self.control_panel.listen_clicked.connect(self.listen_clicked)
+        self.control_panel.smooth_changed.connect(self.smooth_changed)
 
         # ─── Restaurar geometría guardada en sesiones previas ───
         self._restore_geometry()

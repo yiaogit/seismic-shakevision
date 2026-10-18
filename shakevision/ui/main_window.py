@@ -178,6 +178,8 @@ class MainWindow(QMainWindow):
         # (revisión individual), con una barra de alcance en cada pestaña.
         self.dashboard_panel.events_requested.connect(
             lambda: self._tabs.setCurrentIndex(TAB_EVENTS))
+        self.dashboard_panel.report_requested.connect(
+            self._on_export_report)
         self.event_center.data_requested.connect(
             lambda: self._tabs.setCurrentIndex(TAB_DATA))
         self._tabs.addTab(
@@ -250,6 +252,8 @@ class MainWindow(QMainWindow):
             self._workbench.on_disconnect_clicked)
         self.pro_window.listen_clicked.connect(
             self._workbench.on_listen_clicked)
+        self.pro_window.smooth_changed.connect(
+            self._workbench.on_smooth_changed)
         # v0.7.7: las unidades físicas (m/s) las pide la barra del propio
         # oscilograma; el controlador obtiene la sensibilidad. Congelar y
         # los pickers son internos al panel (no necesitan al controlador).
@@ -1131,9 +1135,15 @@ class MainWindow(QMainWindow):
         if clicked is fav_btn:
             if fav_now:
                 FavoritesStore.remove_station(network, code)
+                self._status_bar.showMessage(t(
+                    "status.station_unfavorited",
+                    network=network, code=code), 3500)
             else:
                 FavoritesStore.add_station(
                     network, code, site_name=site or "", provider="usgs")
+                self._status_bar.showMessage(t(
+                    "status.station_favorited",
+                    network=network, code=code), 3500)
             return
 
         if clicked is history_btn:
@@ -1171,9 +1181,10 @@ class MainWindow(QMainWindow):
         self.pro_window.show_live()
         n = self.pro_window.dynamic_station_count()
         if added:
+            key = ("status.station_added_evicted"
+                   if n >= cap else "status.station_added")
             self._status_bar.showMessage(
-                t("status.station_added",
-                  network=network, code=code, n=n, cap=cap),
+                t(key, network=network, code=code, n=n, cap=cap),
                 6000,
             )
         else:

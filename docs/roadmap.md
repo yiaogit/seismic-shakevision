@@ -61,6 +61,9 @@
   Mine 收藏→Replay、Workbench 控件、Kiosk、报告；修复 Stop 的 QThread
   双重释放 segfault、Workbench 置顶时弹窗被挡、Kiosk 快捷键。
   见 `docs/functional-paths-audit.md`。
+- P0/P1 优化：Workbench 台站占位、Smooth/Realtime 开关、历史计数、
+  Replay PSD 提示、Catalog 守卫、部分数据提示、槽位反馈、报告按钮、
+  收藏 toast、Reset 按钮隐藏。见 `docs/optimization-checklist.md`。
 - 地图 → 最近真实台站 IU.PAB（San Pablo，距马德里 111.5 km）：
   地图 Devices → 台站弹窗 → Monitor live → 工作台 Connect。
   网络握手 257 ms / TCP 105 ms / 首包 2.55 s；应用 “Connected” 约 13.1 s

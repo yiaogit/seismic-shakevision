@@ -116,6 +116,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   “Viewed an earthquake” / “station —”。
 
 ### Added
+- **P0/P1 UX batch.** Workbench默认台站占位/Connect gating；Smooth/Realtime
+  开关；历史查询前不显示 `0/0`；Replay 空态 PSD 提示；无 P/S 时禁用
+  Catalog/QuakeML；部分窗口显示 `8:28 of 10:00`；动态台站满槽提示；
+  Rotate/View history 文案；Reset 页隐藏 Apply/Cancel；Data 页增加
+  Export report；台站收藏 toast；SeedLink 首通道/三分量进度提示；
+  Globe 新增 **Find station** 搜索（USGS datalist + Enter 打开同一台站
+  弹窗，解决微小标记难点击）。新增/更新测试至 **586 passed**。
+
 - **Live waveform — 30 Hz smooth playout.** Medido: el timer ya corría a
   30.8 Hz y cada frame tardaba 0.24 ms, pero IRIS entrega ~13 s de datos por
   paquete y el oscilograma solo cambiaba 2 veces en 30 s. Ahora, tras el

@@ -68,8 +68,9 @@ class SpectrumPanel(QFrame):
         self._fdom_line.setVisible(False)
         self._plot.addItem(self._fdom_line, ignoreBounds=True)
 
+        self._empty_key = "spectrum.hint"
         self._empty = pg.TextItem(
-            text=t("spectrum.hint"), color="#9aa0a6", anchor=(0.5, 0.5))
+            text=t(self._empty_key), color="#9aa0a6", anchor=(0.5, 0.5))
         self._plot.addItem(self._empty)
         self._empty.setPos(10.0, -60.0)
 
@@ -105,8 +106,14 @@ class SpectrumPanel(QFrame):
     def reset(self) -> None:
         self.clear()
 
+    def set_hint_key(self, key: str) -> None:
+        """Cambia el texto del estado vacío (p. ej. aún sin cargar datos)."""
+
+        self._empty_key = str(key)
+        self._empty.setText(t(self._empty_key))
+
     def _retranslate(self) -> None:
         self._header.setText(t("spectrum.title"))
         self._plot.setLabel("bottom", t("spectrum.axis_freq"))
         self._plot.setLabel("left", t("spectrum.axis_power"))
-        self._empty.setText(t("spectrum.hint"))
+        self._empty.setText(t(self._empty_key))

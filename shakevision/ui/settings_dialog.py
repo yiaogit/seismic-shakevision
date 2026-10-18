@@ -156,8 +156,8 @@ class SettingsDialog(QDialog):
         """En Reset, Apply/Cancel no aplican: la acción destructiva es aparte."""
 
         is_reset = index == 2
-        self._apply_btn.setEnabled(not is_reset)
-        self._cancel_btn.setEnabled(not is_reset)
+        self._apply_btn.setVisible(not is_reset)
+        self._cancel_btn.setVisible(not is_reset)
 
     def _build_language_section(self) -> QVBoxLayout:
         layout = QVBoxLayout()

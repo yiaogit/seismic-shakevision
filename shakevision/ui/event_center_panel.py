@@ -106,6 +106,7 @@ class EventCenterPanel(QFrame):
         self._quakes: list = []       # lo que se MUESTRA (tras filtros)
         self._live_quakes: list = []  # último feed en vivo
         self._hist_quakes: list = []  # último resultado histórico
+        self._hist_queried: bool = False  # ¿ya se lanzó/completó una búsqueda?
         self._search_index = None     # id → campos buscables localizados (lazy)
         self._cat_cache: dict = {}    # id → (etiqueta, Δ°) cacheado (rendimiento)
         self._worker = None           # FDSNQueryWorker (lazy)
@@ -301,6 +302,7 @@ class EventCenterPanel(QFrame):
         # El dataset activo cambia de fuente según el modo; el refinado cliente
         # (_apply_filters) es el MISMO en los dos.
         self._all_quakes = self._live_quakes if is_live else self._hist_quakes
+        self._hist_queried = bool(is_live or self._hist_quakes)
         self._search_index = None
         self.event_list.set_hint_override(
             None if is_live else "events.hist_prompt")
@@ -322,6 +324,7 @@ class EventCenterPanel(QFrame):
 
         self._hist_quakes = []
         self._all_quakes = []
+        self._hist_queried = False
         self._search_index = None
         self._clear_selection()       # también limpia el panel de cercanas
         # filter_bar.reset() limpia palabra clave / magnitud / profundidad y
@@ -338,11 +341,14 @@ class EventCenterPanel(QFrame):
 
     def _on_historical_search(self, params: dict) -> None:
         self.hist_bar.set_searching(True)
+        self._hist_queried = False
+        self.filter_bar.clear_count()
         self._ensure_worker().query(params)
 
     def _on_hist_results(self, quakes) -> None:
         self.hist_bar.set_searching(False)
         self._hist_quakes = list(quakes)
+        self._hist_queried = True
         if self._mode == MODE_REPLAY:
             # Mismo refinado cliente que en vivo (palabra clave / mag / prof.).
             self._all_quakes = self._hist_quakes
@@ -352,6 +358,8 @@ class EventCenterPanel(QFrame):
 
     def _on_hist_failed(self, message: str, too_many: bool) -> None:
         self.hist_bar.set_searching(False)
+        self._hist_queried = False
+        self.filter_bar.clear_count()
         from PySide6.QtWidgets import QMessageBox
         QMessageBox.warning(self, t("hist.mode_historical"), message)
 
@@ -427,7 +435,10 @@ class EventCenterPanel(QFrame):
         # _quakes = lo mostrado: _on_event_selected / favoritos lo usan.
         self._quakes = filtered
         self._render(filtered)
-        self.filter_bar.set_count(len(filtered), len(self._all_quakes))
+        if self._mode == MODE_REPLAY and not self._hist_queried:
+            self.filter_bar.clear_count()
+        else:
+            self.filter_bar.set_count(len(filtered), len(self._all_quakes))
 
     def _min_station_dist_deg(self, lat: float, lon: float):
         """Δ° a la estación más cercana — O(M) (solo el mínimo, sin ordenar)."""

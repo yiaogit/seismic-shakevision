@@ -773,6 +773,7 @@ class DashboardPanel(QFrame):
     pager_region_changed = Signal(str)
     #: El usuario pulsó "revisar eventos" en la barra de alcance.
     events_requested = Signal()
+    report_requested = Signal()
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -896,6 +897,11 @@ class DashboardPanel(QFrame):
             lambda: self._set_dashboard_mode("analysis"))
         row.addWidget(self.an_mode_live)
         row.addWidget(self.an_mode_an)
+        self.report_btn = QPushButton(t("dashboard.report"))
+        self.report_btn.setObjectName("ChipButton")
+        self.report_btn.setToolTip(t("dashboard.report"))
+        self.report_btn.clicked.connect(self.report_requested.emit)
+        row.addWidget(self.report_btn)
         row.addSpacing(10)
 
         loc = self._current_lang()
