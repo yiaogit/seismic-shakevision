@@ -463,7 +463,7 @@ See `CHANGELOG.md` for the source-of-truth detail.
 | Analysis time window / range slider | `ui/range_slider.py` + `utils/timescale.py` |
 | Quake filtering (mag/depth/text) | `processing/event_filter.py` + `ui/event_filter_bar.py` |
 | Inspect what got released | `curl -s https://api.github.com/repos/yiaogit/seismic-shakevision/releases` |
-| **Design docs index** | `docs/`: `dashboard-pro.md` · `workbench-restructure.md` · `smooth-live-waveform.md` · `events-i18n-timezone.md` · `replay-redesign.md` · `roadmap.md` · `ux-review.md` · `audit-0.7.7.md` · `seismic-software-survey.md` |
+| **Design docs index** | `docs/`: `dashboard-pro.md` · `workbench-restructure.md` · `smooth-live-waveform.md` · `functional-paths-audit.md` · `events-i18n-timezone.md` · `replay-redesign.md` · `roadmap.md` · `ux-review.md` · `audit-0.7.7.md` · `seismic-software-survey.md` |
 | **Workbench station/event flow & 2-mode restructure** | **`docs/workbench-restructure.md`** — source of truth for how stations/events route into Live vs Replay; read BEFORE changing `pro_window` / `control_panel` / `replay_panel` station wiring |
 
 ---
@@ -595,6 +595,28 @@ Replay empty, plus light Data/Events).
 | 38 | Detection/MMI | ✅ still use latest window; only the visual waveform is delayed |
 
 Design/trade-offs: `docs/smooth-live-waveform.md`.
+
+### Sixth pass — full functional-path E2E
+
+| # | Chain | Result |
+|---|---|---|
+| 39 | Globe rotate/layers/period/camera | ✅ 10/10 |
+| 40 | Station dialog Favorite / Monitor live→Connect→Stop / View history | ✅ |
+| 41 | Quake dialog Favorite / Review→picker→Replay | ✅ |
+| 42 | Data Live/Analysis/scope→Events | ✅ |
+| 43 | Events Live/Historical/filters/favorite/station double-click→Replay | ✅ |
+| 44 | Mine favorites→picker→Replay→Load; station→Monitor live; unfavorite | ✅ |
+| 45 | Workbench filters/freeze/picks/FFT/log/24h/Hodogram/MMI | ✅ |
+| 46 | Replay PSD/spec/FFT/CSV/PNG/catalog (with P/S) | ✅ |
+| 47 | **Stop segfault found/fixed** — 3× Connect/Stop + close with live source clean | ✅ |
+| 48 | Workbench-visible dialogs/settings/profile parent fix | ✅ |
+| 49 | Kiosk F11/Esc ApplicationShortcut | ✅ |
+| 50 | Report HTML; station history; events filters; scope link | ✅ |
+| 51 | Settings/Profile direct; gear automation limited by macOS activation | ⚠️ recheck on desktop |
+| 52 | WebGL marker actual mouse hit-test not automatable; bridge used for same dialog | ⚠️ automation limit |
+
+Full inventory/paths/limitations: `docs/functional-paths-audit.md`.
+Tests: **583 passed**.
 
 ### Sandboxed-agent caveat (not a product issue)
 

@@ -78,6 +78,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   selección por defecto ampliada, mientras 0.12.7 daba el árbol limpio.
 
 ### Fixed
+- **Stop 时 SIGSEGV（严重回归）。** 连接任意 SeedLink 台站后点 Stop，
+  `SeedLinkSource` 的 worker/QThread 同时被 `deleteLater` 和 Python
+  包装器析构，QThread 双重释放 → 进程 segfault（等待事件循环时复现，
+  与平滑预填充无关）。移除 `thread.finished → deleteLater`，由 source
+  在 `_on_thread_finished` 后释放；连续 3 次 Connect/Stop 和带活动流
+  关闭窗口均正常。
+- **Workbench 置顶时弹窗跑到后面。** 台站/地震/QInputDialog/Settings/
+  Profile/GitHub 登录统一使用 `_dialog_parent()`：Workbench 可见时以
+  它为父窗口。修复 Review 选择器不可见、后续 Settings/Profile 被
+  阻塞的问题。
+- **Kiosk 快捷键失效。** F11/Esc 从 WindowShortcut 改为
+  ApplicationShortcut 并保留引用，Workbench/WebEngine 获得焦点时也能
+  进入/退出；F11 进入、Esc 退出复测通过。
+- **全功能链路审计。** 新增 `docs/functional-paths-audit.md`：真实
+  UI 走 Globe/Data/Events/Mine/Workbench/Replay/Settings/Profile/
+  报告/Kiosk 链路，记录 3 个真实缺陷修复、自动化限制与完善空间。
+
 - **UI 逐页巡检 — 空态、Workbench/回放、Mine、设置与活动日志。** 为
   Waveform/Spectrogram 增加真正的占位状态（不再显示 0.1–0.9 s、
   00:00:00、±400 与 `(x0.001)` 等无意义空轴）；Replay 空态显示

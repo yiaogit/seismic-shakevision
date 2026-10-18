@@ -25,6 +25,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -259,8 +260,18 @@ class MainWindow(QMainWindow):
         # SWARM): F11 alterna; Esc sale. Oculta cabecera + barra de pestañas
         # para una vista limpia del globo/datos.
         self._kiosk: bool = False
-        QShortcut(QKeySequence("F11"), self, activated=self._toggle_kiosk)
-        QShortcut(QKeySequence("Esc"), self, activated=self._exit_kiosk)
+        # ApplicationShortcut: funciona aunque el foco esté en el Workbench
+        # o dentro de QWebEngine (WindowShortcut solo respondía con la
+        # MainWindow activa; Esc quedaba atrapado y no se podía salir).
+        # Guardamos referencias: un QShortcut sin padre Python puede ser
+        # recolectado y dejar el atajo muerto.
+        self._kiosk_shortcuts = []
+        for key, slot in (("F11", self._toggle_kiosk),
+                          ("Esc", self._exit_kiosk)):
+            sc = QShortcut(QKeySequence(key), self)
+            sc.setContext(Qt.ApplicationShortcut)
+            sc.activated.connect(slot)
+            self._kiosk_shortcuts.append(sc)
 
         # Atajos cómodos a los paneles internos del banco de trabajo —
         # permiten que el resto de MainWindow siga escribiendo
@@ -684,7 +695,7 @@ class MainWindow(QMainWindow):
             return
 
         when = datetime.fromtimestamp(quake.timestamp_unix, tz=timezone.utc)
-        box = QMessageBox(self)
+        box = QMessageBox(self._dialog_parent())
         box.setWindowTitle(t("dialog.replay_event.title"))
         box.setText(t("dialog.replay_event.body",
                       mag=f"{quake.magnitude:.1f}", place=quake.place,
@@ -749,6 +760,22 @@ class MainWindow(QMainWindow):
         scored.sort(key=lambda it: it[1])
         return scored[:k]
 
+    def _dialog_parent(self):
+        """Padre para diálogos: si el Workbench está abierto, usarlo.
+
+        Con el Workbench en primer plano, un QInputDialog/QMessageBox
+        parentado a MainWindow podía quedar DETRÁS y parecer que el botón
+        "Review"/"Monitor live" no hacía nada; además bloqueaba los
+        siguientes diálogos. Parentar a la ventana visible lo trae al frente.
+        """
+
+        try:
+            if self.pro_window is not None and self.pro_window.isVisible():
+                return self.pro_window
+        except (RuntimeError, AttributeError):
+            pass
+        return self
+
     def _pick_review_station(self, nearest, bound_net: str = "",
                              bound_sta: str = ""):
         """Diálogo para elegir con QUÉ estación cercana revisar. Pre-selecciona
@@ -766,8 +793,8 @@ class MainWindow(QMainWindow):
                 default_idx = i
                 break
         text, ok = QInputDialog.getItem(
-            self, t("mine.pick_station_title"), t("mine.pick_station_label"),
-            items, default_idx, False)
+            self._dialog_parent(), t("mine.pick_station_title"),
+            t("mine.pick_station_label"), items, default_idx, False)
         if not ok:
             return None
         try:
@@ -1078,7 +1105,7 @@ class MainWindow(QMainWindow):
             slot=used + 1, cap=cap,
         )
         from shakevision.services.favorites_store import FavoritesStore
-        box = QMessageBox(self)
+        box = QMessageBox(self._dialog_parent())
         box.setWindowTitle(t("dialog.usgs.title", network=network, code=code))
         box.setText(msg)
         # v0.8.0: DOS-en-uno — el usuario elige la INTENCIÓN:
@@ -1392,7 +1419,7 @@ class MainWindow(QMainWindow):
 
         from shakevision.ui.settings_dialog import SettingsDialog
 
-        dlg = SettingsDialog(self)
+        dlg = SettingsDialog(self._dialog_parent())
         dlg.settings_applied.connect(self._on_settings_applied)
         dlg.exec()
 
@@ -1436,7 +1463,7 @@ class MainWindow(QMainWindow):
         from shakevision.ui.profile_dialog import ProfileDialog
 
         if self.profile_dialog is None:
-            self.profile_dialog = ProfileDialog(self)
+            self.profile_dialog = ProfileDialog(self._dialog_parent())
             self.profile_dialog.request_github_login.connect(
                 self._open_github_login_dialog)
         else:
@@ -1452,7 +1479,7 @@ class MainWindow(QMainWindow):
 
         from shakevision.ui.github_login_dialog import GitHubLoginDialog
 
-        dlg = GitHubLoginDialog(self)
+        dlg = GitHubLoginDialog(self._dialog_parent())
         # Refrescar el Profile dialog si está visible
         dlg.logged_in.connect(
             lambda _u: self.profile_dialog and self.profile_dialog.refresh())

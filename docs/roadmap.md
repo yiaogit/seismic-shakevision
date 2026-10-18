@@ -57,6 +57,10 @@
 - Live 波形平滑：预填充 60 s 历史 + 12 s playout 缓冲，IU.PAB 实测
   29.8 Hz、97% 帧有时间推进；检测/MMI 仍用最新数据。见
   `docs/smooth-live-waveform.md`。
+- 全功能链路审计：Globe 自转/图层/台站弹窗→工作台、Data/Events 历史、
+  Mine 收藏→Replay、Workbench 控件、Kiosk、报告；修复 Stop 的 QThread
+  双重释放 segfault、Workbench 置顶时弹窗被挡、Kiosk 快捷键。
+  见 `docs/functional-paths-audit.md`。
 - 地图 → 最近真实台站 IU.PAB（San Pablo，距马德里 111.5 km）：
   地图 Devices → 台站弹窗 → Monitor live → 工作台 Connect。
   网络握手 257 ms / TCP 105 ms / 首包 2.55 s；应用 “Connected” 约 13.1 s

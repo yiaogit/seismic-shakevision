@@ -572,8 +572,11 @@ class SeedLinkSource(DataSource):
         # sigue bloqueado en el pre-check unos segundos). worker e hilo se
         # liberan con el patrón estándar de Qt (finished → deleteLater).
         SeedLinkSource._closing.add(self)
-        self._thread.finished.connect(self._worker.deleteLater)
-        self._thread.finished.connect(self._thread.deleteLater)
+        # No usar deleteLater para worker/thread: la fuente mantiene ambos
+        # como atributos Python y ``_on_thread_finished`` suelta la referencia
+        # fuerte cuando el hilo ya terminó. Programar deleteLater ADEMÁS de
+        # dejar que el GC destruya los wrappers provocaba un doble delete del
+        # QThread (segfault al pulsar Detener, visible en QObjectWrapper).
         self._thread.finished.connect(self._on_thread_finished)
         self._thread.quit()
         if wait_ms > 0:
