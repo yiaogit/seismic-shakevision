@@ -46,10 +46,10 @@ License: MIT.
 
 | Item | Value |
 |---|---|
-| Current version (4 files, see §5) | **0.9.0.0** — ready to tag; `[Unreleased]` empty |
-| Latest tag pushed to origin | `v0.8.3.0` (commit `dd45523`, 2026-06-28); `v0.9.0.0` pending |
-| HEAD | `main` @ `9ca4f8f` (release commit; pushed pending write access) |
-| Latest **release with installers** on GitHub Releases | `v0.8.3.0` — macOS arm64 `.dmg`, Windows `.zip`, Linux `.AppImage` + `SHA256SUMS.txt`; `v0.9.0.0` pending |
+| Current version (4 files, see §5) | **0.9.0.0** — tagged + released; `[Unreleased]` empty |
+| Latest tag pushed to origin | `v0.9.0.0` (commit `d0797c1`, 2026-10-18) |
+| HEAD | `main` @ `577fb05` + release-workflow checksum fix |
+| Latest **release with installers** on GitHub Releases | `v0.9.0.0` — macOS arm64 `.dmg`, Windows `.zip`, Linux `.AppImage` + `SHA256SUMS.txt` |
 | Branch | `main` |
 | Python | 3.10 / 3.11 / 3.12 (CI matrix); 3.14 runs locally but is **off-matrix** |
 | Qt binding | PySide6 |
@@ -59,24 +59,27 @@ License: MIT.
 
 1. **Auto-update L1 exists** (manifest + notification + SHA-256 verified
    download); silent install/signature/rollback remain L2 for v1.0.
-2. **GUI / obspy tests need full deps + a display.** Pure tests
+2. **CI Linux Python <3.12 pins PySide6 6.11.2.** PySide6 6.12 aborts in
+   CPython 3.10/3.11 finalization (`none_dealloc`) after pytest; 3.12 and
+   macOS/Windows use 6.12. The app supports PySide6 >=6.6.
+3. **GUI / obspy tests need full deps + a display.** Pure tests
    (i18n / measurements / recordings_list / response / seismic_stats /
    event_filter…) run headless; the full suite needs the venv from §5
    on a real machine (see §9).
-3. **Two intentionally-unused i18n keys** (`common.cancel`,
+4. **Two intentionally-unused i18n keys** (`common.cancel`,
    `profile.tab_title`): the app never calls them, but
    `tests/test_i18n.py` and `tests/test_profile_view.py` assert them as
    a locale contract. The dead-key scan must therefore include `tests/`,
    not just `shakevision/` + web JS. All 4 locales stay aligned
    (803 keys, same placeholders).
-4. **`ui/sidebar_nav.py` has no runtime consumer** — the shell uses a
+5. **`ui/sidebar_nav.py` has no runtime consumer** — the shell uses a
    `QTabWidget` (main_window.py); only `tests/test_sidebar_nav.py`
    imports the sidebar. Either re-wire it or delete it in a cleanup.
-5. **Python 3.14 is off the CI matrix.** It installs and runs locally
+6. **Python 3.14 is off the CI matrix.** It installs and runs locally
    (595/595 tests green, §9), but 3.10–3.12 is the supported
    configuration — reproduce any 3.14-only bug on 3.12 before chasing it
    (`brew install python@3.12` if needed).
-6. **Docs drift**: CLAUDE.md and `docs/roadmap.md` had lagged behind
+7. **Docs drift**: CLAUDE.md and `docs/roadmap.md` had lagged behind
    0.8.x. Update this file in the same commit as any version bump.
 
 ---
@@ -480,7 +483,7 @@ historical query and rendered both reports.
 | # | Check | How | Result |
 |---|---|---|---|
 | 1 | Package compiles | `.venv/bin/python -m compileall -q shakevision/` | ✅ pass |
-| 2 | Full test suite | `.venv/bin/pytest -q` | ✅ **595 passed** in 3.0 s |
+| 2 | Full test suite | `.venv/bin/pytest -q` | ✅ **595 passed** in 3.3 s; GitHub CI 9/9 green |
 | 3 | Lint | `.venv/bin/ruff check .` | ✅ fixed: `[tool.ruff.lint] select = ["E4","E7","E9","F"]` — 0.17.1 and 0.12.7 both clean |
 | 4 | App launches, splash → MainWindow | `.venv/bin/python -m shakevision` | ✅ (harness built MainWindow directly; splash path not exercised) |
 | 5 | 4 top tabs render (Globe/Data/Events/Mine) | visual | ✅ |

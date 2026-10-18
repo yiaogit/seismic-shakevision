@@ -208,8 +208,10 @@ jobs:
           find artifacts -type f \( -name '*.zip' -o -name '*.dmg' -o -name '*.AppImage' \) \
               -exec cp {} release/ \;
           # Combinar checksums de los 3 jobs en un solo archivo
+          # Windows escribe checksums con CRLF; normalizar antes de
+          # combinarlos o `sha256sum -c` falla en Linux/macOS.
           find artifacts -name 'ShakeVision-*-checksums.txt' -exec cat {} \; \
-              | sort -u > release/SHA256SUMS.txt
+              | tr -d '\r' | sort -u > release/SHA256SUMS.txt
           ls -lh release/
 
       - name: Extract release notes from CHANGELOG.md
