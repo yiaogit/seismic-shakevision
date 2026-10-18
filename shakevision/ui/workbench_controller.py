@@ -454,6 +454,7 @@ class WorkbenchController(QObject):
             from shakevision.config import seedlink_channels_for as _chs
             zc, nc, ec = _chs(preset.network)
             self._view.waveform_panel.set_channel_labels(zc, nc, ec)
+            self._view.helicorder_panel.set_channel(zc)
         except (RuntimeError, AttributeError, ValueError):
             pass
         self._connected = False
@@ -528,6 +529,14 @@ class WorkbenchController(QObject):
         if not self._connected:
             self._connected = True
             self.connection_status_changed.emit("Conectado", "StatusOk")
+            try:
+                from shakevision.services.usage_tracker import UsageTracker
+                UsageTracker.record_station_streamed(
+                    f"{self._current_station.network}."
+                    f"{self._current_station.station}")
+            except Exception:  # noqa: BLE001
+                logger.debug("UsageTracker.record_station_streamed falló",
+                             exc_info=True)
             # v0.7.7: streaming — detener el spinner y mostrar "recibiendo
             # datos" (estado estable).
             self._set_panel_progress(

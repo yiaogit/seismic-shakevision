@@ -248,6 +248,12 @@ def _build_qss(p: dict[str, str]) -> str:
         background-color: transparent;
         font-size: {FONT_SIZE_LABEL}px;
     }}
+    QLabel#EmptyState {{
+        color: {p["text_muted"]};
+        background-color: transparent;
+        font-size: 12px;
+        padding: 12px;
+    }}
 
     /* ── INPUTS (ComboBox, SpinBox, LineEdit, DateTime) ──
        Estilo "pill" macOS: rounded 8px, padding cómodo, focus

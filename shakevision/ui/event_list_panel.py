@@ -75,6 +75,7 @@ class EventListPanel(QFrame):
 
         self._loaded_once = False
         self._has_data = False
+        self._hint_override_key: Optional[str] = None
         # Estado del recorte a _MAX_ROWS. Se guarda para poder reconstruir el
         # aviso traducido en cada cambio de idioma (antes se perdía).
         self._capped_total = 0
@@ -107,18 +108,27 @@ class EventListPanel(QFrame):
     def _update_hint(self) -> None:
         """Estado del listado: cargando / recortado / sin eventos / instrucción."""
 
-        if not self._loaded_once:
-            self._hint.setText(t("events.loading"))
-        elif self._capped_total > _MAX_ROWS:
+        if self._capped_total > _MAX_ROWS:
             # Se pintan solo las N más recientes: avisar SIEMPRE (también tras
             # un cambio de idioma) para no confundir con el total filtrado.
             self._hint.setText(t(
                 "events.showing_capped",
                 shown=self._capped_shown, total=self._capped_total))
+        elif not self._has_data and self._hint_override_key:
+            self._hint.setText(t(self._hint_override_key))
+        elif not self._loaded_once:
+            self._hint.setText(t("events.loading"))
         elif not self._has_data:
             self._hint.setText(t("events.empty"))
         else:
             self._hint.setText(t("events.hint"))
+
+    def set_hint_override(self, key: Optional[str]) -> None:
+        """Fuerza un texto de ayuda mientras no haya datos (p. ej. histórico
+        sin búsqueda aún). Pasar ``None`` para volver al hint normal."""
+
+        self._hint_override_key = key
+        self._update_hint()
 
     def set_events(self, quakes, categories: Optional[dict] = None) -> None:
         """Rellena la tabla con la lista de ``Earthquake`` (recientes primero).

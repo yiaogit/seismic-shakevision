@@ -436,7 +436,7 @@ class ReplayPanel(QWidget):
 
         btn_row.addStretch(1)
 
-        self.status_label = QLabel("")
+        self.status_label = QLabel(t("replay.empty_hint"))
         self.status_label.setObjectName("StatusValue")
         btn_row.addWidget(self.status_label)
 
@@ -463,6 +463,13 @@ class ReplayPanel(QWidget):
         self.spectrogram_panel.fft_window_changed.connect(
             self._on_fft_window_changed)
         self.spectrum_panel = SpectrumPanel(parent=splitter)
+        # Etiquetas iniciales del estado vacío: sin esto el navegador mostraba
+        # EHZ/EHN/EHE y "STATION: —" aunque el combo ya dijera IU.ANMO/BH.
+        _band = (self._cha or "BHZ")[:2]
+        self.waveform_panel.set_station_label(f"{self._net}.{self._sta}")
+        self.waveform_panel.set_channel_labels(
+            f"{_band}Z", f"{_band}N", f"{_band}E")
+        self.spectrogram_panel.set_channel(f"{_band}Z")
         splitter.addWidget(self.waveform_panel)
         splitter.addWidget(self.spectrogram_panel)
         splitter.addWidget(self.spectrum_panel)
@@ -511,6 +518,8 @@ class ReplayPanel(QWidget):
         self._lbl_output.setText(t("replay.field.output"))
         self._apply_output_texts()
         self._lbl_dur_preset.setText(t("replay.field.duration_preset"))
+        if not self.status_label.text():
+            self.status_label.setText(t("replay.empty_hint"))
         self._update_station_display()
 
     def _apply_output_texts(self) -> None:
@@ -548,6 +557,14 @@ class ReplayPanel(QWidget):
             self._net, self._sta, self._loc, (self._cha or "BH")[:2])
         if idx >= 0:
             self._select_station_index(idx)
+        if not self._rotated:
+            band = (self._cha or "BHZ")[:2]
+            self.waveform_panel.set_channel_labels(
+                f"{band}Z", f"{band}N", f"{band}E")
+            self.spectrogram_panel.set_channel(f"{band}Z")
+        if self._loaded_arrays is None:
+            self.waveform_panel.set_station_label(
+                f"{self._net}.{self._sta}")
 
     def _update_station_hint(self) -> None:
         """Aclara de dónde viene la estación: sigue al combo (modo normal) o es

@@ -157,6 +157,14 @@ class SpectrogramPanel(QFrame):
         header_row.addWidget(self._log_btn)
         layout.addLayout(header_row)
 
+        # Placeholder hasta el primer espectro (evita ejes -400..400 con
+        # prefijos x0.001 y un mapa vacío sin explicación).
+        self._empty = QLabel(t("spectrogram.waiting"))
+        self._empty.setObjectName("EmptyState")
+        self._empty.setAlignment(Qt.AlignCenter)
+        self._empty.setWordWrap(True)
+        layout.addWidget(self._empty, stretch=1)
+
         # PlotWidget contenedor — v0.6 P11: theme-aware
         self._freq_axis = _FreqAxisItem(orientation="left")
         if self._absolute_time:
@@ -180,6 +188,7 @@ class SpectrogramPanel(QFrame):
         from shakevision.ui.pg_theming import subscribe_pg_plot
         subscribe_pg_plot(self._plot)
         layout.addWidget(self._plot, stretch=1)
+        self._plot.setVisible(False)
 
         subscribe(self, LocaleService.language_changed_signal(),
                   self._retranslate)  # v0.7.7 (B1)
@@ -227,10 +236,16 @@ class SpectrogramPanel(QFrame):
                 pass
         except Exception:  # noqa: BLE001
             self._colorbar = None
+        self._set_empty(True)
 
     # ------------------------------------------------------------------
     # API pública
     # ------------------------------------------------------------------
+    def _set_empty(self, empty: bool) -> None:
+        """Placeholder visible y plot oculto hasta el primer espectro."""
+
+        self._empty.setVisible(bool(empty))
+        self._plot.setVisible(not empty)
     def _time_axis_label(self) -> str:
         return t("spectrogram.axis_time_utc" if self._absolute_time
                  else "spectrogram.axis_time")
@@ -300,6 +315,7 @@ class SpectrogramPanel(QFrame):
         """Re-aplica labels traducidos al cambiar idioma."""
 
         self._apply_header()
+        self._empty.setText(t("spectrogram.waiting"))
         self._fft_label.setText(t("spectrogram.fft_window"))
         self._log_btn.setText(t("spectrogram.log_freq"))
         self._plot.setLabel("bottom", self._time_axis_label())
@@ -317,6 +333,7 @@ class SpectrogramPanel(QFrame):
             return
         self._last_spectrum = spectrum
         self._last_t0_abs = t0_abs
+        self._set_empty(False)
         self._redraw_spectrum()
 
     def _redraw_spectrum(self) -> None:
@@ -380,6 +397,7 @@ class SpectrogramPanel(QFrame):
         self._last_spectrum = None
         self._last_t0_abs = None
         self._image.clear()
+        self._set_empty(True)
 
     def set_db_range(self, db_min: float, db_max: float) -> None:
         """Permite al usuario ajustar el rango dinámico mostrado."""

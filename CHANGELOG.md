@@ -77,6 +77,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   fija el conjunto histórico: ruff 0.17.1 reportaba 576 hallazgos con su
   selección por defecto ampliada, mientras 0.12.7 daba el árbol limpio.
 
+### Fixed
+- **UI 逐页巡检 — 空态、Workbench/回放、Mine、设置与活动日志。** 为
+  Waveform/Spectrogram 增加真正的占位状态（不再显示 0.1–0.9 s、
+  00:00:00、±400 与 `(x0.001)` 等无意义空轴）；Replay 空态显示
+  `IU.ANMO`/`BHZ` 而不是 `STATION: —`/EHZ，PSD 空态固定为 0–20 Hz /
+  −120–0 dB；helicorder 标题跟随实际波段（BHZ），并提示 24 h 记录实时填充。
+- **顶栏与设置细节。** 版本 chip 从整条 56 px 高缩为 22 px，`·` 分隔符
+  ／状态标签透明化，去掉了深色块；Settings 的 Reset 卡片标签透明、
+  增加内边距，地址输入框加宽，Reset 页禁用 Apply/Cancel（破坏性操作
+  独立）。Mine 无收藏时显示引导文案，未选中行时禁用 Unfavorite。
+- **分析页/事件页日期与 KPI。** “Most recent” 超过 48 h 显示天数
+  （如 13 d ago），不再出现 311.5 h；RangeSlider 右侧留出 24 px，
+  避免最后一个日期被滚动条裁切；事件历史未查询时提示“先选择筛选并
+  点 Search catalog”，不再显示 No recent earthquakes。
+- **活动日志与计数。** 地图台站点击现在记录 `network.code`（之前
+  记录为空 → “Inspected station ?”），地震复核记录 place/mag（之前
+  “M? near ?”），连接成功记录 streamed；旧的无参条目回退为
+  “Viewed an earthquake” / “station —”。
+
 ### Added
 - **Panel de datos — estado vacío de Análisis.** Al entrar en “Analizar” sin
   catálogo histórico (o si `/count` supera 20 000) ya no se muestran los KPIs

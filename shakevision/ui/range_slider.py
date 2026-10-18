@@ -90,7 +90,9 @@ class RangeSlider(QWidget):
 
     # ── Geometría ────────────────────────────────────────────────────
     def _track_w(self) -> float:
-        return max(1.0, self.width() - 2 * _PAD)
+        # 24 px extra a la derecha: el último tick/etiqueta no puede quedar
+        # debajo del scrollbar de la página (se veía '2026-10-' cortado).
+        return max(1.0, self.width() - 2 * _PAD - 24)
 
     def _x_for(self, value: float) -> float:
         f = _ts.frac_for_value(value, self._t_min, self._t_max, self._warp)
@@ -140,7 +142,12 @@ class RangeSlider(QWidget):
             tx = _PAD + frac * self._track_w()
             label = _dt.datetime.fromtimestamp(
                 xv, tz=_dt.timezone.utc).strftime(fmt)
-            p.drawText(QRectF(tx - 24, y + 10, 48, 12),
+            # La caja de 48 px se salía por la derecha en la última marca
+            # (2026-10 quedaba cortado). Acotarla al ancho del widget.
+            box_w = 48.0
+            box_x = min(max(0.0, tx - box_w / 2.0),
+                        max(0.0, self.width() - box_w))
+            p.drawText(QRectF(box_x, y + 10, box_w, 12),
                        Qt.AlignHCenter, label)
 
         # Manijas.

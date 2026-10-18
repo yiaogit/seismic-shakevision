@@ -453,9 +453,19 @@ class ProfileView(QFrame):
         ts = int(entry.get("ts", 0))
         kind = str(entry.get("kind", ""))
         params = entry.get("params", {}) or {}
+        if kind == "station_clicked" and str(params.get("station", "")) in ("", "?"):
+            # Entradas antiguas se grabaron sin network/code → no mostrar "?"
+            params = dict(params)
+            params["station"] = "—"
         rel = format_relative_time(ts)
-        # i18n key por kind. Si falta, mostramos el kind crudo.
-        i18n_key = f"activity.{kind}"
+        if kind == "quake_viewed" and (
+                str(params.get("place", "")) in ("", "?")
+                or str(params.get("mag", "")) in ("", "?")):
+            # Entrada antigua sin datos útiles: no mostrar "M? near ?".
+            i18n_key = "activity.quake_viewed_generic"
+            params = {}
+        else:
+            i18n_key = f"activity.{kind}"
         try:
             desc = t(i18n_key, **{str(k): str(v) for k, v in params.items()})
         except Exception:  # noqa: BLE001

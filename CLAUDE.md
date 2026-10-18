@@ -53,7 +53,7 @@ License: MIT.
 | Branch | `main` |
 | Python | 3.10 / 3.11 / 3.12 (CI matrix); 3.14 runs locally but is **off-matrix** |
 | Qt binding | PySide6 |
-| i18n keys | **752** per locale (en/es/fr/zh), aligned |
+| i18n keys | **761** per locale (en/es/fr/zh), aligned |
 
 ### Known issues / unfinished
 
@@ -68,7 +68,7 @@ License: MIT.
    `tests/test_i18n.py` and `tests/test_profile_view.py` assert them as
    a locale contract. The dead-key scan must therefore include `tests/`,
    not just `shakevision/` + web JS. All 4 locales stay aligned
-   (752 keys, same placeholders).
+   (761 keys, same placeholders).
 4. **`ui/sidebar_nav.py` has no runtime consumer** — the shell uses a
    `QTabWidget` (main_window.py); only `tests/test_sidebar_nav.py`
    imports the sidebar. Either re-wire it or delete it in a cleanup.
@@ -208,7 +208,7 @@ ShakeVision/
 │  ├─ i18n/                      ← Locale system
 │  │  ├─ __init__.py             ← Public API: t(), LocaleService
 │  │  ├─ service.py              ← Singleton + language_changed signal + t()
-│  │  └─ locales/{en,es,fr,zh}.json   (752 flat dotted keys each)
+│  │  └─ locales/{en,es,fr,zh}.json   (761 flat dotted keys each)
 │  │
 │  ├─ utils/                     ← Pure helpers (no Qt)
 │  │  ├─ logging.py              ← Centralized logger
@@ -564,6 +564,24 @@ historical query and rendered both reports.
 | 23 | UX P2 scope bars | ✅ Data “Review events →” switches to Events; Events “Statistics view →” switches to Data |
 | 24 | Compact layout | ✅ Replay 1200×800: waveform 242 px (3 traces + labels), spectrogram 150 px, PSD 100 px; colorbar 4 ticks |
 | 25 | Map → nearby real station | ✅ Globe → Devices → IU.PAB (San Pablo, 111.5 km) dialog → “Monitor live” → Workbench → Connect; panel/header show IU.PAB. Raw: TCP 105 ms, SeedLink handshake 257 ms, SELECT 103 ms, first packet 2.55 s. App “Connected” 13.1 s after Connect (10 s channel grace + IRIS 13 s packet batching), live latency 10.8–16.7 s |
+
+### Fourth pass — full UI review
+
+Captured every top-level page/state and Workbench subpage to
+`/tmp/sg_shots/ui_review/` (Globe/Devices, Data Live/Analysis empty+result,
+Events Live/selected/Historical, Mine empty/populated, Settings 3 tabs,
+Profile, station dialog, Workbench Live empty/connected, 24h, Hodogram,
+Replay empty, plus light Data/Events).
+
+| # | Check | Result |
+|---|---|---|
+| 26 | Empty states | ✅ Workbench/Replay no longer show meaningless empty axes; waiting labels + Replay station/channel (IU.ANMO/BHZ) correct |
+| 27 | Helicorder | ✅ Header follows actual band (`BHZ`), plus “collecting data” hint; no longer hardcoded EHZ |
+| 28 | Header | ✅ version chip 22 px, separators/status labels transparent; dark blocks removed |
+| 29 | Mine | ✅ empty-state guidance, Unfavorite disabled until row selected |
+| 30 | Settings/Profile | ✅ Reset labels transparent/padded, Apply/Cancel disabled on Reset, address field wider; activity station/quake/stream logging fixed (no more “?”) |
+| 31 | Analysis/History dates | ✅ “13 d ago” instead of 311.5 h; slider last date inset; historical no-query hint |
+| 32 | Light theme spot check | ✅ Data/Events remain readable, charts render after initial paint |
 
 ### Sandboxed-agent caveat (not a product issue)
 

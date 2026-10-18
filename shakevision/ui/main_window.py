@@ -791,6 +791,15 @@ class MainWindow(QMainWindow):
 
         from datetime import datetime, timezone
         when = datetime.fromtimestamp(quake.timestamp_unix, tz=timezone.utc)
+        # Métrica/actividad: cuenta y registra el sismo revisado (antes se
+        # llamaba sin argumentos o no se llamaba → "M? near ?").
+        try:
+            from shakevision.services.usage_tracker import UsageTracker
+            UsageTracker.record_earthquake_viewed(
+                quake.place or "", quake.magnitude)
+        except Exception:  # noqa: BLE001
+            logger.debug("UsageTracker.record_earthquake_viewed falló",
+                         exc_info=True)
         self.pro_window.show_and_focus()
         self.pro_window.show_replay()
         # Tip para usuarios de UN solo monitor: el análisis abre en OTRA ventana
@@ -1011,7 +1020,7 @@ class MainWindow(QMainWindow):
         # interactuando con el globo.
         try:
             from shakevision.services.usage_tracker import UsageTracker
-            UsageTracker.record_station_clicked()
+            UsageTracker.record_station_clicked(network, code)
         except Exception:  # noqa: BLE001 — métricas nunca rompen UI
             logger.debug("UsageTracker.record_station_clicked falló",
                          exc_info=True)

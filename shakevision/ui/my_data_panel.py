@@ -88,6 +88,14 @@ class MyDataPanel(QFrame):
         self.filter_bar.filter_changed.connect(self.refresh)
         root.addWidget(self.filter_bar)
 
+        # Estado vacío global: sin esto quedaban dos tablas grandes en blanco
+        # sin explicar qué hacer.
+        self._empty_hint = QLabel("")
+        self._empty_hint.setObjectName("Caption")
+        self._empty_hint.setWordWrap(True)
+        self._empty_hint.setVisible(False)
+        root.addWidget(self._empty_hint)
+
         outer = QSplitter(Qt.Vertical, parent=self)
 
         # ───── Bloque 1: Favoritos ─────
@@ -96,11 +104,13 @@ class MyDataPanel(QFrame):
             self._make_section(t("mine.fav_events"), t("mine.unfav"), 3)
         self._ev_table.itemDoubleClicked.connect(self._on_event_activated)
         self._ev_del.clicked.connect(self._on_unfav_event)
+        self._ev_table.itemSelectionChanged.connect(self._update_action_states)
         fav.addWidget(self._ev_box)
         self._st_table, self._st_box, self._st_hdr, self._st_del, _ = \
             self._make_section(t("mine.fav_stations"), t("mine.unfav"), 2)
         self._st_table.itemDoubleClicked.connect(self._on_station_activated)
         self._st_del.clicked.connect(self._on_unfav_station)
+        self._st_table.itemSelectionChanged.connect(self._update_action_states)
         fav.addWidget(self._st_box)
         outer.addWidget(fav)
 
@@ -112,6 +122,7 @@ class MyDataPanel(QFrame):
             open_btn_text=t("local.open_folder"))
         self._rec_table.itemDoubleClicked.connect(self._on_recording_activated)
         self._rec_del.clicked.connect(self._on_delete_recording)
+        self._rec_table.itemSelectionChanged.connect(self._update_action_states)
         self._rec_open.clicked.connect(self._on_open_recordings_folder)
         rec.addWidget(self._rec_box)
         (self._cat_table, self._cat_box, self._cat_hdr, self._cat_del,
@@ -120,6 +131,7 @@ class MyDataPanel(QFrame):
             open_btn_text=t("local.open_folder"))
         self._cat_table.itemDoubleClicked.connect(self._on_catalog_activated)
         self._cat_del.clicked.connect(self._on_delete_catalog)
+        self._cat_table.itemSelectionChanged.connect(self._update_action_states)
         self._cat_open.clicked.connect(self._on_open_catalog_folder)
         rec.addWidget(self._cat_box)
         outer.addWidget(rec)
@@ -253,6 +265,23 @@ class MyDataPanel(QFrame):
             self._cat_table.setItem(r, 3, QTableWidgetItem(ev.get("desc", "")))
 
         self.filter_bar.set_count(shown, total)
+        if total == 0:
+            self._empty_hint.setText(t("mine.empty"))
+            self._empty_hint.setVisible(True)
+        elif shown == 0:
+            self._empty_hint.setText(t("mine.no_match"))
+            self._empty_hint.setVisible(True)
+        else:
+            self._empty_hint.setVisible(False)
+        self._update_action_states()
+
+    def _update_action_states(self) -> None:
+        """Habilita eliminar solo con una fila seleccionada."""
+
+        self._ev_del.setEnabled(self._ev_table.currentRow() >= 0)
+        self._st_del.setEnabled(self._st_table.currentRow() >= 0)
+        self._rec_del.setEnabled(self._rec_table.currentRow() >= 0)
+        self._cat_del.setEnabled(self._cat_table.currentRow() >= 0)
 
     # ------------------------------------------------------------------
     # Acciones

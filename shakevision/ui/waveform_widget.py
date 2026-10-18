@@ -143,6 +143,16 @@ class WaveformPanel(QFrame):
         header_row.addWidget(self._build_toolbar())
         layout.addLayout(header_row)
 
+        # Placeholder de "sin datos": evita ejes sin sentido (0.1..0.9 s,
+        # 00:00:00, etc.) antes de conectar o cargar un histórico.
+        self._empty_label = QLabel(t("waveform.waiting"))
+        self._empty_label.setObjectName("EmptyState")
+        self._empty_label.setAlignment(Qt.AlignCenter)
+        self._empty_label.setWordWrap(True)
+        self._empty_label.setSizePolicy(QSizePolicy.Expanding,
+                                        QSizePolicy.Expanding)
+        layout.addWidget(self._empty_label, stretch=1)
+
         # ── Trazas ──
         self._plots: dict[str, pg.PlotWidget] = {}
         self._curves: dict[str, pg.PlotDataItem] = {}
@@ -155,6 +165,7 @@ class WaveformPanel(QFrame):
             self._plots[channel] = plot
             self._curves[channel] = curve
             layout.addWidget(plot, stretch=1)
+            plot.setVisible(False)
 
         for channel in _CHANNELS[1:]:
             self._plots[channel].setXLink(self._plots[_CHANNELS[0]])
@@ -211,6 +222,7 @@ class WaveformPanel(QFrame):
         self._retranslate()
         subscribe(self, LocaleService.language_changed_signal(),
                   self._retranslate)
+        self._set_empty(True)
 
     # ------------------------------------------------------------------
     # Barra de herramientas + items del modo análisis
@@ -417,6 +429,7 @@ class WaveformPanel(QFrame):
         if self._frozen:
             return
         self._last_snapshot = snapshot
+        self._set_empty(False)
         self._redraw(snapshot)
 
     def _redraw(self, snapshot: BufferSnapshot) -> None:
@@ -501,6 +514,7 @@ class WaveformPanel(QFrame):
             region.setVisible(True)
         self._syncing_region = False
         self._update_readout()
+        self._set_empty(False)
 
     def set_phase_markers(self, arrivals: list[tuple[str, float, str]]) -> None:
         """Dibuja líneas verticales de llegada TEÓRICA (TauP) en las 3 trazas.
@@ -545,6 +559,20 @@ class WaveformPanel(QFrame):
         if curve is not None:
             curve.setData(self._display(samples))
 
+    def set_empty_hint(self, text: str) -> None:
+        """Texto del placeholder cuando aún no hay traza (Live/Replay)."""
+
+        self._empty_label.setText(text)
+
+    def _set_empty(self, empty: bool) -> None:
+        """Placeholder visible y trazas ocultas mientras no hay datos."""
+
+        self._empty_label.setVisible(bool(empty))
+        for plot in self._plots.values():
+            plot.setVisible(not empty)
+        if empty:
+            self._readout.setVisible(False)
+
     def reset(self) -> None:
         """Limpia TODO el estado de visualización y análisis (al desconectar):
         trazas, picks, marcador de trigger, modo congelado, unidades y cft."""
@@ -564,6 +592,7 @@ class WaveformPanel(QFrame):
         self._cft_over = None
         self._cft_label.setText("cft —")
         self._cft_label.setStyleSheet("font-family: 'JetBrains Mono'; font-size: 11px;")
+        self._set_empty(True)
 
     # ------------------------------------------------------------------
     # Internos
@@ -886,6 +915,7 @@ class WaveformPanel(QFrame):
     def _retranslate(self) -> None:
         self.station_header.setText(
             t("waveform.station_label", label=self._station_text))
+        self._empty_label.setText(t("waveform.waiting"))
         self._plots[_CHANNELS[-1]].setLabel("bottom", self._axis_time_label())
         self._freeze_btn.setText(t("controls.analysis.freeze"))
         self._freeze_btn.setToolTip(t("analysis.tip_freeze"))

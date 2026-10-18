@@ -27,7 +27,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Optional
 
-from PySide6.QtCore import QSize, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -280,6 +280,8 @@ class AppHeader(QFrame):
         # Etiqueta de versión sutil al lado
         self._version_label = QLabel("v0.0.0")
         self._version_label.setObjectName("BrandVersion")
+        self._version_label.setFixedHeight(22)
+        self._version_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(self._version_label)
 
         # Re-pintar logo + iconos al cambiar tema en caliente
@@ -348,6 +350,8 @@ class AppHeader(QFrame):
         # Pequeño separador "·" entre estación y estado
         sep = QLabel("·")
         sep.setObjectName("HeaderSep")
+        sep.setFixedHeight(16)
+        sep.setAlignment(Qt.AlignCenter)
         layout.addWidget(sep)
 
         # Texto del estado de conexión
@@ -672,6 +676,7 @@ class AppHeader(QFrame):
 
         QLabel#HeaderStation {{
             color: {COLOR_TEXT_PRIMARY};
+            background-color: transparent;
             font-family: {FONT_STACK_MONO};
             font-size: 12px;
             font-weight: 600;
@@ -679,11 +684,13 @@ class AppHeader(QFrame):
 
         QLabel#HeaderSep {{
             color: {COLOR_TEXT_MUTED};
+            background-color: transparent;
             font-size: 12px;
         }}
 
         QLabel#HeaderStatus {{
             color: {COLOR_TEXT_SECONDARY};
+            background-color: transparent;
             font-family: {FONT_STACK_SANS};
             font-size: 11px;
             font-weight: 500;

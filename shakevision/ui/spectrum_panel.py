@@ -50,6 +50,11 @@ class SpectrumPanel(QFrame):
         self._plot.showGrid(x=True, y=True, alpha=0.15)
         self._plot.setLabel("bottom", t("spectrum.axis_freq"))
         self._plot.setLabel("left", t("spectrum.axis_power"))
+        self._plot.getAxis("bottom").enableAutoSIPrefix(False)
+        # Rango inicial razonable (0–20 Hz, −120–0 dB) para que el panel
+        # vacío no muestre -400..400 con "(x0.001)".
+        self._plot.setXRange(0, 20, padding=0)
+        self._plot.setYRange(-120, 0, padding=0)
         self._plot.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         from shakevision.ui.pg_theming import subscribe_pg_plot
         subscribe_pg_plot(self._plot)
@@ -66,6 +71,7 @@ class SpectrumPanel(QFrame):
         self._empty = pg.TextItem(
             text=t("spectrum.hint"), color="#9aa0a6", anchor=(0.5, 0.5))
         self._plot.addItem(self._empty)
+        self._empty.setPos(10.0, -60.0)
 
         subscribe(self, LocaleService.language_changed_signal(), self._retranslate)
 
@@ -92,6 +98,9 @@ class SpectrumPanel(QFrame):
         self._curve.clear()
         self._fdom_line.setVisible(False)
         self._empty.setVisible(True)
+        self._plot.disableAutoRange()
+        self._plot.setXRange(0, 20, padding=0)
+        self._plot.setYRange(-120, 0, padding=0)
 
     def reset(self) -> None:
         self.clear()

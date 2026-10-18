@@ -302,6 +302,8 @@ class EventCenterPanel(QFrame):
         # (_apply_filters) es el MISMO en los dos.
         self._all_quakes = self._live_quakes if is_live else self._hist_quakes
         self._search_index = None
+        self.event_list.set_hint_override(
+            None if is_live else "events.hist_prompt")
         self._update_time_bounds()
         self._apply_filters()
 

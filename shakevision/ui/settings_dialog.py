@@ -72,7 +72,10 @@ class SettingsDialog(QDialog):
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.setWindowTitle(t("settings.title"))
-        self.setMinimumWidth(520)
+        self.setMinimumWidth(560)
+        # Refuerzo explícito: algunos QLabel heredaban un fondo negro al
+        # aplicar el QSS de la tarjeta de Reset.
+        self.setStyleSheet("QLabel { background: transparent; }")
         # Permitir redimensionar (textos de algunos idiomas son largos)
         self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
 
@@ -145,6 +148,16 @@ class SettingsDialog(QDialog):
         self._cancel_btn.clicked.connect(self.reject)
         self._restore_btn.clicked.connect(self._on_restore_defaults)
         root.addWidget(buttons)
+        self._buttons = buttons
+        self._tabs.currentChanged.connect(self._on_tab_changed)
+        self._on_tab_changed(self._tabs.currentIndex())
+
+    def _on_tab_changed(self, index: int) -> None:
+        """En Reset, Apply/Cancel no aplican: la acción destructiva es aparte."""
+
+        is_reset = index == 2
+        self._apply_btn.setEnabled(not is_reset)
+        self._cancel_btn.setEnabled(not is_reset)
 
     def _build_language_section(self) -> QVBoxLayout:
         layout = QVBoxLayout()
@@ -212,6 +225,7 @@ class SettingsDialog(QDialog):
         addr_row.setSpacing(6)
         self._address_edit = QLineEdit()
         self._address_edit.setPlaceholderText(t("settings.address.placeholder"))
+        self._address_edit.setMinimumWidth(240)
         self._address_edit.setSizePolicy(
             QSizePolicy.Expanding, QSizePolicy.Preferred)
         addr_row.addWidget(self._address_edit, stretch=1)
@@ -441,7 +455,7 @@ class SettingsDialog(QDialog):
         warn_card = _F()
         warn_card.setObjectName("ResetWarningCard")
         wc = QVBoxLayout(warn_card)
-        wc.setContentsMargins(18, 16, 18, 16)
+        wc.setContentsMargins(20, 16, 22, 16)
         wc.setSpacing(10)
 
         # Cabecera: icono ⚠ + título
@@ -534,9 +548,11 @@ class SettingsDialog(QDialog):
             font-size: 16px;
             background: transparent;
         }}
+        QLabel#ResetItemLabel, QLabel#SettingsSectionTitle, QLabel#DialogHint {{
+            background: transparent;
+        }}
         QLabel#ResetItemLabel {{
             color: {_t.COLOR_TEXT_PRIMARY};
-            background: transparent;
             font-size: 12px;
         }}
         """)

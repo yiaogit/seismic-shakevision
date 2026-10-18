@@ -134,6 +134,7 @@ class HelicorderPanel(QFrame):
         hours: int = 24,
         minutes_per_row: int = 60,
         pixels_per_row: int = DEFAULT_PIXELS_PER_ROW,
+        channel: str = "EHZ",
         parent: Optional[QWidget] = None,
     ) -> None:
         super().__init__(parent)
@@ -141,6 +142,7 @@ class HelicorderPanel(QFrame):
         self.setFrameShape(QFrame.NoFrame)
 
         self._sample_rate = int(sample_rate_hz)
+        self._channel = (channel or "EHZ").strip()
         self._hours = int(hours)
         self._minutes_per_row = int(minutes_per_row)
         self._row_seconds = self._minutes_per_row * 60
@@ -158,11 +160,15 @@ class HelicorderPanel(QFrame):
         layout.setSpacing(6)
 
         self._header = QLabel(
-            t("helicorder.title", hours=hours, minutes=minutes_per_row)
+            t("helicorder.title", channel=self._channel,
+              hours=hours, minutes=minutes_per_row)
         )
         self._header.setObjectName("SectionTitle")
         self._header.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         layout.addWidget(self._header)
+        self._hint = QLabel(t("helicorder.hint"))
+        self._hint.setObjectName("Caption")
+        layout.addWidget(self._hint)
 
         # v0.6 P11: theme-aware
         self._plot = pg.PlotWidget(background=COLOR_BACKGROUND)
@@ -219,13 +225,24 @@ class HelicorderPanel(QFrame):
         """Re-aplica las cadenas i18n al cambiar de idioma."""
 
         self._header.setText(
-            t("helicorder.title",
+            t("helicorder.title", channel=self._channel,
               hours=self._hours, minutes=self._minutes_per_row)
         )
         self._plot.setLabel(
             "bottom", t("helicorder.axis_x", minutes=self._minutes_per_row),
         )
+        self._hint.setText(t("helicorder.hint"))
         self._plot.setLabel("left", t("helicorder.axis_y"))
+
+    def set_channel(self, channel: str) -> None:
+        """Fija el canal mostrado en la cabecera (p. ej. ``BHZ``)."""
+
+        channel = (channel or "").strip()
+        if channel and channel != self._channel:
+            self._channel = channel
+            self._header.setText(
+                t("helicorder.title", channel=self._channel,
+                  hours=self._hours, minutes=self._minutes_per_row))
 
     def ingest(self, samples: np.ndarray) -> None:
         """Recibe un nuevo bloque de muestras del canal Z."""

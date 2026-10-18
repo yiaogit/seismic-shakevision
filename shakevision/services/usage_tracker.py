@@ -383,16 +383,16 @@ class UsageTracker:
         _get_instance().end_session()
 
     @staticmethod
-    def record_earthquake_viewed() -> None:
-        _get_instance().record_earthquake_viewed()
+    def record_earthquake_viewed(place: str = "", mag: float = 0.0) -> None:
+        _get_instance().record_earthquake_viewed(place, mag)
 
     @staticmethod
-    def record_station_clicked() -> None:
-        _get_instance().record_station_clicked()
+    def record_station_clicked(network: str = "", code: str = "") -> None:
+        _get_instance().record_station_clicked(network, code)
 
     @staticmethod
-    def record_station_streamed() -> None:
-        _get_instance().record_station_streamed()
+    def record_station_streamed(label: str = "") -> None:
+        _get_instance().record_station_streamed(label)
 
     @staticmethod
     def record_audio_played(seconds: float) -> None:

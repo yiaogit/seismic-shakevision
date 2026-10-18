@@ -51,6 +51,9 @@
 - MMI 芯片：IU.ANMO 实时数据出现、切 Standard 仍可见、点击回工作台、
   断开自动隐藏。
 - UX P2：数据页“逐条复核 →”切到事件页，事件页“统计视图 →”切回数据页。
+- 全 UI 巡检：逐页截图主窗四页/弹窗/工作台各子页，修复空态轴、顶栏
+  版本 chip、Mine 空态、Settings Reset、活动日志占位符、
+  Helicorder 波段、分析日期等显示问题。
 - 地图 → 最近真实台站 IU.PAB（San Pablo，距马德里 111.5 km）：
   地图 Devices → 台站弹窗 → Monitor live → 工作台 Connect。
   网络握手 257 ms / TCP 105 ms / 首包 2.55 s；应用 “Connected” 约 13.1 s

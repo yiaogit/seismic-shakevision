@@ -611,9 +611,17 @@
     if (payload.latest_iso) {
       const dt = new Date(payload.latest_iso);
       const minsAgo = Math.max(0, Math.round((Date.now() - dt.getTime()) / 60000));
-      document.getElementById("kpi-latest").textContent = minsAgo < 60
-        ? t("web.dashboard.minutes_ago", {n: minsAgo})
-        : t("web.dashboard.hours_ago", {n: (minsAgo / 60).toFixed(1)});
+      let latestText;
+      if (minsAgo < 60) {
+        latestText = t("web.dashboard.minutes_ago", {n: minsAgo});
+      } else if (minsAgo < 48 * 60) {
+        latestText = t("web.dashboard.hours_ago", {n: (minsAgo / 60).toFixed(1)});
+      } else if (minsAgo < 2 * 365 * 24 * 60) {
+        latestText = t("web.dashboard.days_ago", {n: Math.round(minsAgo / 1440)});
+      } else {
+        latestText = dt.toISOString().slice(0, 10);
+      }
+      document.getElementById("kpi-latest").textContent = latestText;
     } else {
       document.getElementById("kpi-latest").textContent = "—";
     }
