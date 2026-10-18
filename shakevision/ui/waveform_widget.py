@@ -136,7 +136,7 @@ class WaveformPanel(QFrame):
         # SWARM/Snuffler: el valor del dato se muestra al pasar por encima.
         self._cursor_label = QLabel("")
         self._cursor_label.setObjectName("StatusValue")
-        self._cursor_label.setStyleSheet("font-family: monospace; font-size: 11px;")
+        self._cursor_label.setStyleSheet("font-family: 'JetBrains Mono'; font-size: 11px;")
         self._cursor_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         header_row.addWidget(self._cursor_label)
         header_row.addSpacing(8)
@@ -149,12 +149,20 @@ class WaveformPanel(QFrame):
         for channel in _CHANNELS:
             plot = _build_plot_widget(channel)
             curve = plot.plot(pen=pg.mkPen(WAVEFORM_COLORS[channel], width=1.2))
+            # Mínimo por traza: en Replay el splitter también reparte con
+            # espectrograma + PSD; sin esto una traza podía quedar a 0 px.
+            plot.setMinimumHeight(56)
             self._plots[channel] = plot
             self._curves[channel] = curve
             layout.addWidget(plot, stretch=1)
 
         for channel in _CHANNELS[1:]:
             self._plots[channel].setXLink(self._plots[_CHANNELS[0]])
+        # El eje X lo manda SIEMPRE el canal Z. Sin desactivar el auto-rango
+        # X en N/E, pyqtgraph los reajustaba por su cuenta (rangos ligeramente
+        # distintos → canales desalineados en el tiempo).
+        for plot in self._plots.values():
+            plot.enableAutoRange(axis="x", enable=False)
         if self._static_mode:
             # Eje X = hora UTC absoluta en la traza inferior (la que muestra
             # valores). Hay que ponerlo ANTES de setLabel/showValues abajo.
@@ -240,7 +248,7 @@ class WaveformPanel(QFrame):
         self._auto_btn = _btn("", checkable=True)
         self._cft_label = QLabel("cft —")
         self._cft_label.setObjectName("StatusValue")
-        self._cft_label.setStyleSheet("font-family: monospace; font-size: 11px;")
+        self._cft_label.setStyleSheet("font-family: 'JetBrains Mono'; font-size: 11px;")
         row.addWidget(self._cft_label)
         if not self._show_detector_tools:
             self._auto_btn.setVisible(False)
@@ -424,6 +432,12 @@ class WaveformPanel(QFrame):
         if times.size and not self._static_mode:
             self._plots[_CHANNELS[0]].setXRange(
                 float(times[0]), float(times[-1]), padding=0.0)
+            # Y autoescala en vivo: el rango fijo ±2.0 del constructor vale
+            # para datos normalizados, pero las estaciones IRIS llegan en
+            # counts (±cientos/miles) y quedaban recortadas en los bordes —
+            # el oscilograma parecía una valla de picos verticales.
+            for ch in _CHANNELS:
+                self._plots[ch].enableAutoRange(axis="y")
 
     def load_static(self, z, n, e, start_ts: float,
                     sample_rate_hz: float) -> None:
@@ -549,7 +563,7 @@ class WaveformPanel(QFrame):
         self._readout.clear()
         self._cft_over = None
         self._cft_label.setText("cft —")
-        self._cft_label.setStyleSheet("font-family: monospace; font-size: 11px;")
+        self._cft_label.setStyleSheet("font-family: 'JetBrains Mono'; font-size: 11px;")
 
     # ------------------------------------------------------------------
     # Internos
@@ -755,7 +769,7 @@ class WaveformPanel(QFrame):
         if over is not self._cft_over:
             self._cft_over = over
             color = "#ff5a52" if over else None
-            css = "font-family: monospace; font-size: 11px;"
+            css = "font-family: 'JetBrains Mono'; font-size: 11px;"
             self._cft_label.setStyleSheet(
                 css + (f" color: {color};" if color else ""))
         if over and self._auto_btn.isChecked() and not self._frozen:

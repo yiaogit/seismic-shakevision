@@ -317,6 +317,8 @@
   "web.dashboard.selector.period": "PÉRIODE",
   "web.dashboard.row.summary": "Résumé",
   "web.dashboard.row.advanced": "Analyse avancée",
+  "web.dashboard.empty.title": "Aucun catalogue historique chargé",
+  "web.dashboard.empty.hint": "Choisissez une région, une fenêtre temporelle et une magnitude minimale ci-dessus, puis cliquez sur Rechercher.",
   "web.dashboard.row.summary_window": "(derniers {period})",
   "web.dashboard.chart.countries": "Top 10 pays / régions",
   "web.dashboard.chart.countries_filter": "(M ≥ 3.0)",

@@ -109,7 +109,7 @@ class ParticleMotionPanel(QFrame):
         # rectilinearidad) — estimación de dirección de una sola estación.
         self._polar_label = QLabel("")
         self._polar_label.setObjectName("StatusValue")
-        self._polar_label.setStyleSheet("font-family: monospace; font-size: 11px;")
+        self._polar_label.setStyleSheet("font-family: 'JetBrains Mono'; font-size: 11px;")
         layout.addWidget(self._polar_label)
 
         # v0.6 P11: theme-aware

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QLabel, QSizePolicy, QVBoxLayout, QWidget
@@ -43,8 +44,9 @@ class SpectrogramPanel(QFrame):
         self.setObjectName("WaveformPanel")  # Reutiliza el estilo del panel de ondas
         self.setFrameShape(QFrame.NoFrame)
         # v0.7.7: altura mínima para que el splitter NO lo aplaste a una
-        # franja donde no se ven los ticks de frecuencia.
-        self.setMinimumHeight(140)
+        # franja donde no se ven los ticks de frecuencia. 110 (no 140): en
+        # Replay conviven 3 bloques y con 140+140 el waveform no cabía.
+        self.setMinimumHeight(110)
 
         # v0.8.0: en Replay (estático) el eje X es **hora UTC absoluta** —
         # coincide con el oscilograma; antes mostraba segundos relativos
@@ -68,6 +70,8 @@ class SpectrogramPanel(QFrame):
             self._plot = pg.PlotWidget(
                 background=COLOR_BACKGROUND,
                 axisItems={"bottom": _UTCAxisItem(orientation="bottom")})
+            # Sin esto pyqtgraph añade "(x1e+09)" al eje de epoch Unix.
+            self._plot.getAxis("bottom").enableAutoSIPrefix(False)
         else:
             self._plot = pg.PlotWidget(background=COLOR_BACKGROUND)
         self._plot.setMouseEnabled(x=True, y=False)
@@ -164,6 +168,23 @@ class SpectrogramPanel(QFrame):
             autoLevels=False,
             autoDownsample=True,
         )
+        # En Replay (estático) el rango fijo -90/-10 dB saturaba la imagen con
+        # eventos grandes (M7.7 a 7.7°: cientos de miles de counts → >100 dB,
+        # todo amarillo). Ajustar el rango al propio dato en cada refresh; el
+        # usuario puede seguir moviendo la barra de color después.
+        if self._absolute_time:
+            finite = spectrum.power_db[np.isfinite(spectrum.power_db)]
+            if finite.size:
+                lo = float(np.percentile(finite, 2.0))
+                hi = float(np.percentile(finite, 99.5))
+                if hi - lo < 12.0:
+                    hi = lo + 12.0
+                self._image.setLevels((lo, hi))
+                if self._colorbar is not None:
+                    try:
+                        self._colorbar.setLevels((lo, hi))
+                    except Exception:  # noqa: BLE001
+                        pass
         self._image.setRect(x0, y0, x1 - x0, y1 - y0)
 
         # Fijar el rango visible para que coincida con el oscilograma

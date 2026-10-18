@@ -446,6 +446,10 @@ class ReplayPanel(QWidget):
         # eje X = hora UTC. Sin herramientas del detector STA/LTA en vivo.
         self.waveform_panel = WaveformPanel(
             parent=splitter, show_detector_tools=False, static_mode=True)
+        # Con espectrograma + PSD debajo, el splitter podía aplastar las
+        # trazas. En vez de forzar altura al panel (que desbordaba y tapaba
+        # el espectrograma con ventanas de 800 px), cada traza tiene su
+        # mínimo y el splitter no deja colapsar ningún bloque.
         self.waveform_panel.units_requested.connect(self._on_units_requested)
         # v0.7.7: PSD del tramo seleccionado (caja amarilla) → 2.º bloque.
         self.waveform_panel.region_changed.connect(self._update_psd)
@@ -457,6 +461,7 @@ class ReplayPanel(QWidget):
         splitter.addWidget(self.waveform_panel)
         splitter.addWidget(self.spectrogram_panel)
         splitter.addWidget(self.spectrum_panel)
+        splitter.setChildrenCollapsible(False)
         splitter.setStretchFactor(0, 52)
         splitter.setStretchFactor(1, 24)
         splitter.setStretchFactor(2, 24)
@@ -876,6 +881,11 @@ class ReplayPanel(QWidget):
             target=_work, name="replay-window", daemon=True).start()
 
     def _apply_suggested_window(self, win) -> None:
+        if self._loaded_arrays is not None:
+            # La descarga terminó mientras calculábamos la ventana sugerida en
+            # segundo plano. No cambiar el formulario ni pisar el estado
+            # ("Theoretical P/S overlaid…"): la ventana ya cargada manda.
+            return
         if not win:
             # No se pudo (sin metadata/red): no dejar el estado "calculando…".
             self.status_label.setText(t("replay.click_load_hint"))

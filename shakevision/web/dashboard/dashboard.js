@@ -1053,6 +1053,29 @@
   window.setDashboardMode("live");   // estado inicial
 
   // ============================================================
+  // Estado VACÍO de la página de análisis.
+  // Sin catálogo histórico no tiene sentido enseñar la fila de KPIs (son del
+  // feed EN VIVO, etiquetadas "/ 24 h") ni gráficas con datos vivos.
+  // Python lo llama al entrar en Análisis sin resultados, o al limpiarlos.
+  // ============================================================
+  window.setAnalysisEmpty = function (show) {
+    const empty = document.getElementById("analysis-empty");
+    const content = document.getElementById("analysis-content");
+    const summary = document.getElementById("summary-bar");
+    if (empty) empty.style.display = show ? "" : "none";
+    if (content) content.style.display = show ? "none" : "";
+    if (summary) summary.style.display = show ? "none" : "";
+    if (!show) {
+      // Los contenedores estaban a 0px mientras estaban ocultos.
+      setTimeout(() => {
+        [chart_scatter, chart_trend, chart_magtime, chart_depthdist,
+         chart_gr, chart_energy, chart_spatial, chart_depthsec, chart_mcb,
+         chart_interevent].forEach(c => c && c.resize());
+      }, 60);
+    }
+  };
+
+  // ============================================================
   // Desplegable de región del radar PAGER (legacy; elemento ya removido)
   // ============================================================
   const pagerRegionSel = document.getElementById("pager-region-select");

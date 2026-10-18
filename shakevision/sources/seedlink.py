@@ -51,6 +51,43 @@ EMIT_INTERVAL_MS: int = 100
 # espurios en conexiones reales pero lentas → revertido a 5 s.
 TCP_PRECHECK_TIMEOUT_S: float = 5.0
 
+# Timeout (s) del handshake SeedLink (socket + HELLO). ObsPy 1.5.1 construye
+# ``SeedLinkConnection`` con ``timeout=None`` y su ``connect()`` llama a
+# ``is_connected(self.timeout)``, que compara ``float < None`` → TypeError:
+# "cannot connect to SeedLink server: '<' not supported between instances of
+# 'float' and 'NoneType'". Con un timeout real y ``autoconnect=False``
+# conectamos de forma explícita y esquivamos el bug.
+SEEDLINK_HANDSHAKE_TIMEOUT_S: float = 30.0
+
+#: Gracia (s) que esperamos a los canales que aún no han enviado nada antes
+#: de emitir con hold (p. ej. estación de un solo canal vertical). Los
+#: paquetes SeedLink de IRIS pueden traer ~13 s de datos y las componentes
+#: llegan en paquetes separados; con una gracia corta (3 s) una horizontal
+#: que aparecía tarde perdía su primer paquete completo (ya emitido como
+#: hold). 10 s cubre el desfase típico sin retrasar demasiado el arranque.
+CHANNEL_WAIT_GRACE_S: float = 10.0
+
+
+def _create_seedlink_client(endpoint: str, on_data):
+    """Crea y conecta un cliente SeedLink de ObsPy (workaround 1.5.1).
+
+    No usar ``create_client()``: fuerza ``autoconnect=True`` con
+    ``SeedLinkConnection.timeout=None`` y revienta con el TypeError de
+    arriba en ObsPy 1.5.1. Aquí instanciamos con ``autoconnect=False``,
+    fijamos un timeout y llamamos a ``connect()`` nosotros.
+    """
+
+    from obspy.clients.seedlink.easyseedlink import EasySeedLinkClient
+
+    client = EasySeedLinkClient(endpoint, autoconnect=False)
+    client.on_data = on_data
+    try:
+        client.conn.timeout = SEEDLINK_HANDSHAKE_TIMEOUT_S
+    except Exception:  # pragma: no cover — versiones antiguas de ObsPy
+        pass
+    client.connect()
+    return client
+
 
 # ============================================================
 # Worker que vive en su propio QThread
@@ -122,7 +159,7 @@ class _SeedLinkWorker(QObject):
         # 1. Importar ObsPy
         # ──────────────────────────────────────────────────────────────
         try:
-            from obspy.clients.seedlink.easyseedlink import create_client
+            from obspy.clients.seedlink import easyseedlink  # noqa: F401
         except Exception as exc:  # pragma: no cover
             self.status.emit(t("source.seedlink.obspy_missing", error=exc))
             return
@@ -165,8 +202,8 @@ class _SeedLinkWorker(QObject):
         self.status.emit(t("source.seedlink.tcp_ok", ms=f"{tcp_ms:.0f}"))
 
         # ──────────────────────────────────────────────────────────────
-        # 3. Crear cliente (HELLO + INFO). Sin timeout: dejamos que
-        #    el servidor responda a su ritmo, pero almacenamos el
+        # 3. Crear cliente (HELLO + INFO). Usamos el helper con timeout
+        #    explícito (workaround del bug de ObsPy 1.5.1). Almacenamos el
         #    cliente bajo el lock para que stop() pueda cerrarlo.
         # ──────────────────────────────────────────────────────────────
         if self._stopping:
@@ -174,7 +211,7 @@ class _SeedLinkWorker(QObject):
         self.status.emit(t("source.seedlink.handshake"))
         t1 = _time.monotonic()
         try:
-            client = create_client(endpoint, on_data=self._on_trace)
+            client = _create_seedlink_client(endpoint, self._on_trace)
         except Exception as exc:
             if not self._stopping:
                 self.status.emit(
@@ -279,16 +316,30 @@ class _SeedLinkWorker(QObject):
         return None
 
     def _safe_shutdown_client(self, client) -> None:
-        """Cierra el socket del cliente sin propagar excepciones.
+        """Cierra el cliente sin propagar excepciones.
 
-        Usamos ``socket.shutdown(SHUT_RDWR)`` en vez de ``close()``:
-        shutdown notifica al kernel que ambos lados terminaron, lo que
-        hace que ObsPy reciba EOF en su recv() y salga del bucle
-        ordenadamente. ``close()`` desde un hilo distinto al que abrió
-        el socket suele causar SEGFAULT en el C-backend.
+        Dos pasos, ambos necesarios en ObsPy 1.5.1:
+
+        1. ``conn.terminate()`` pone ``terminate_flag``: el bucle de
+           ``collect()`` solo sale por ahí (recibir EOF lo deja durmiendo
+           0.5 s en bucle, sin terminar nunca el QThread).
+        2. ``socket.shutdown(SHUT_RDWR)`` despierta el ``recv()`` bloqueado.
+           Usamos shutdown (no ``close()``) porque cerrar el socket desde
+           otro hilo suele causar SEGFAULT en el backend C de ObsPy.
+
+        Tras esto ``collect()`` devuelve SLTERMINATE, ``client.run()`` sale
+        y el worker termina de forma ordenada.
         """
 
         import socket as _socket
+
+        conn = getattr(client, "conn", client)
+        try:
+            terminate = getattr(conn, "terminate", None)
+            if callable(terminate):
+                terminate()
+        except Exception:  # noqa: BLE001 — la cancelación nunca debe romper
+            pass
 
         sock = self._find_socket(client)
         if sock is None:
@@ -401,13 +452,26 @@ class SeedLinkSource(DataSource):
         self._sample_rate = int(sample_rate_hz)
         self._station_label = station_label or f"{network}.{station}"
 
-        # Acumuladores por canal (recibidos en el hilo principal vía señal)
+        # Acumuladores por canal (recibidos en el hilo principal vía señal).
+        # Cada canal es una secuencia CONTIGUA de muestras que empieza en
+        # ``_ch_start``; los huecos se rellenan con hold para que el eje
+        # temporal sea real. Ver _on_trace_received/_emit_pending.
         self._buf_lock = threading.Lock()
         self._chunks: dict[str, list[np.ndarray]] = {"Z": [], "N": [], "E": []}
-        # v0.7.7: último valor real de cada canal, para rellenar los huecos
-        # de alineación con "hold DC" en vez de ceros (ver _emit_pending).
+        self._ch_start: dict[str, Optional[float]] = {
+            "Z": None, "N": None, "E": None}
+        self._ch_total: dict[str, int] = {"Z": 0, "N": 0, "E": 0}
+        # Último valor real de cada canal, para rellenar huecos con "hold DC"
+        # en vez de ceros.
         self._last_value: dict[str, float] = {"Z": 0.0, "N": 0.0, "E": 0.0}
         self._latest_ts: float = 0.0
+        # Instante (epoch) hasta el que ya se emitió. Evita solapar ventanas
+        # cuando los paquetes de cada canal llegan con retrasos distintos.
+        self._emit_end: Optional[float] = None
+        # Reloj de pared del primer trace: si las horizontales tardan en
+        # aparecer (estación vertical-only), tras una gracia emitimos con
+        # hold en vez de quedarnos esperando para siempre.
+        self._first_data_wall: Optional[float] = None
         # Bandera: ¿ya hemos recibido el primer paquete tras conectar?
         # Sirve para emitir un solo "streaming" en cuanto llegue, en
         # lugar de spamear el statusbar con cada batch.
@@ -520,7 +584,12 @@ class SeedLinkSource(DataSource):
         with self._buf_lock:
             for key in self._chunks:
                 self._chunks[key] = []
+                self._ch_start[key] = None
+                self._ch_total[key] = 0
+                self._last_value[key] = 0.0
             self._latest_ts = 0.0
+            self._emit_end = None
+            self._first_data_wall = None
         self._got_first_packet = False
 
     @Slot()
@@ -538,81 +607,189 @@ class SeedLinkSource(DataSource):
     def _on_trace_received(
         self, channel: str, start_ts: float, samples: np.ndarray, sample_rate: int
     ) -> None:
-        """Acumula un trace recibido en la cola del canal correspondiente."""
+        """Acumula un trace de UN canal, manteniendo su eje temporal real.
+
+        Los paquetes SeedLink de Z/N/E llegan en instantes distintos y a
+        veces con solapes o huecos. Aquí cada canal se guarda como una
+        secuencia CONTIGUA: se recortan los solapes ya emitidos y los
+        huecos internos se rellenan con hold. La alineación final entre
+        canales la hace ``_emit_pending`` con ``_emit_end`` como referencia.
+        """
 
         # Primer paquete tras conectar → notificar al usuario.
         # (No usamos status_changed aquí porque vive en el worker; el
         # hilo del SeedLinkSource reutiliza la señal vía passthrough.)
         if not self._got_first_packet:
             self._got_first_packet = True
+            self._first_data_wall = time.monotonic()
             try:
                 self.status_changed.emit("🟢 Streaming activo")
             except Exception:
                 pass
 
-        # Duración REAL del bloque (con la tasa nativa del trace) — la
-        # usamos para el timestamp antes de remuestrear.
-        real_duration = samples.size / max(1, sample_rate)
+        if samples.size == 0:
+            return
 
-        # v0.7.7 fix: remuestrear a la tasa nominal del pipeline (config,
-        # típicamente 100 Hz). Las estaciones broadband IRIS (BHZ/BHN/BHE)
-        # llegan a 20/40 Hz; sin esto, el búfer (fijado a 100 Hz) interpreta
-        # mal el eje temporal → oscilograma comprimido y hodograma a saltos.
-        if sample_rate != self._sample_rate and samples.size > 0:
+        # Remuestrear a la tasa nominal del pipeline (config, típicamente
+        # 100 Hz). Las estaciones broadband IRIS (BHZ/BHN/BHE) llegan a
+        # 20/40 Hz; sin esto, el búfer (fijado a 100 Hz) interpreta mal el
+        # eje temporal.
+        if sample_rate != self._sample_rate:
             samples = self._resample(samples, sample_rate, self._sample_rate)
+        samples = np.ascontiguousarray(samples, dtype=np.float32).reshape(-1)
+        if samples.size == 0:
+            return
 
+        rate = float(self._sample_rate)
         with self._buf_lock:
-            self._chunks.setdefault(channel, []).append(samples)
-            end_ts = start_ts + real_duration
+            # Nunca re-emitir datos anteriores a la última ventana emitida:
+            # si un canal llega tarde (p. ej. apareció tras la gracia), su
+            # historia previa ya se rellenó con hold.
+            if self._emit_end is not None and start_ts < self._emit_end:
+                drop = int(round((self._emit_end - start_ts) * rate))
+                if drop >= samples.size:
+                    return
+                samples = samples[drop:]
+                start_ts = self._emit_end
+
+            start = self._ch_start[channel]
+            if start is None:
+                self._ch_start[channel] = float(start_ts)
+                self._ch_total[channel] = 0
+                start = float(start_ts)
+
+            cur_end = start + self._ch_total[channel] / rate
+            if start_ts < cur_end:
+                # Solape con lo ya acumulado (el servidor repite un tramo).
+                drop = int(round((cur_end - start_ts) * rate))
+                if drop >= samples.size:
+                    return
+                samples = samples[drop:]
+                start_ts = cur_end
+            elif start_ts > cur_end:
+                # Hueco: rellenar con el último valor real (hold DC), no
+                # con ceros (inyectaba picos verticales en el oscilograma).
+                gap = int(round((start_ts - cur_end) * rate))
+                if gap > 0:
+                    self._chunks[channel].append(
+                        np.full(gap, self._last_value[channel],
+                                dtype=np.float32))
+                    self._ch_total[channel] += gap
+
+            self._chunks[channel].append(samples)
+            self._ch_total[channel] += samples.size
+            self._last_value[channel] = float(samples[-1])
+            end_ts = start_ts + samples.size / rate
             if end_ts > self._latest_ts:
                 self._latest_ts = end_ts
 
     @Slot()
     def _emit_pending(self) -> None:
-        """Empaqueta lo acumulado por canal y lo emite como un único batch."""
+        """Emite el tramo común ya disponible, alineado por tiempo real.
 
+        Antes se concatenaba lo que hubiera de cada canal, se rellenaba al
+        máximo y se escribía todo con un único timestamp. Con paquetes
+        asíncronos (IRIS manda BH1/BH2/BHZ por separado) eso repetía tramos
+        de tiempo en el búfer → oscilograma con picos y hodograma desfasado.
+        Ahora se calcula el fin común (``min`` de los canales disponibles),
+        se extrae la ventana ``[_emit_end, fin]`` de cada canal y solo se
+        avanza hasta ahí. Los canales que no han llegado se rellenan con
+        hold; si no aparecen tras ``CHANNEL_WAIT_GRACE_S`` se emite igual.
+        """
+
+        rate = float(self._sample_rate)
         with self._buf_lock:
-            chunks = {
-                ch: (
-                    np.concatenate(self._chunks[ch])
-                    if self._chunks.get(ch)
-                    else np.zeros(0, dtype=np.float32)
-                )
-                for ch in ("Z", "N", "E")
+            seen = [ch for ch in ("Z", "N", "E")
+                    if self._ch_start[ch] is not None]
+            if not seen:
+                return
+            grace_ok = (
+                self._first_data_wall is not None
+                and time.monotonic() - self._first_data_wall
+                >= CHANNEL_WAIT_GRACE_S
+            )
+            if len(seen) < 3 and not grace_ok:
+                # Esperar a las horizontales al conectar (evita empezar con
+                # tramos que luego habría que rellenar/duplicar).
+                return
+
+            ends = {
+                ch: self._ch_start[ch] + self._ch_total[ch] / rate
+                for ch in seen
             }
-            for key in self._chunks:
-                self._chunks[key] = []
-            latest_ts = self._latest_ts
+            target_end = min(ends.values())
+            if self._emit_end is None:
+                # Alinear el comienzo al canal que empieza más tarde, para no
+                # inventar historia antes de que existiera.
+                self._emit_end = max(self._ch_start[ch] for ch in seen)
+            n = int(round((target_end - self._emit_end) * rate))
+            if n <= 0:
+                return
 
-        # Si no llegó nada en este intervalo, no emit (la UI no se mueve)
-        max_len = max(c.size for c in chunks.values())
-        if max_len == 0:
-            return
+            t0 = self._emit_end
+            z = self._slice_and_trim_locked("Z", t0, n, rate)
+            n_arr = self._slice_and_trim_locked("N", t0, n, rate)
+            e = self._slice_and_trim_locked("E", t0, n, rate)
+            self._emit_end = t0 + n / rate
+            ts = self._emit_end
 
-        # v0.7.7 fix: alinear longitudes rellenando AL INICIO con el ÚLTIMO
-        # valor real del canal ("hold DC"), no con ceros. En estaciones IRIS
-        # las componentes Z/N/E llegan en paquetes ASÍNCRONOS: en un mismo
-        # intervalo suele haber datos de solo una; rellenar con ceros las
-        # otras inyectaba picos a 0 (oscilograma a "barras" y el balín del
-        # hodograma saltando al origen). Mantener el último valor deja un
-        # tramo plano, mucho menos disruptivo.
-        z = self._pad_left(chunks["Z"], max_len, self._last_value["Z"])
-        n = self._pad_left(chunks["N"], max_len, self._last_value["N"])
-        e = self._pad_left(chunks["E"], max_len, self._last_value["E"])
-
-        # Actualizar el último valor real de cada canal (si trajo datos).
-        for ch, arr in (("Z", chunks["Z"]), ("N", chunks["N"]), ("E", chunks["E"])):
-            if arr.size > 0:
-                self._last_value[ch] = float(arr[-1])
-
-        batch = SampleBatch(
-            timestamp_unix=latest_ts if latest_ts > 0 else time.time(),
+        self.data_ready.emit(SampleBatch(
+            timestamp_unix=ts,
             sample_rate_hz=self._sample_rate,
             z=z,
-            n=n,
+            n=n_arr,
             e=e,
-        )
-        self.data_ready.emit(batch)
+        ))
+
+    def _slice_and_trim_locked(
+        self, channel: str, t0: float, n: int, rate: float
+    ) -> np.ndarray:
+        """Extrae ``n`` muestras de ``channel`` para ``[t0, t0+n/rate)``.
+
+        Debe llamarse con ``_buf_lock`` tomado. Rellena con hold lo que
+        falte (canal aún sin datos, huecos antes/después) y descarta de la
+        cola lo que ya queda por detrás del instante emitido.
+        """
+
+        start = self._ch_start[channel]
+        total = self._ch_total[channel]
+        if start is None or total == 0:
+            return np.full(n, self._last_value[channel], dtype=np.float32)
+
+        buf = np.concatenate(self._chunks[channel])
+        total = buf.size
+        offset = int(round((t0 - start) * rate))
+        src_start = max(0, offset)
+        src_end = min(total, offset + n)
+
+        # Hold de partida: última muestra antes de la ventana (si la hay);
+        # si no, el último valor real del canal.
+        hold = self._last_value[channel]
+        if 0 < src_start <= total:
+            hold = float(buf[src_start - 1])
+        out = np.full(n, hold, dtype=np.float32)
+
+        written = 0
+        if src_end > src_start:
+            chunk = buf[src_start:src_end]
+            dst = max(0, -offset)
+            out[dst:dst + chunk.size] = chunk
+            written = chunk.size
+            hold = float(chunk[-1])
+
+        # Si el tramo de datos no cubre toda la ventana, el resto es hold.
+        dst_end = max(0, -offset) + written
+        if dst_end < n:
+            out[dst_end:] = hold
+
+        # Consumir lo que ya queda por detrás de t0 + n.
+        drop = max(0, min(total, offset + n))
+        if drop > 0:
+            rest = buf[drop:]
+            self._chunks[channel] = [rest] if rest.size else []
+            self._ch_total[channel] = rest.size
+            self._ch_start[channel] = start + drop / rate
+        return out
 
     # ------------------------------------------------------------------
     # Helpers

@@ -840,8 +840,11 @@ class DashboardPanel(QFrame):
             return
         # Recordar el último feed en vivo para poder volver desde "Análisis".
         self._last_live_args = (list(quakes), period_seconds, pager_region)
-        # En modo análisis NO pisamos el histórico con el feed en vivo.
-        if self._analysis_mode:
+        # En modo análisis NO pisamos el histórico con el feed en vivo. Vale
+        # también mientras la página de análisis aún no tiene resultados: el
+        # feed no debe llenar sus gráficas (luego se verían como si fueran
+        # históricas).
+        if self._analysis_mode or self._view_mode == "analysis":
             return
         payload = build_payload(
             quakes,
@@ -995,12 +998,38 @@ class DashboardPanel(QFrame):
             f"window.setDashboardMode && window.setDashboardMode('{mode}')")
         if is_live:
             self._analysis_mode = False
+            # Al volver a "En vivo" el feed re-renderiza TODAS las gráficas
+            # (también las de la página de análisis, oculta). Si guardáramos
+            # el catálogo viejo, al regresar a Análisis se verían datos en
+            # vivo bajo la etiqueta histórica. Se descarta el resultado.
+            self._analysis_quakes = []
+            self._run_js(
+                "window.setAnalysisEmpty && window.setAnalysisEmpty(false)")
             self._clear_status()
             if self._last_live_args is not None:
                 q, ps, pr = self._last_live_args
                 self._push_payload(build_payload(
                     q, period_seconds=ps, stations=self._stations_cache,
                     pager_region=pr, region_bbox=self._live_region_bbox))
+        else:
+            # Sin catálogo histórico: estado vacío (oculta KPIs/en vivo y
+            # gráficas) en vez de enseñar la última vista del feed.
+            has_analysis = bool(self._analysis_quakes)
+            self._run_js(
+                "window.setAnalysisEmpty && window.setAnalysisEmpty("
+                f"{'false' if has_analysis else 'true'});")
+            if hasattr(self, "_overlay"):
+                self._overlay.hide_overlay()
+
+    def has_analysis_data(self) -> bool:
+        """¿Hay un catálogo histórico cargado en la página de análisis?.
+
+        Se usa para bloquear la exportación de reporte cuando el usuario está
+        en Análisis pero todavía no ha ejecutado una consulta: sin esto se
+        generaría un reporte EN VIVO etiquetado como si fuera el análisis.
+        """
+
+        return self._view_mode == "analysis" and bool(self._analysis_quakes)
 
     def report_context(self):
         """``(quakes, context)`` para el reporte según el modo ACTUAL.
@@ -1038,7 +1067,8 @@ class DashboardPanel(QFrame):
         from shakevision.services import region_presets
         self._live_region_bbox = region_presets.bbox_for(
             self.live_region.currentData())
-        if self._last_live_args is not None and not self._analysis_mode:
+        if self._last_live_args is not None and not self._analysis_mode \
+                and self._view_mode == "live":
             q, ps, pr = self._last_live_args
             self._push_payload(build_payload(
                 q, period_seconds=ps, stations=self._stations_cache,
@@ -1105,6 +1135,9 @@ class DashboardPanel(QFrame):
         if n > FDSN_MAX_LIMIT:
             self.an_search.setEnabled(True)
             self._set_status("dashboard.count_over", n=f"{n:,}")
+            if not self._analysis_quakes:
+                self._run_js(
+                    "window.setAnalysisEmpty && window.setAnalysisEmpty(true)")
             return
         self._set_status("dashboard.count_estimate", n=f"{n:,}")
         self._ensure_analysis_worker().query(params)
@@ -1127,6 +1160,8 @@ class DashboardPanel(QFrame):
                 stations=self._stations_cache,
             )
             self._push_payload(payload)
+            self._run_js(
+                "window.setAnalysisEmpty && window.setAnalysisEmpty(false)")
         except Exception as exc:  # noqa: BLE001
             logger.exception("Construir el payload de análisis falló")
             self._set_status_raw(str(exc))
@@ -1143,6 +1178,9 @@ class DashboardPanel(QFrame):
         self.an_search.setEnabled(True)
         if self._view_mode == "analysis":
             self._set_status_raw(message)
+            if not self._analysis_quakes:
+                self._run_js(
+                    "window.setAnalysisEmpty && window.setAnalysisEmpty(true)")
 
     # ── Estado de la barra de análisis (re-traducible) ──────────────
     def _clear_status(self) -> None:
@@ -1290,6 +1328,17 @@ class DashboardPanel(QFrame):
         if self._pending_payload is not None:
             self._push_payload(self._pending_payload)
             self._pending_payload = None
+        # Sincronizar el modo/página y el estado vacío por si el usuario cambió
+        # de pestaña ANTES de que la web terminara de cargar (los runJavaScript
+        # previos se habrían descartado).
+        self._run_js(
+            "window.setDashboardMode && "
+            f"window.setDashboardMode('{self._view_mode}')")
+        show_empty = (self._view_mode == "analysis"
+                      and not self._analysis_quakes)
+        self._run_js(
+            "window.setAnalysisEmpty && window.setAnalysisEmpty("
+            f"{'true' if show_empty else 'false'});")
         # v0.6 Phase 11: empujar el tema actual + suscribirse a cambios
         # para que las gráficas ECharts respondan al toggle dark/light.
         self._push_theme()

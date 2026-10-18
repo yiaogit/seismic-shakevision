@@ -81,3 +81,12 @@ def test_update_sample_rate_accepts_positive() -> None:
     comp.update_sample_rate(200)
     out = comp.compute(_sine(15.0, duration_s=4.0)[:800])
     assert out.freqs.size > 0
+
+
+def test_db_is_independent_of_amplitude_units() -> None:
+    """counts (±cientos) y m/s (±1e-7) deben dar el mismo mapa dB."""
+
+    comp = SpectrumComputer(SAMPLE_RATE)
+    a = comp.compute(_sine(5.0))
+    b = comp.compute(_sine(5.0) * 1e-7)
+    assert np.allclose(a.power_db, b.power_db, atol=1e-4)

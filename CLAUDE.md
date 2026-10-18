@@ -38,13 +38,13 @@ License: MIT.
 
 > 📌 **当前会话方向 (user)**
 > 1. 把本文件与 `docs/roadmap.md` 校准到 **0.8.3.0** 的真实状态（已完成）。
-> 2. **本机冒烟验证**（已完成，结果见 §9）。随后修复了验证发现的
->    P1/P2 批次（浅色标签栏、i18n、缓存 best-effort、字体、ruff），
->    记录在 `CHANGELOG.md` 的 `[Unreleased]`。
+> 2. **本机冒烟验证 + 修复**（已完成，结果见 §9）：分析页空状态、SeedLink
+>    实时链路、工作台/回放，以及“地图→台站→工作台”“历史事件回顾”“收藏→
+>    工作台”三条端到端流程；修复见 `CHANGELOG.md` 的 `[Unreleased]`。
 
 | Item | Value |
 |---|---|
-| Current version (4 files, see §5) | **0.8.3.0** — tagged + released; `[Unreleased]` holds a fix batch (theme/i18n/cache/font/lint) |
+| Current version (4 files, see §5) | **0.8.3.0** — tagged + released; `[Unreleased]` holds the validated fix batch |
 | Latest tag pushed to origin | `v0.8.3.0` (commit `dd45523`, 2026-06-28) |
 | HEAD | `main` @ `295adbd` + local docs/fixes on top of the tag |
 | Latest **release with installers** on GitHub Releases | `v0.8.3.0` — macOS arm64 `.dmg`, Windows `.zip`, Linux `.AppImage` + `SHA256SUMS.txt` |
@@ -61,24 +61,20 @@ License: MIT.
    (i18n / measurements / recordings_list / response / seismic_stats /
    event_filter…) run headless; the full suite needs the venv from §5
    on a real machine (see §9).
-3. **Dashboard Analysis layer — render validated locally (§9).** Historical
-   query + pro charts + analysis report all render on a real machine. The
-   remaining gap is the **empty state**: when no analysis query has succeeded
-   (or `/count` exceeds 20 000) the page keeps showing live KPIs/charts.
-4. **Two intentionally-unused i18n keys** (`common.cancel`,
+3. **Two intentionally-unused i18n keys** (`common.cancel`,
    `profile.tab_title`): the app never calls them, but
    `tests/test_i18n.py` and `tests/test_profile_view.py` assert them as
    a locale contract. The dead-key scan must therefore include `tests/`,
    not just `shakevision/` + web JS. All 4 locales stay aligned
    (739 keys, same placeholders).
-5. **`ui/sidebar_nav.py` has no runtime consumer** — the shell uses a
+4. **`ui/sidebar_nav.py` has no runtime consumer** — the shell uses a
    `QTabWidget` (main_window.py); only `tests/test_sidebar_nav.py`
    imports the sidebar. Either re-wire it or delete it in a cleanup.
-6. **Python 3.14 is off the CI matrix.** It installs and runs locally
-   (569/569 tests green, §9), but 3.10–3.12 is the supported
+5. **Python 3.14 is off the CI matrix.** It installs and runs locally
+   (577/577 tests green, §9), but 3.10–3.12 is the supported
    configuration — reproduce any 3.14-only bug on 3.12 before chasing it
    (`brew install python@3.12` if needed).
-7. **Docs drift**: CLAUDE.md and `docs/roadmap.md` had lagged behind
+6. **Docs drift**: CLAUDE.md and `docs/roadmap.md` had lagged behind
    0.8.x. Update this file in the same commit as any version bump.
 
 ---
@@ -175,7 +171,9 @@ ShakeVision/
 │  ├─ sources/                   ← Realtime data source abstractions
 │  │  ├─ base.py                 ← Abstract base + samples_received signal
 │  │  ├─ mock.py                 ← Synthetic source for tests + demo
-│  │  ├─ seedlink.py             ← ObsPy EasySeedLinkClient wrapper (LAN Shake)
+│  │  ├─ seedlink.py             ← ObsPy EasySeedLinkClient wrapper (LAN/IRIS):
+│  │  │                             time-aligned Z/N/E aggregator + ObsPy 1.5.1
+│  │  │                             handshake/stop workarounds
 │  │  └─ replay.py               ← Replay arbitrary IRIS dataselect at N× speed
 │  │
 │  ├─ processing/                ← DSP + analytics (no Qt)
@@ -291,6 +289,21 @@ ShakeVision/
 - `processing/magnitude_color.py` — green→red magnitude scale used by
   tables, legend and globe markers.
 - Keep these Qt-free so they stay unit-testable headless.
+
+### SeedLink / live pipeline
+- **Do not use ObsPy `create_client()`** with ObsPy 1.5.1: it autoconnects with
+  `SeedLinkConnection.timeout=None` and raises
+  `'<' not supported between instances of 'float' and 'NoneType'`.
+  Use `sources.seedlink._create_seedlink_client()` (`autoconnect=False`,
+  explicit timeout).
+- `SeedLinkSource` keeps a **per-channel time axis**: trim overlaps, hold-fill
+  gaps and emit only the common window. A 10 s grace covers stations whose
+  horizontal components arrive in later packets.
+- `stop()` must call `conn.terminate()` **and** `socket.shutdown()`; shutdown
+  alone leaves ObsPy’s `collect()` looping and the QThread alive.
+- Live waveform Y auto-ranges (IRIS counts are not ±2); X is driven by Z only.
+- Spectrogram dB is peak-normalised (unit independent), so counts and m/s
+  render the same.
 
 ### Error overlays
 - `LoadingOverlay` is the standard "loading / error + retry" widget.
@@ -444,16 +457,16 @@ historical query and rendered both reports.
 | # | Check | How | Result |
 |---|---|---|---|
 | 1 | Package compiles | `.venv/bin/python -m compileall -q shakevision/` | ✅ pass |
-| 2 | Full test suite | `.venv/bin/pytest -q` | ✅ **569 passed** in 3.1 s |
+| 2 | Full test suite | `.venv/bin/pytest -q` | ✅ **577 passed** in 2.9 s |
 | 3 | Lint | `.venv/bin/ruff check .` | ✅ fixed: `[tool.ruff.lint] select = ["E4","E7","E9","F"]` — 0.17.1 and 0.12.7 both clean |
 | 4 | App launches, splash → MainWindow | `.venv/bin/python -m shakevision` | ✅ (harness built MainWindow directly; splash path not exercised) |
 | 5 | 4 top tabs render (Globe/Data/Events/Mine) | visual | ✅ |
 | 6 | Globe loads from local `lib/` + quake markers | visual + JS | ✅ WebGL true, Earth + borders + labels + 181 quakes. Software rendering (`--disable-gpu`) → “browser does not support WebGL” |
 | 7 | Data ▸ Live charts + region selector | visual + JS | ✅ 9 ECharts instances, KPIs 181 / M5.7 / 21 regions, region combo works |
-| 8 | Data ▸ Analysis: JP · 1 y · M≥3 | real query | ✅ 1,369 events, 16 charts, KPIs relabel to “/ 1 y”, b/Mc/energy/depth charts render. ⚠️ over-cap query (20,971) only warns — page keeps the previous **live** charts/KPIs (no analysis empty state) |
+| 8 | Data ▸ Analysis: JP · 1 y · M≥3 / over-cap | real query + JS | ✅ 1,369 events, 16 charts, KPIs relabel to “/ 1 y”. ✅ fixed: entering Analysis without data (or with `/count` > 20k) hides the live KPI row + charts and shows the “choose region/window/Search” empty state; re-entering after Live shows it again |
 | 9 | Event Center: live/historical, filters, nearby stations | visual + Qt introspection | ✅ 10,164 loaded, table capped at 2,000 rows, live/historical switch works. ✅ fixed: cap notice survives language switches; counter now says “Filtered {shown} / {total}” (filter matches, not painted rows) |
-| 10 | Pro Workbench opens; panels instantiate | visual | ✅ opens, waveform/spectrogram/heliogram/hodogram built. Live station connection not exercised (needs SeedLink/LAN Shake) |
-| 11 | Replay review from an event | end-to-end | ⚠️ not exercised (needs an IRIS dataselect download); panel instantiates |
+| 10 | Pro Workbench opens; SeedLink live pipeline | real IRIS feed | ✅ connects IU.ANMO/IU.OTAV, 3 channels aligned at 100 Hz, Y auto-range, spectrogram + helicorder + hodogram, clean stop (no QThread warning) |
+| 11 | Replay review from an event | end-to-end | ✅ IRIS dataselect loaded (24k samples @40 Hz), TauP P/S, deconv VEL, ZRT, PSD, spectrogram, CSV/QuakeML/PNG exports |
 | 12 | Report export (live + analysis) | generator + WebEngine | ✅ analysis HTML 204 KB / PDF 776 KB with GR + energy SVG + findings; live HTML 29 KB / PDF 259 KB |
 | 13 | Language + theme switch live | visual + JS | ✅ Qt UI, web charts, report all follow the switch. ✅ fixed: light theme tab bar now readable (`setDocumentMode(False)`); region combos + analysis status retranslate |
 
@@ -461,9 +474,9 @@ historical query and rendered both reports.
 
 1. ✅ **Light theme tab bar (macOS)** — fixed: `setDocumentMode(False)` in
    `main_window.py`; QTabBar now follows the QSS in both themes.
-2. ⏳ **Analysis page empty state** — **still open**, needs a UX decision:
-   switching to Analysis with no successful query (or when `/count` exceeds
-   20 000) leaves the live KPI row and live-derived charts on screen.
+2. ✅ **Analysis page empty state** — fixed: `#analysis-empty` +
+   `setAnalysisEmpty()` hide the live KPI row/content until a historical
+   query succeeds; stale results are dropped when returning to Live.
 3. ✅ **Live re-translation gaps** — fixed: region combos are rebuilt keeping
    the selection, the analysis status is re-rendered from its stored i18n key,
    the Event Center cap hint is preserved, and the filter counter retranslates.
@@ -471,16 +484,53 @@ historical query and rendered both reports.
    the `dashboard.js` bar-width map.
 5. ✅ **Cache writes are fatal** — `FileCache.set()` is best-effort now
    (debug log, no raise) + regression test.
-6. ✅ **Font warning** — root cause was `_load_bundled_fonts()` ignoring
-   `.ttc` (so `Inter.ttc` never registered). It now loads 38 families and the
-   QSS lists `Inter` first; startup log is clean.
+6. ✅ **Font warning** — fixed in two stages: `.ttc` is now loaded (Inter
+   registers 38 families) and the QSS stacks use only bundled families
+   (`Inter` / `JetBrains Mono`); the old lists named missing Qt families
+   (`Inter Variable`, `-apple-system`, `SF Pro Text`…). Startup log is clean,
+   zh still renders via Qt glyph fallback.
 7. ✅ **Ruff drift** — explicit `[tool.ruff.lint] select`; 0.17.1 and 0.12.7
    both pass.
 
-> Re-verified after the fixes: **569 tests**, compile + both ruff versions
+> Re-verified after the fixes: **577 tests**, compile + both ruff versions
 > clean; light+zh run shows the light tab bar, `全球(不限地区)`, the translated
 > over-cap status, `已筛选 10,163 / 10,163`, and the capped hint
 > `显示最新 2000 条(共 10163 条)`; no font warnings.
+
+### Second pass — SeedLink / workbench / replay flows
+
+| # | Flow | Result |
+|---|---|---|
+| 14 | SeedLink direct (IU.ANMO 00BH?) | ✅ Hello 0.2 s, SELECT accepted, BH1/BH2/BHZ @40 Hz; 7 packets/30 s |
+| 15 | Map → nearest station → “Monitor live” → Workbench | ✅ dialog auto-confirmed, IU.OTAV added, Pro opens in Live, connect + data (1,420 samples in 15 s), 3 traces + spectrogram + MMI card |
+| 16 | Event Center **Historical** → event → nearest station → Replay | ✅ JP M≥5 (2 y) → 50 events; M7.6 Aomori + IU.MAJO; picker 8 stations; download 24k @40 Hz; 6 TauP P/S markers |
+| 17 | Event **favorite** → My collection → open Workbench | ✅ M5.2 Mexico + IU.TEIG; favorite button + My tab row; station picker accepted; download 24k @40 Hz; 6 markers; cleanup leaves 0 favorites |
+| 18 | Replay tools | ✅ VEL deconvolution, ZNE→ZRT, PSD 129 points, spectrogram, CSV 854 KB / QuakeML 1.3 KB / PNG |
+| 19 | Live spectrum / fonts / shutdown | ✅ spectrogram normalised dB now shows the event; no “missing font family”; no `QThread` warning on close |
+
+### New findings fixed in the second pass
+
+8. **SeedLink handshake (ObsPy 1.5.1)** — `create_client()` fails with
+   `'<' not supported … float and NoneType` because `SeedLinkConnection.timeout=None`.
+   Fixed with `EasySeedLinkClient(autoconnect=False)` + explicit timeout.
+9. **SeedLink async channels** — per-channel packets were padded to max length
+   and written with one timestamp (duplicated time → spike artefacts).
+   Replaced by a time-aligned aggregator (trim overlaps, hold gaps, emit the
+   common window; 10 s grace for vertical-only stations).
+10. **SeedLink stop** — only `socket.shutdown` was called; ObsPy’s `collect()`
+    kept looping and the QThread never ended. Now `conn.terminate()` + shutdown
+    → `SLTERMINATE`, thread finishes cleanly.
+11. **Live waveform scaling** — Y was fixed at ±2 (IRIS counts ±thousands were
+    clipped into “picket fence” spikes) and N/E X axes auto-ranged separately.
+    Live Y now auto-ranges; X is Z-driven only.
+12. **Spectrogram dB** — absolute dB meant physical units (1e-7 m/s) clamped to
+    the −120 dB floor (uniform purple). Now normalised relative dB; replay
+    auto-levels the colour range; UTC axis drops `(x1e+09)`.
+13. **Replay layout / late suggestion** — waveform + spectrogram + PSD now
+    coexist (per-trace min heights, non-collapsible splitter); a window
+    suggestion finishing after the download no longer rewrites the form/status.
+14. **Font stacks** — Qt warnings came from CSS families that do not exist in
+    Qt; use bundled `Inter` / `JetBrains Mono` only.
 
 ### Sandboxed-agent caveat (not a product issue)
 

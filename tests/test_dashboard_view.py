@@ -480,3 +480,36 @@ def test_dashboard_js_exposes_set_aggregations() -> None:
     js = (WEB_DASHBOARD_DIR / "dashboard.js").read_text(encoding="utf-8")
     assert "shakevisionDashboard" in js
     assert "setAggregations" in js
+
+
+def test_dashboard_html_has_analysis_empty_state() -> None:
+    """La página de análisis debe traer contenedores para el estado vacío."""
+
+    html = (WEB_DASHBOARD_DIR / "index.html").read_text(encoding="utf-8")
+    for element_id in ("analysis-empty", "analysis-content"):
+        assert f'id="{element_id}"' in html
+    assert "web.dashboard.empty.title" in html
+    assert "web.dashboard.empty.hint" in html
+
+
+def test_dashboard_js_exposes_set_analysis_empty() -> None:
+    js = (WEB_DASHBOARD_DIR / "dashboard.js").read_text(encoding="utf-8")
+    assert "window.setAnalysisEmpty" in js
+    assert "analysis-empty" in js
+
+
+def test_has_analysis_data_requires_analysis_mode() -> None:
+    """El reporte solo debe considerar "hay análisis" en modo análisis."""
+
+    from types import SimpleNamespace
+
+    from shakevision.ui.dashboard_view import DashboardPanel
+
+    fake = SimpleNamespace(_view_mode="live", _analysis_quakes=[object()])
+    assert DashboardPanel.has_analysis_data(fake) is False
+
+    fake._view_mode = "analysis"
+    assert DashboardPanel.has_analysis_data(fake) is True
+
+    fake._analysis_quakes = []
+    assert DashboardPanel.has_analysis_data(fake) is False

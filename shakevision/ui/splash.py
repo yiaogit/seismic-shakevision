@@ -260,7 +260,7 @@ class SplashScreen(QFrame):
             text_block_y = title_y + lh + 14
         else:
             # Fallback: texto si el PNG no se encontró.
-            title_font = QFont("Inter Variable", 22, QFont.Weight.DemiBold)
+            title_font = QFont("Inter", 22, QFont.Weight.DemiBold)
             title_font.setStyleHint(QFont.StyleHint.SansSerif)
             painter.setFont(title_font)
             painter.setPen(QColor(COLOR_PRIMARY))
@@ -283,7 +283,7 @@ class SplashScreen(QFrame):
         )
 
         # 6) Estado dinámico + 3 puntos animados
-        status_font = QFont("Inter Variable", 11, QFont.Weight.Normal)
+        status_font = QFont("Inter", 11, QFont.Weight.Normal)
         status_font.setStyleHint(QFont.StyleHint.SansSerif)
         painter.setFont(status_font)
         painter.setPen(QColor(COLOR_SECONDARY))

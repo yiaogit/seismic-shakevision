@@ -33,7 +33,7 @@ class SpectrumPanel(QFrame):
         super().__init__(parent)
         self.setObjectName("WaveformPanel")
         self.setFrameShape(QFrame.NoFrame)
-        self.setMinimumHeight(140)   # v0.7.7: no aplastar bajo el splitter
+        self.setMinimumHeight(110)   # v0.7.7: no aplastar bajo el splitter
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)

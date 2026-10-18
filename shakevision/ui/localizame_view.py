@@ -355,7 +355,7 @@ class LocalizameScreen(QFrame):
 
         # 6) Bloque de texto debajo de los halos
         # Encabezado (más grande, blanco)
-        head_font = QFont("Inter Variable", 13, QFont.Weight.DemiBold)
+        head_font = QFont("Inter", 13, QFont.Weight.DemiBold)
         head_font.setStyleHint(QFont.StyleHint.SansSerif)
         painter.setFont(head_font)
         painter.setPen(QColor(COLOR_PRIMARY))

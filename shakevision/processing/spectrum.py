@@ -69,11 +69,21 @@ class SpectrumComputer:
                 power_db=np.zeros((0, 0), dtype=np.float32),
             )
 
+        # Normalizar por el pico ANTES del espectrograma. La escala dB es
+        # relativa (no una PSD calibrada): así una traza en counts (±cientos)
+        # y la misma en velocidad (±1e-7 m/s, tras remove_response) producen
+        # el mismo color. Sin esto, los datos físicos caían todos al piso
+        # -120 dB y el mapa salía uniforme.
+        x = samples.astype(np.float64)
+        peak = float(np.max(np.abs(x))) if x.size else 0.0
+        if peak > 0:
+            x = x / peak
+
         # ``spectrogram`` devuelve potencia (escala "spectrum"). Hacemos
         # la conversión a dB después y aplicamos un piso para evitar
         # -inf en bloques silenciosos.
         freqs, times, sxx = spectrogram(
-            samples.astype(np.float64),
+            x,
             fs=self._sample_rate,
             window="hann",
             nperseg=self._nperseg,

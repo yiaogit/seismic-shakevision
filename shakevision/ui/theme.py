@@ -176,20 +176,8 @@ WAVEFORM_COLORS = {
 # ============================================================
 # Tipografía (no cambia con el tema)
 # ============================================================
-FONT_STACK_SANS = (
-    # El TTC empaquetado (Inter.ttc) expone la familia "Inter" (caras
-    # estáticas), NO "Inter Variable". Poner primero la que no existe hacía
-    # que Qt avisara en cada arranque y resolviera alias de más.
-    '"Inter", "Inter Variable", '
-    '"-apple-system", "SF Pro Text", '
-    '"Segoe UI Variable", "Segoe UI", '
-    '"PingFang SC", "Microsoft YaHei", '
-    '"Helvetica Neue", sans-serif'
-)
-FONT_STACK_MONO = (
-    '"JetBrains Mono", "SF Mono", "Monaco", '
-    '"Cascadia Code", "Consolas", "Menlo", monospace'
-)
+FONT_STACK_SANS = '"Inter"'
+FONT_STACK_MONO = '"JetBrains Mono"'
 FONT_SIZE_DEFAULT = 13
 FONT_SIZE_LABEL   = 11
 FONT_SIZE_VALUE   = 14
@@ -804,7 +792,7 @@ def apply_theme(app: QApplication, theme: ThemeName = "dark") -> Iterable[str]:
     # 2. Fuente por defecto
     default_font = QFont()
     default_font.setPointSize(FONT_SIZE_DEFAULT)
-    if "Inter" in families or "Inter Variable" in families:
+    if "Inter" in families:
         default_font.setFamily("Inter")
     elif families:
         default_font.setFamily(families[0])

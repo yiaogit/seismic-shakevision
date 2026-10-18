@@ -112,6 +112,17 @@
 
       <!-- ░░░░ PÁGINA: ANÁLISIS (estadística) ░░░░ -->
       <div id="page-analysis" style="display:none;">
+        <!-- Estado vacío: aún no se ha ejecutado ninguna consulta histórica.
+             Sin esto, la página mostraba KPIs y gráficas del feed EN VIVO. -->
+        <div id="analysis-empty" class="analysis-empty" style="display:none;">
+          <div class="analysis-empty-icon">🧭</div>
+          <h3 data-i18n="web.dashboard.empty.title">Sin catálogo histórico</h3>
+          <p data-i18n="web.dashboard.empty.hint">
+            Elige región, ventana y magnitud mínima arriba, y pulsa Buscar.
+          </p>
+        </div>
+
+        <div id="analysis-content">
         <h2 class="row-title" data-i18n="web.dashboard.row.advanced">Análisis avanzado</h2>
         <div class="charts-grid">
           <section class="chart-card">
@@ -174,6 +185,7 @@
             <div class="chart" id="chart-interevent"></div>
           </section>
         </div>
+        </div><!-- /analysis-content -->
       </div>
     </main>
   </div>

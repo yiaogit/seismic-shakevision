@@ -317,6 +317,8 @@
   "web.dashboard.selector.period": "周期",
   "web.dashboard.row.summary": "概览",
   "web.dashboard.row.advanced": "高级分析",
+  "web.dashboard.empty.title": "尚未加载历史目录",
+  "web.dashboard.empty.hint": "请在上方选择地区、时段与最小震级，然后点击「查询」。",
   "web.dashboard.row.summary_window": "(最近 {period})",
   "web.dashboard.chart.countries": "Top 10 国家 / 地区",
   "web.dashboard.chart.countries_filter": "(M ≥ 3.0)",

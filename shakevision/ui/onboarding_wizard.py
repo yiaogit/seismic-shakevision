@@ -238,7 +238,7 @@ class OnboardingWizard(QDialog):
             logo_label.setPixmap(pm)
         else:
             logo_label.setText("SeismicGuard")
-            f = QFont("Inter Variable", 22, QFont.Weight.DemiBold)
+            f = QFont("Inter", 22, QFont.Weight.DemiBold)
             f.setStyleHint(QFont.StyleHint.SansSerif)
             logo_label.setFont(f)
         logo_label.setAlignment(Qt.AlignCenter)
@@ -650,7 +650,7 @@ class OnboardingWizard(QDialog):
         }}
         QLabel#WizardStepLabel {{
             color: {_t.COLOR_TEXT_PRIMARY};
-            font-family: 'Inter Variable', sans-serif;
+            font-family: 'Inter', sans-serif;
             font-size: 16px;
             font-weight: 600;
         }}
@@ -661,25 +661,25 @@ class OnboardingWizard(QDialog):
         }}
         QLabel#WizardSectionTitle {{
             color: {_t.COLOR_TEXT_PRIMARY};
-            font-family: 'Inter Variable', sans-serif;
+            font-family: 'Inter', sans-serif;
             font-size: 18px;
             font-weight: 600;
         }}
         QLabel#WizardBody {{
             color: {_t.COLOR_TEXT_SECONDARY};
-            font-family: 'Inter Variable', sans-serif;
+            font-family: 'Inter', sans-serif;
             font-size: 13px;
             line-height: 1.4;
         }}
         QLabel#WizardCaption {{
             color: {_t.COLOR_TEXT_MUTED};
-            font-family: 'Inter Variable', sans-serif;
+            font-family: 'Inter', sans-serif;
             font-size: 11px;
         }}
         QRadioButton#WizardRadio {{
             color: {_t.COLOR_TEXT_PRIMARY};
             background: transparent;
-            font-family: 'Inter Variable', sans-serif;
+            font-family: 'Inter', sans-serif;
             font-size: 13px;
             padding: 6px 4px;
             spacing: 10px;
@@ -729,7 +729,7 @@ class OnboardingWizard(QDialog):
             border-radius: 8px;
             padding: 8px 18px;
             font-weight: 600;
-            font-family: 'Inter Variable', sans-serif;
+            font-family: 'Inter', sans-serif;
             font-size: 13px;
             min-width: 100px;
         }}
@@ -740,7 +740,7 @@ class OnboardingWizard(QDialog):
             border: 1px solid {_t.COLOR_PANEL_BORDER};
             border-radius: 8px;
             padding: 8px 14px;
-            font-family: 'Inter Variable', sans-serif;
+            font-family: 'Inter', sans-serif;
             font-size: 12px;
             min-width: 80px;
         }}

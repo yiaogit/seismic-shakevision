@@ -1228,6 +1228,14 @@ class MainWindow(QMainWindow):
     def _on_export_report(self) -> None:
         """Pregunta al usuario dónde guardar el reporte y lo escribe."""
 
+        # En la página de Análisis sin catálogo histórico, _report_dataset()
+        # caería al feed EN VIVO y generaría un reporte con la etiqueta
+        # equivocada. Mejor avisar de que no hay datos del análisis.
+        if (getattr(self.dashboard_panel, "_view_mode", "live") == "analysis"
+                and not self.dashboard_panel.has_analysis_data()):
+            self._status_bar.showMessage(t("status.no_data_for_report"), 6000)
+            return
+
         quakes, context = self._report_dataset()
         if not quakes:
             self._status_bar.showMessage(t("status.no_data_for_report"), 6000)

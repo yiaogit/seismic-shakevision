@@ -34,16 +34,58 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   `~/.cache` de solo lectura (sandbox, HOME ro, disco lleno) abortaba el feed
   completo con “Could not load data”.
 - **La fuente Inter no se cargaba.** `_load_bundled_fonts()` solo aceptaba
-  `.ttf/.otf`, así que `Inter.ttc` (36 caras) nunca se registraba y Qt avisaba
-  `missing font family "Inter"` en cada arranque. Se admite `.ttc` y el stack
-  QSS prioriza la familia real (`Inter`, no `Inter Variable`).
+  `.ttf/.otf`, así que `Inter.ttc` (36 caras) nunca se registraba. Se admite
+  `.ttc` y los stacks QSS usan una sola familia empaquetada
+  (`Inter` / `JetBrains Mono`): antes la lista incluía familias inexistentes en
+  Qt (`Inter Variable`, `-apple-system`, `SF Pro Text`…) y el log de arranque
+  avisaba `missing font family …` en cada ejecución.
+- **SeedLink — handshake roto con ObsPy 1.5.1.** `create_client()` fuerza
+  `autoconnect=True` y `SeedLinkConnection.timeout=None`; su `connect()` hace
+  `is_connected(self.timeout)` → `'<' not supported between instances of
+  'float' and 'NoneType'`. Se instancia `EasySeedLinkClient(autoconnect=False)`,
+  se fija un timeout real y se conecta de forma explícita.
+- **SeedLink — paquetes asíncronos desalineados.** IRIS manda BHZ/BH1/BH2 en
+  paquetes separados (a veces con huecos/solapes). El emisor anterior rellenaba
+  al máximo y escribía todo con un único timestamp: duplicaba tramos de tiempo
+  (oscilograma con picos, hodograma desfasado). Ahora cada canal mantiene su
+  eje temporal, los solapes se recortan, los huecos se rellenan con hold y solo
+  se emite la ventana común `[_emit_end, min(fin canales)]`; si faltan canales
+  tras 10 s se emite con hold (estación vertical-only).
+- **SeedLink — al desconectar, el hilo quedaba vivo.** Solo se hacía
+  `socket.shutdown`; ObsPy seguía en su bucle de `collect()` (EOF → sleep 0.5 s)
+  y al salir aparecía `QThread: Destroyed while thread is still running`.
+  `_safe_shutdown_client()` ahora llama también a `conn.terminate()`, de modo
+  que `collect()` devuelve `SLTERMINATE` y el hilo termina ordenadamente.
+- **Oscilograma en vivo — trazas recortadas.** El rango Y estaba fijado a
+  ±2.0; las estaciones IRIS llegan en counts (±miles) y todas las trazas se
+  dibujaban contra los bordes (parecían picos). Se activa auto-rango Y en vivo.
+  Además N/E tenían auto-rango X propio: se desactiva para que el eje temporal
+  lo mande Z (canales alineados).
+- **Espectrograma — dB dependiente de la unidad.** Con datos físicos
+  (p. ej. velocidad 1e-7 m/s tras `remove_response`) todos los valores caían al
+  piso −120 dB y el mapa salía uniforme. El cálculo ahora normaliza por el pico
+  antes del espectrograma (dB relativo); en Replay el rango de color se ajusta
+  a los percentiles del dato y el eje X UTC ya no muestra `(x1e+09)`.
+- **Replay — layout y sugerencia tardía.** Con espectrograma + PSD el splitter
+  aplastaba las trazas (la inferior desaparecía); ahora cada traza tiene altura
+  mínima, el splitter no colapsa bloques y los paneles usan mínimos de 110 px.
+  Si la ventana P/S sugerida termina de calcularse **después** de la descarga,
+  ya no cambia el formulario ni pisa el estado “P/S overlayed” con “click Load”.
 - **Lint reproducible.** `[tool.ruff.lint] select = ["E4", "E7", "E9", "F"]`
   fija el conjunto histórico: ruff 0.17.1 reportaba 576 hallazgos con su
   selección por defecto ampliada, mientras 0.12.7 daba el árbol limpio.
 
 ### Added
-- Tests: `tests/test_event_list_panel.py` (recorte + aviso tras retraducir) y
-  caso de caché no escribible en `tests/test_cache.py`.
+- **Panel de datos — estado vacío de Análisis.** Al entrar en “Analizar” sin
+  catálogo histórico (o si `/count` supera 20 000) ya no se muestran los KPIs
+  del feed en vivo (“EARTHQUAKES / 24 H”) ni sus gráficas: contenido y cabecera
+  se ocultan y aparece una guía “elige región, ventana y magnitud y pulsa
+  Buscar”. Al volver a “En vivo” se restaura; al reentrar en Análisis sin nueva
+  consulta se vuelve a mostrar el estado vacío (no datos viejos).
+- Tests: `tests/test_event_list_panel.py` (recorte + aviso tras retraducir),
+  caché no escribible en `tests/test_cache.py`, independencia de amplitud del
+  espectrograma en `tests/test_spectrum.py`, y alineación/huecos/solapes del
+  agregador SeedLink en `tests/test_seedlink.py`.
 
 ## [0.8.3.0] - 2026-06-28
 
