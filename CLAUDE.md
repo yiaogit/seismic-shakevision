@@ -48,7 +48,7 @@ License: MIT.
 |---|---|
 | Current version (4 files, see §5) | **0.9.0.0** — tagged + released; `[Unreleased]` empty |
 | Latest tag pushed to origin | `v0.9.0.0` (commit `d0797c1`, 2026-10-18) |
-| HEAD | `main` @ `577fb05` + release-workflow checksum fix |
+| HEAD | `main` @ `233ad46` (release tag `v0.9.0.0` = `d0797c1`) |
 | Latest **release with installers** on GitHub Releases | `v0.9.0.0` — macOS arm64 `.dmg`, Windows `.zip`, Linux `.AppImage` + `SHA256SUMS.txt` |
 | Branch | `main` |
 | Python | 3.10 / 3.11 / 3.12 (CI matrix); 3.14 runs locally but is **off-matrix** |
