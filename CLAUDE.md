@@ -463,7 +463,7 @@ See `CHANGELOG.md` for the source-of-truth detail.
 | Analysis time window / range slider | `ui/range_slider.py` + `utils/timescale.py` |
 | Quake filtering (mag/depth/text) | `processing/event_filter.py` + `ui/event_filter_bar.py` |
 | Inspect what got released | `curl -s https://api.github.com/repos/yiaogit/seismic-shakevision/releases` |
-| **Design docs index** | `docs/`: `dashboard-pro.md` · `workbench-restructure.md` · `smooth-live-waveform.md` · `functional-paths-audit.md` · `events-i18n-timezone.md` · `replay-redesign.md` · `roadmap.md` · `ux-review.md` · `audit-0.7.7.md` · `seismic-software-survey.md` |
+| **Design docs index** | `docs/`: `dashboard-pro.md` · `workbench-restructure.md` · `smooth-live-waveform.md` · `functional-paths-audit.md` · `optimization-checklist.md` · `events-i18n-timezone.md` · `replay-redesign.md` · `roadmap.md` · `ux-review.md` · `audit-0.7.7.md` · `seismic-software-survey.md` |
 | **Workbench station/event flow & 2-mode restructure** | **`docs/workbench-restructure.md`** — source of truth for how stations/events route into Live vs Replay; read BEFORE changing `pro_window` / `control_panel` / `replay_panel` station wiring |
 
 ---

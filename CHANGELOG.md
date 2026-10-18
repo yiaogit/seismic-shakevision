@@ -94,6 +94,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - **全功能链路审计。** 新增 `docs/functional-paths-audit.md`：真实
   UI 走 Globe/Data/Events/Mine/Workbench/Replay/Settings/Profile/
   报告/Kiosk 链路，记录 3 个真实缺陷修复、自动化限制与完善空间。
+- **综合优化清单。** `docs/optimization-checklist.md` 合并 UI 巡检、
+  30 Hz 平滑波形、全链路测试与 P0/P1/P2 backlog，便于后续排期。
 
 - **UI 逐页巡检 — 空态、Workbench/回放、Mine、设置与活动日志。** 为
   Waveform/Spectrogram 增加真正的占位状态（不再显示 0.1–0.9 s、
