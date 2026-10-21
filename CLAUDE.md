@@ -48,7 +48,7 @@ License: MIT.
 |---|---|
 | Current version (4 files, see §5) | **0.9.0.1** — tagged + released; `[Unreleased]` empty |
 | Latest tag pushed to origin | `v0.9.0.1` (2026-10-21) |
-| HEAD | `main` @ `233ad46` (release tag `v0.9.0.0` = `d0797c1`) |
+| HEAD | `main` @ `71e20db` (release tag `v0.9.0.1` = `71e20db`) |
 | Latest **release with installers** on GitHub Releases | `v0.9.0.1` — macOS arm64 `.dmg`, Windows `.zip`, Linux `.AppImage` + `SHA256SUMS.txt` |
 | Branch | `main` |
 | Python | 3.10 / 3.11 / 3.12 (CI matrix); 3.14 runs locally but is **off-matrix** |
@@ -80,7 +80,7 @@ License: MIT.
    configuration — reproduce any 3.14-only bug on 3.12 before chasing it
    (`brew install python@3.12` if needed).
 7. **Docs drift**: CLAUDE.md and `docs/roadmap.md` had lagged behind
-   0.8.x. Update this file in the same commit as any version bump.
+   0.9.x. Update this file in the same commit as any version bump.
 
 ---
 
