@@ -4,7 +4,7 @@
 
 [简体中文](README.md) · [English](README.en.md) · [Español](README.es.md) · **Français**
 
-> **v0.9.0.1 — plus fluide, plus fiable, plus simple.** Cette version ajoute un
+> **v0.9.0.2 — plus fluide, plus fiable, plus simple.** Cette version ajoute un
 > placeholder de station avec Connect protégé, une **forme d’onde en direct
 > fluide à 30 Hz** (bascule Smooth/Realtime), la recherche de stations sur le
 > globe, la progression de connexion avec temps écoulé, une ScopeBar repliable,
@@ -41,7 +41,7 @@ spectrogramme / déclenchement dans une seule application desktop.
 
 ## 🖼 Captures et fonctionnalités
 
-> Captures de **v0.9.0.1** en session réelle (fenêtre principale 1480×900 / Workbench 1200×800). Sombre par défaut ; le thème clair est à un clic.
+> Captures de **v0.9.0.2** en session réelle (fenêtre principale 1480×900 / Workbench 1200×800). Sombre par défaut ; le thème clair est à un clic.
 
 ### 1. Globe 3D : de « voir » à « utiliser »
 

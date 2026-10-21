@@ -4,7 +4,7 @@
 
 [简体中文](README.md) · [English](README.en.md) · **Español** · [Français](README.fr.md)
 
-> **v0.9.0.1 — más fluido, fiable y fácil de usar.** Esta versión añade un
+> **v0.9.0.2 — más fluido, fiable y fácil de usar.** Esta versión añade un
 > placeholder de estación con Connect protegido, **forma de onda en vivo suave
 > a 30 Hz** (conmutador Smooth/Realtime), búsqueda de estaciones en el globo,
 > progreso de conexión con tiempo transcurrido, ScopeBar plegable, progreso de
@@ -41,7 +41,7 @@ disparo en una sola aplicación de escritorio.
 
 ## 🖼 Capturas y funciones
 
-> Capturas de **v0.9.0.1** en una sesión real (ventana principal 1480×900 / Workbench 1200×800). Oscuro por defecto; el tema claro está a un clic.
+> Capturas de **v0.9.0.2** en una sesión real (ventana principal 1480×900 / Workbench 1200×800). Oscuro por defecto; el tema claro está a un clic.
 
 ### 1. Globo 3D: de “ver” a “usar”
 

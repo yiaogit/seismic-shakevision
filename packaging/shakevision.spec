@@ -25,7 +25,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files  # noqa: F401
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata  # noqa: F401
 
 import obspy  # noqa: E402
 
@@ -69,7 +69,17 @@ datas += collect_data_files("certifi")
 datas += collect_data_files("babel")
 datas += collect_data_files("reverse_geocoder")
 
-# v0.9.0.1 — ObsPy carga sus librerías C por ruta física:
+# v0.9.0.2 — ObsPy descubre sus plugin(s) (MSEED/SAC/StationXML...) con
+# importlib.metadata.entry_points(). Sin el .dist-info en el bundle,
+# obspy.read() no reconoce ni siquiera un MiniSEED válido:
+#   Unknown format for file .../obspy-...tmp
+# `copy_metadata` incluye obspy-*.dist-info/entry_points.txt.
+datas += copy_metadata("obspy")
+# v0.9.0.2 — ObsPy plugin packages are lazy-loaded from entry points;
+# collect the whole namespace so MSEED/StationXML/SAC/etc. are present.
+datas += collect_data_files("obspy", excludes=["**/tests/**", "**/test/**"])
+
+# v0.9.0.2 — ObsPy carga sus librerías C por ruta física:
 #   Path(obspy.core.util.libnames.__file__).parents[2] / "lib"
 # `collect_dynamic_libs("obspy")` no las detecta (son extensiones dentro
 # de obspy/lib), así que hay que copiarlas explícitamente. Sin esto el
@@ -87,6 +97,11 @@ if OBS_LIB.is_dir():
     _init = OBS_LIB / "__init__.py"
     if _init.is_file():
         datas.append((str(_init), "obspy/lib"))
+# ObsPy __init__ lee/escribe obspy/RELEASE-VERSION al importar; sin el
+# archivo, import obspy lanza FileNotFoundError en el bundle.
+_release = OBS_PKG / "RELEASE-VERSION"
+if _release.is_file():
+    datas.append((str(_release), "obspy"))
 # Datos que ObsPy carga con open()/numpy (TauP y PQLX).
 for _sub in ("taup/data", "imaging/data"):
     _dir = OBS_PKG / _sub
@@ -107,6 +122,8 @@ hiddenimports = [
     "obspy.io.stationxml",
     "obspy.clients.fdsn",
     "obspy.clients.seedlink",
+    # v0.9.0.2 — entry-point plugins are imported lazily at read() time.
+    # collect_submodules() below adds the remaining obspy namespace.
     # tzdata es runtime-only en Windows; lo incluimos siempre por
     # seguridad — coste casi nulo (~1 MB).
     "tzdata",
@@ -133,6 +150,7 @@ hiddenimports = [
     "shakevision.services.updater",
     "shakevision.ui.update_dialog",
 ]
+hiddenimports += collect_submodules("obspy")
 
 # macOS — pyobjc se importa de forma PEREZOSA dentro de funciones en
 # ui/macos_native.py (barra de título translúcida + botón verde = zoom en
@@ -172,7 +190,7 @@ a = Analysis(
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=[str(ROOT / "packaging" / "rthook_obspy.py")],
     excludes=excludes,
     noarchive=False,
     optimize=0,
@@ -252,12 +270,12 @@ if sys.platform == "darwin":
         name="ShakeVision.app",
         icon=ICON_PATH,
         bundle_identifier="org.shakevision.app",
-        version="0.9.0.1",
+        version="0.9.0.2",
         info_plist={
             "CFBundleName": "ShakeVision",
             "CFBundleDisplayName": "ShakeVision",
-            "CFBundleShortVersionString": "0.9.0.1",
-            "CFBundleVersion": "0.9.0.1",
+            "CFBundleShortVersionString": "0.9.0.2",
+            "CFBundleVersion": "0.9.0.2",
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "11.0",
             "NSHumanReadableCopyright": "© 2025 ShakeVision contributors — MIT License",

@@ -12,6 +12,22 @@ _(nothing yet)_
 
 ---
 
+## [0.9.0.2] - 2026-10-21
+
+### Fixed
+- **DMG — Replay `Load` falla con `Unknown format for file ...tmp`.** El
+  bundle ya traía las C-libs de ObsPy (0.9.0.1), pero no sus **entry
+  points** ni `obspy/RELEASE-VERSION`; por eso `obspy.read()` no
+  registraba el plugin MiniSEED. El spec ahora incluye
+  `copy_metadata("obspy")`, `collect_submodules("obspy")`,
+  `RELEASE-VERSION`, y un runtime hook que mantiene `OBSPY_ROOT` dentro
+  del bundle. Verificado con un binario PyInstaller congelado:
+  `obspy.read()` de MiniSEED devuelve 1 trace y los 30 formatos están
+  registrados.
+- **0.9.0.1 queda superseded** por este parche; usa 0.9.0.2.
+
+---
+
 ## [0.9.0.1] - 2026-10-21
 
 ### Fixed

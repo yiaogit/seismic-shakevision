@@ -203,7 +203,17 @@ def verify_runtime_bundle() -> None:
     libs = list(libdir.glob("mseed*")) + list(libdir.glob("signal*"))
     if not libs:
         _die(f"{libdir} no contiene extensiones ObsPy (mseed/signal)")
-    _ok(f"ObsPy C-libs presentes ({len(libs)} archivos)")
+    # ObsPy registra sus formatos con entry points; sin metadata,
+    # obspy.read() no reconoce MiniSEED aunque el archivo sea válido.
+    if sys.platform == "darwin":
+        data_root = DIST / f"{APP_NAME}.app" / "Contents" / "Resources"
+    else:
+        data_root = DIST / APP_NAME / "_internal"
+    if not (data_root / "obspy" / "RELEASE-VERSION").is_file():
+        _die(f"falta {data_root / 'obspy' / 'RELEASE-VERSION'}")
+    if not list(data_root.glob("obspy-*.dist-info/entry_points.txt")):
+        _die(f"falta obspy-*.dist-info/entry_points.txt en {data_root}")
+    _ok(f"ObsPy C-libs presentes ({len(libs)} archivos) + entry points")
 
 
 # ============================================================
