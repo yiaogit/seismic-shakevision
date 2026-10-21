@@ -12,6 +12,24 @@ _(nothing yet)_
 
 ---
 
+## [0.9.0.1] - 2026-10-21
+
+### Fixed
+- **macOS DMG — Connect falla con `ObsPy no disponible: [Errno 2] ...
+  Frameworks/obspy/lib`.** El bundle incluía el paquete Python de ObsPy
+  pero no sus extensiones C (`obspy/lib/*.so`), que `_load_cdll()` carga
+  por ruta física. PyInstaller no las detecta con `collect_dynamic_libs`
+  porque están dentro del paquete. El spec ahora copia explícitamente
+  `obspy/lib`, `obspy/taup/data` y `obspy/imaging/data`; el DMG vuelve a
+  conectar SeedLink y a cargar MiniSEED/StationXML. Verificado con
+  `ctypes.CDLL` sobre el bundle y arranque del `.app`.
+- CI: se normaliza `SHA256SUMS.txt` (CRLF de Windows) en el workflow de
+  release y se fija PySide6 6.11.2 en Linux Python 3.10/3.11 por el
+  finalizer `none_dealloc` de PySide6 6.12; 3.12/macOS/Windows siguen
+  con 6.12.
+
+---
+
 ## [0.9.0.0] - 2026-10-18
 
 ### Highlights

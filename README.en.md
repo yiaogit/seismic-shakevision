@@ -4,7 +4,7 @@
 
 [简体中文](README.md) · **English** · [Español](README.es.md) · [Français](README.fr.md)
 
-> **v0.9.0 — smoother, more reliable, easier to use.** This release adds a
+> **v0.9.0.1 — smoother, more reliable, easier to use.** This release adds a
 > station placeholder with Connect gating, a **30 Hz smooth live waveform**
 > (switchable to Realtime), globe station search, elapsed connection progress,
 > a collapsible ScopeBar, helicorder collection progress, an in-page report
@@ -40,7 +40,7 @@ analysis into a single desktop app.
 
 ## 🖼 Screenshots & features
 
-> Captured from **v0.9.0** on a real session (1480×900 main window / 1200×800 Workbench). Dark is the default; light theme is one click away.
+> Captured from **v0.9.0.1** on a real session (1480×900 main window / 1200×800 Workbench). Dark is the default; light theme is one click away.
 
 ### 1. 3D globe — from “see” to “use”
 

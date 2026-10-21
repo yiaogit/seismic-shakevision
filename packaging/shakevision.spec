@@ -27,6 +27,8 @@ from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_data_files  # noqa: F401
 
+import obspy  # noqa: E402
+
 # El spec se ejecuta desde la raíz del repo cuando se llama vía
 # `pyinstaller packaging/shakevision.spec`. Calculamos rutas absolutas
 # para que no dependa del cwd.
@@ -66,6 +68,30 @@ datas += collect_data_files("certifi")
 #     que carga en runtime; hay que incluirlo como dato.
 datas += collect_data_files("babel")
 datas += collect_data_files("reverse_geocoder")
+
+# v0.9.0.1 — ObsPy carga sus librerías C por ruta física:
+#   Path(obspy.core.util.libnames.__file__).parents[2] / "lib"
+# `collect_dynamic_libs("obspy")` no las detecta (son extensiones dentro
+# de obspy/lib), así que hay que copiarlas explícitamente. Sin esto el
+# .dmg arranca pero Connect falla con:
+#   ObsPy no disponible: [Errno 2] .../Frameworks/obspy/lib
+OBS_PKG = Path(obspy.__file__).resolve().parent
+OBS_LIB = OBS_PKG / "lib"
+binaries = []
+if OBS_LIB.is_dir():
+    for _lib in sorted(OBS_LIB.iterdir()):
+        if _lib.suffix.lower() in {".so", ".pyd", ".dll", ".dylib"}:
+            binaries.append((str(_lib), "obspy/lib"))
+    # El __init__.py de obspy.lib también debe existir físicamente para
+    # que el paquete congelado resuelva la ruta.
+    _init = OBS_LIB / "__init__.py"
+    if _init.is_file():
+        datas.append((str(_init), "obspy/lib"))
+# Datos que ObsPy carga con open()/numpy (TauP y PQLX).
+for _sub in ("taup/data", "imaging/data"):
+    _dir = OBS_PKG / _sub
+    if _dir.is_dir():
+        datas.append((str(_dir), f"obspy/{_sub}"))
 
 # ------------------------------------------------------------
 # Hidden imports — módulos que PyInstaller no descubre por análisis
@@ -141,7 +167,7 @@ excludes = [
 a = Analysis(
     [str(APP_PKG / "__main__.py")],
     pathex=[str(ROOT)],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
@@ -226,12 +252,12 @@ if sys.platform == "darwin":
         name="ShakeVision.app",
         icon=ICON_PATH,
         bundle_identifier="org.shakevision.app",
-        version="0.9.0.0",
+        version="0.9.0.1",
         info_plist={
             "CFBundleName": "ShakeVision",
             "CFBundleDisplayName": "ShakeVision",
-            "CFBundleShortVersionString": "0.9.0.0",
-            "CFBundleVersion": "0.9.0.0",
+            "CFBundleShortVersionString": "0.9.0.1",
+            "CFBundleVersion": "0.9.0.1",
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "11.0",
             "NSHumanReadableCopyright": "© 2025 ShakeVision contributors — MIT License",

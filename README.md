@@ -4,7 +4,7 @@
 
 **简体中文** · [English](README.en.md) · [Español](README.es.md) · [Français](README.fr.md)
 
-> **v0.9.0 — 更顺滑、更可靠、更易上手。** 本版加入台站占位与 Connect 防误连、**30 Hz 平滑实时波形**（Smooth/Realtime 可切）、Globe 台站搜索、连接耗时进度条、可折叠 ScopeBar、Helicorder 采集进度、Data 页报告入口，以及 **L1 自动更新**（GitHub manifest + SHA-256 校验下载，不静默安装）。同时修复 **Stop 时 QThread 崩溃**、**Workbench 置顶时弹窗被挡**、**Kiosk 快捷键失效**。v0.8.3 的历史目录/专业统计、双布局报告，v0.8.0 的「事件 → 复核 → 收藏」工作流完整保留。
+> **v0.9.0.1 — 更顺滑、更可靠、更易上手。** 本版加入台站占位与 Connect 防误连、**30 Hz 平滑实时波形**（Smooth/Realtime 可切）、Globe 台站搜索、连接耗时进度条、可折叠 ScopeBar、Helicorder 采集进度、Data 页报告入口，以及 **L1 自动更新**（GitHub manifest + SHA-256 校验下载，不静默安装）。同时修复 **Stop 时 QThread 崩溃**、**Workbench 置顶时弹窗被挡**、**Kiosk 快捷键失效**。v0.8.3 的历史目录/专业统计、双布局报告，v0.8.0 的「事件 → 复核 → 收藏」工作流完整保留。
 >
 > 原名 **ShakeVision OpenData Monitor**；历史 v0.1.x 二进制仍以 `ShakeVision-*` 名称保留在 Releases。
 
@@ -29,7 +29,7 @@
 
 ## 🖼 界面与功能
 
-> 截图来自 **v0.9.0** 实机（1480×900 主窗 / 1200×800 Workbench）。默认深色，浅色主题一键切换。
+> 截图来自 **v0.9.0.1** 实机（1480×900 主窗 / 1200×800 Workbench）。默认深色，浅色主题一键切换。
 
 ### 1. 3D 地球：从“看”到“用”
 

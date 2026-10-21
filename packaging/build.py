@@ -184,6 +184,28 @@ def run_pyinstaller() -> None:
     _ok("Bundle PyInstaller generado en dist/")
 
 
+def verify_runtime_bundle() -> None:
+    """Falla el build si ObsPy no llevó sus extensiones C.
+
+    ObsPy carga ``obspy/lib/*.so|pyd`` por ruta física (no por import), así
+    que un bundle sin esa carpeta arranca pero falla al conectar:
+    ``ObsPy no disponible: [Errno 2] .../obspy/lib``. Esto ocurrió en
+    v0.9.0.0; el check evita publicar otro binario roto.
+    """
+
+    _step("Verificando ObsPy C-libs en el bundle")
+    if sys.platform == "darwin":
+        libdir = DIST / f"{APP_NAME}.app" / "Contents" / "Frameworks" / "obspy" / "lib"
+    else:
+        libdir = DIST / APP_NAME / "_internal" / "obspy" / "lib"
+    if not libdir.is_dir():
+        _die(f"falta {libdir} — revisa obspy/lib en shakevision.spec")
+    libs = list(libdir.glob("mseed*")) + list(libdir.glob("signal*"))
+    if not libs:
+        _die(f"{libdir} no contiene extensiones ObsPy (mseed/signal)")
+    _ok(f"ObsPy C-libs presentes ({len(libs)} archivos)")
+
+
 # ============================================================
 # Paso 4: post-procesado por plataforma
 # ============================================================
@@ -374,6 +396,7 @@ def main() -> int:
         ensure_web_libs()
     clean_previous()
     run_pyinstaller()
+    verify_runtime_bundle()
 
     if args.no_installer:
         _ok("Compilación completada (--no-installer; no se generan .dmg/.AppImage/.zip)")
