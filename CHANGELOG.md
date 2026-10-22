@@ -12,6 +12,21 @@ _(nothing yet)_
 
 ---
 
+## [0.9.0.4] - 2026-10-22
+
+### Fixed
+- **Auto-update notification never appeared.** En
+  `_on_update_check_done`, un `from shakevision import __version__`
+  dentro de otra rama convertía `__version__` en variable local; la ruta
+  "hay actualización" lanzaba `UnboundLocalError` antes de construir el
+  `QMessageBox`. Se usa el import de módulo y se añadió un test de
+  regresión. Verificado con una ejecución real: aparece
+  `SeismicGuard 0.9.0.3 已发布，当前版本 0.9.0.2。`.
+- **0.9.0.3 queda superseded**: corrige el endpoint SeedLink, pero su
+  notificación de auto-update no se mostraba.
+
+---
+
 ## [0.9.0.3] - 2026-10-22
 
 ### Fixed

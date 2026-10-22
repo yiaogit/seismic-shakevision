@@ -69,17 +69,17 @@ datas += collect_data_files("certifi")
 datas += collect_data_files("babel")
 datas += collect_data_files("reverse_geocoder")
 
-# v0.9.0.3 — ObsPy descubre sus plugin(s) (MSEED/SAC/StationXML...) con
+# v0.9.0.4 — ObsPy descubre sus plugin(s) (MSEED/SAC/StationXML...) con
 # importlib.metadata.entry_points(). Sin el .dist-info en el bundle,
 # obspy.read() no reconoce ni siquiera un MiniSEED válido:
 #   Unknown format for file .../obspy-...tmp
 # `copy_metadata` incluye obspy-*.dist-info/entry_points.txt.
 datas += copy_metadata("obspy")
-# v0.9.0.3 — ObsPy plugin packages are lazy-loaded from entry points;
+# v0.9.0.4 — ObsPy plugin packages are lazy-loaded from entry points;
 # collect the whole namespace so MSEED/StationXML/SAC/etc. are present.
 datas += collect_data_files("obspy", excludes=["**/tests/**", "**/test/**"])
 
-# v0.9.0.3 — ObsPy carga sus librerías C por ruta física:
+# v0.9.0.4 — ObsPy carga sus librerías C por ruta física:
 #   Path(obspy.core.util.libnames.__file__).parents[2] / "lib"
 # `collect_dynamic_libs("obspy")` no las detecta (son extensiones dentro
 # de obspy/lib), así que hay que copiarlas explícitamente. Sin esto el
@@ -122,7 +122,7 @@ hiddenimports = [
     "obspy.io.stationxml",
     "obspy.clients.fdsn",
     "obspy.clients.seedlink",
-    # v0.9.0.3 — entry-point plugins are imported lazily at read() time.
+    # v0.9.0.4 — entry-point plugins are imported lazily at read() time.
     # collect_submodules() below adds the remaining obspy namespace.
     # tzdata es runtime-only en Windows; lo incluimos siempre por
     # seguridad — coste casi nulo (~1 MB).
@@ -270,12 +270,12 @@ if sys.platform == "darwin":
         name="ShakeVision.app",
         icon=ICON_PATH,
         bundle_identifier="org.shakevision.app",
-        version="0.9.0.3",
+        version="0.9.0.4",
         info_plist={
             "CFBundleName": "ShakeVision",
             "CFBundleDisplayName": "ShakeVision",
-            "CFBundleShortVersionString": "0.9.0.3",
-            "CFBundleVersion": "0.9.0.3",
+            "CFBundleShortVersionString": "0.9.0.4",
+            "CFBundleVersion": "0.9.0.4",
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "11.0",
             "NSHumanReadableCopyright": "© 2025 ShakeVision contributors — MIT License",

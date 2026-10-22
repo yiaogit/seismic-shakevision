@@ -1615,7 +1615,6 @@ class MainWindow(QMainWindow):
             self._status_bar.showMessage(t("update.checking"), 3000)
 
         def _work() -> None:
-            from shakevision import __version__
             from shakevision.services import updater
             info = None
             error = ""
@@ -1645,7 +1644,6 @@ class MainWindow(QMainWindow):
             return
         if info is None:
             if interactive:
-                from shakevision import __version__
                 QMessageBox.information(
                     self, t("update.title"),
                     t("update.up_to_date", version=__version__))
