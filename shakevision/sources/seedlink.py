@@ -46,7 +46,7 @@ EMIT_INTERVAL_MS: int = 100
 
 # Timeout del pre-check TCP. NO bajar de 5 s: aunque una conexión LAN sana
 # responde en decenas de ms, los servidores SeedLink internacionales
-# (p. ej. rtserve.iris.edu desde Asia) pueden tardar 3-5 s solo en el
+# (p. ej. rtserve.earthscope.org desde Asia) pueden tardar 3-5 s solo en el
 # DNS+TCP. v0.7.7 lo bajó a 3 s "para fallar más rápido" y provocó timeouts
 # espurios en conexiones reales pero lentas → revertido a 5 s.
 TCP_PRECHECK_TIMEOUT_S: float = 5.0

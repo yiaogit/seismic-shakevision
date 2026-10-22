@@ -46,10 +46,10 @@ License: MIT.
 
 | Item | Value |
 |---|---|
-| Current version (4 files, see §5) | **0.9.0.2** — tagged + released; `[Unreleased]` empty |
+| Current version (4 files, see §5) | **0.9.0.3** — tagged + released; `[Unreleased]` empty |
 | Latest tag pushed to origin | `v0.9.0.2` (2026-10-21, commit `fe741eb`) |
 | HEAD | `main` @ `fe741eb` (release tag `v0.9.0.2` = `fe741eb`) |
-| Latest **release with installers** on GitHub Releases | `v0.9.0.2` — macOS arm64 `.dmg`, Windows `.zip`, Linux `.AppImage` + `SHA256SUMS.txt` |
+| Latest **release with installers** on GitHub Releases | `v0.9.0.3` — macOS arm64 `.dmg`, Windows `.zip`, Linux `.AppImage` + `SHA256SUMS.txt` |
 | Branch | `main` |
 | Python | 3.10 / 3.11 / 3.12 (CI matrix); 3.14 runs locally but is **off-matrix** |
 | Qt binding | PySide6 |
@@ -404,6 +404,7 @@ Release workflow is `.github/workflows/release.yml` (tag `v*` push).
 
 | Version | Date | One-line summary |
 |---|---|---|
+| **0.9.0.3** | 2026-10-22 | SeedLink endpoint migrated to EarthScope `rtserve.earthscope.org:18000`. |
 | **0.9.0.2** | 2026-10-21 | ObsPy entry points/RELEASE-VERSION/plugins in frozen app; fixes Replay `obspy.read` Unknown format. |
 | **0.9.0.1** | 2026-10-21 | ObsPy C-extension packaging fix for macOS DMG; CI/release checksum normalization. |
 | **0.9.0.0** | 2026-10-18 | P0/P1/P2 UX batch (placeholder, Smooth/Realtime, 30 Hz, search, guards, progress, ScopeBar, helicorder, reports), auto-update L1, Stop/dialog/kiosk fixes, README screenshot tour + 4 locales. |

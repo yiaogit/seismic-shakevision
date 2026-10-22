@@ -19,7 +19,8 @@ So the renderer was already at 30 Hz; the "卡顿" was the **data cadence**:
 SeedLink delivered 13 s of samples at once, then the waveform stood still
 until the next packet. Increasing FPS cannot fix missing samples.
 
-Server probes: IRIS `rtserve.iris.washington.edu` accepts IU.PAB;
+Server probes (2026-06): IRIS `rtserve.iris.washington.edu` accepted IU.PAB; the
+current EarthScope endpoint is `rtserve.earthscope.org:18000`;
 EIDA IPGP/KNMI/INGV were unreachable, BGR rejected IU.PAB. No smaller-packet
 endpoint was available.
 

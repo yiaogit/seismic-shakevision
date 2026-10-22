@@ -66,8 +66,8 @@ DEFAULT_SEEDLINK_PORT: int = 18000
 # ============================================================
 # Mapa de red SeedLink → servidor
 # ============================================================
-# IRIS opera un servidor SeedLink público en
-# ``rtserve.iris.washington.edu:18000`` que transmite los datos en
+# EarthScope (antes IRIS) opera un servidor SeedLink público en
+# ``rtserve.earthscope.org:18000`` que transmite los datos en
 # tiempo real de las redes troncales profesionales (IU, US, II, IC,
 # GT…). Es la vía estándar para conectar a una estación USGS/IRIS
 # desde el cliente de un usuario final.
@@ -75,7 +75,7 @@ DEFAULT_SEEDLINK_PORT: int = 18000
 # Para Raspberry Shake (red AM) no existe SeedLink público; la única
 # vía gratuita es conectar al puerto 18000 del propio dispositivo en
 # la red local. El usuario debe configurarlo manualmente.
-IRIS_SEEDLINK_HOST: str = "rtserve.iris.washington.edu"
+IRIS_SEEDLINK_HOST: str = "rtserve.earthscope.org"
 IRIS_SEEDLINK_PORT: int = 18000
 
 # Redes troncales servidas por IRIS rtserve. La lista no es exhaustiva

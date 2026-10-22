@@ -4,7 +4,7 @@
 
 [简体中文](README.md) · [English](README.en.md) · [Español](README.es.md) · **Français**
 
-> **v0.9.0.2 — plus fluide, plus fiable, plus simple.** Cette version ajoute un
+> **v0.9.0.3 — plus fluide, plus fiable, plus simple.** Cette version ajoute un
 > placeholder de station avec Connect protégé, une **forme d’onde en direct
 > fluide à 30 Hz** (bascule Smooth/Realtime), la recherche de stations sur le
 > globe, la progression de connexion avec temps écoulé, une ScopeBar repliable,
@@ -41,7 +41,7 @@ spectrogramme / déclenchement dans une seule application desktop.
 
 ## 🖼 Captures et fonctionnalités
 
-> Captures de **v0.9.0.2** en session réelle (fenêtre principale 1480×900 / Workbench 1200×800). Sombre par défaut ; le thème clair est à un clic.
+> Captures de **v0.9.0.3** en session réelle (fenêtre principale 1480×900 / Workbench 1200×800). Sombre par défaut ; le thème clair est à un clic.
 
 ### 1. Globe 3D : de « voir » à « utiliser »
 
@@ -109,7 +109,7 @@ spectrogramme / déclenchement dans une seule application desktop.
 | 🌐 **i18n**                | Stack complète en 4 langues (EN / ES / 简中 / FR) avec changement instantané, y compris vues web, intérieurs de graphiques, tooltips et rapports HTML |
 | 🕒 **Fuseau horaire**      | Auto-détection du fuseau système + override manuel ; tous les timestamps affichés dans le fuseau de l'utilisateur                 |
 | 📄 **Rapports (deux mises en page)** | HTML + PDF en un seul fichier, **selon le mode** : **Direct** = rapport de surveillance (résumé de situation + classement des pays + timeline + notes sources/données préliminaires) ; **Analyse** = **rapport statistique** (7 graphiques SVG avec axes : GR / énergie / Mc-b / densité spatiale / coupe de profondeur / distribution de profondeur / intervalles + KPIs + **constats** auto-générés + méthodes/provenance/mises en garde + tableau d'événements avec lat/lon et ID). SVG inline pur, sans JS |
-| ⚡ **SeedLink en direct**  | Connexion directe à IRIS `rtserve.iris.washington.edu:18000`, routage automatique IU/US/II/IC, statut de connexion par étapes, annulable à tout moment |
+| ⚡ **SeedLink en direct**  | Connexion directe à IRIS `rtserve.earthscope.org:18000`, routage automatique IU/US/II/IC, statut de connexion par étapes, annulable à tout moment |
 | 👤 **Profil**              | OAuth GitHub (Device Flow), statistiques d'usage, **timeline d'activité récente** (50 derniers événements avec timestamps relatifs, stockés localement) |
 | 📍 **Localisation**        | Géolocalisation par IP (un clic, jamais en arrière-plan) suggère les stations proches et met à jour le fuseau horaire             |
 
@@ -260,7 +260,7 @@ Fenêtre principale — 4 onglets de premier niveau :
 <details>
 <summary><b>FAQ</b></summary>
 
-- **Pas de flux Raspberry Shake public ?** Il n'existe pas de serveur SeedLink public Raspberry Shake. Vous ne pouvez vous connecter qu'à votre propre appareil sur le LAN (`rs.local:18000`) ou à un RTDC payant ; tous les flux publics passent par défaut par IRIS `rtserve.iris.washington.edu`.
+- **Pas de flux Raspberry Shake public ?** Il n'existe pas de serveur SeedLink public Raspberry Shake. Vous ne pouvez vous connecter qu'à votre propre appareil sur le LAN (`rs.local:18000`) ou à un RTDC payant ; tous les flux publics passent par défaut par IRIS `rtserve.earthscope.org`.
 - **Pourquoi Replay met-il parfois du temps ?** Il **télécharge** la fenêtre choisie depuis IRIS FDSN dataselect à la demande ; un distant lent implique une attente (la fenêtre auto est plafonnée et affiche « calcul en cours »). Ce n'est pas un blocage.
 - **Où sont stockés favoris / enregistrements / catalogue ?** Tout en **local**, sans réseau ni télémétrie : favoris dans QSettings ; enregistrements MiniSEED et `catalog.xml` sous `~/SeismicGuard/`. Utilisez « Ouvrir le dossier » dans Ma collection pour récupérer les fichiers ; « Réglages → Vider le cache » les efface aussi.
 - **Bloqué au premier lancement ?** Les binaires ne sont pas signés : sous Windows cliquez sur « Informations complémentaires → Exécuter quand même » de SmartScreen ; sous macOS clic droit sur l'`.app` → Ouvrir. Voir Télécharger ci-dessus.
@@ -283,7 +283,7 @@ graph TB
     subgraph external[" 🌐 Sources externes"]
         USGS[USGS<br/>GeoJSON Feed]
         FDSN[FDSN Web Services<br/>IRIS · ShakeNet]
-        SL[SeedLink TCP<br/>rtserve.iris.washington.edu:18000]
+        SL[SeedLink TCP<br/>rtserve.earthscope.org:18000]
         GH[GitHub API<br/>Device Flow OAuth]
         IP[ip-api.com<br/>géolocalisation]
     end
@@ -578,7 +578,7 @@ automatique et rollback sont L2.
 **Décisions architecturales notables :**
 
 1. **Exécutable unique vs microservices** — les utilisateurs desktop attendent un « double-clic pour lancer » ; livrer un artifact PyInstaller de ~250 MB est des ordres de grandeur plus simple que demander à l'utilisateur d'installer Python.
-2. **Le SeedLink public Raspberry Shake n'existe pas** (découvert en v0.5.1) — seuls les appareils LAN (`rs.local:18000`) ou RTDC payant fonctionnent. Tous les flux temps réel passent par défaut par IRIS `rtserve.iris.washington.edu`.
+2. **Le SeedLink public Raspberry Shake n'existe pas** (découvert en v0.5.1) — seuls les appareils LAN (`rs.local:18000`) ou RTDC payant fonctionnent. Tous les flux temps réel passent par défaut par IRIS `rtserve.earthscope.org`.
 3. **Namespace QSettings conservé en `SeismicGuard` / `ShakeVision`** — le renommer rendrait orphelines toutes les données persistées des utilisateurs actuels ; le rebrand est purement cosmétique.
 4. **Commentaires du code en espagnol** — convention du projet depuis les débuts ; conservé par cohérence stylistique. Les chaînes face à l'utilisateur passent toujours par i18n.
 5. **`DEFAULT_CLIENT_ID` embarqué dans le binaire** (v0.7.5) — les Client IDs OAuth GitHub sont publics par conception et Device Flow ne nécessite pas de secret ; les utilisateurs ont le sign-in en un clic sans enregistrer leur propre App.
@@ -614,7 +614,7 @@ seismic-shakevision/
 ├── shakevision/                          # ── package Python ──
 │   ├── __init__.py                       # constantes __version__ + APP_NAME
 │   ├── __main__.py                       # entrée : splash → fenêtre principale ; gère PyInstaller --windowed stderr=None
-│   ├── config.py                         # registre SEEDLINK_SERVERS (IU/US/II/IC → rtserve.iris) + DEFAULT_STATIONS
+│   ├── config.py                         # registre SEEDLINK_SERVERS (IU/US/II/IC → rtserve.earthscope) + DEFAULT_STATIONS
 │   │
 │   ├── sources/                          # ── sources temps réel (4) ──
 │   │   ├── base.py                       # DataSource abstrait : start/stop + signal samples_ready
@@ -846,7 +846,7 @@ macOS dual-arch, tailles, etc.) dans
 
 - 🍓 [Raspberry Shake](https://raspberryshake.org/) — réseau de sismologie citoyenne, données ouvertes CC-BY
 - 🇺🇸 [USGS Earthquake Hazards Program](https://earthquake.usgs.gov/) — flux GeoJSON sismes
-- 🌍 [IRIS DMC](https://ds.iris.edu/) — métadonnées réseaux pro + stream SeedLink direct (`rtserve.iris.washington.edu`)
+- 🌍 [IRIS DMC](https://ds.iris.edu/) — métadonnées réseaux pro + stream SeedLink direct (`rtserve.earthscope.org`)
 
 > ⚠ **Aucun serveur SeedLink Raspberry Shake public n'existe.** Vous ne
 > pouvez vous connecter qu'à votre propre appareil LAN

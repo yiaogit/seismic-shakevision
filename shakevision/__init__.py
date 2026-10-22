@@ -12,7 +12,7 @@ nuevo.
 
 # Versión del paquete (mantener sincronizada con pyproject.toml y
 # con packaging/shakevision.spec).
-__version__ = "0.9.0.2"
+__version__ = "0.9.0.3"
 
 # Nombre comercial que el usuario ve (ventana, splash, About).
 APP_NAME = "SeismicGuard"

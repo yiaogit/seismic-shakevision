@@ -12,6 +12,21 @@ _(nothing yet)_
 
 ---
 
+## [0.9.0.3] - 2026-10-22
+
+### Fixed
+- **SeedLink — `rtserve.iris.washington.edu` ya no existe (NXDOMAIN).**
+  EarthScope retiró el hostname histórico; el servidor público actual es
+  **`rtserve.earthscope.org:18000`** (SeedLink v4/v3). Se actualiza
+  `IRIS_SEEDLINK_HOST`, el routing IU/US/II/IC, los tests y las cuatro
+  READMEs. Verificado por DNS público (el host antiguo no resuelve; el
+  nuevo sí) y documentado en
+  https://docs.earthscope.org/service/seedlink
+- **0.9.0.2 queda superseded**: corrige ObsPy/Replay, pero seguía usando
+  el hostname SeedLink retirado.
+
+---
+
 ## [0.9.0.2] - 2026-10-21
 
 ### Fixed

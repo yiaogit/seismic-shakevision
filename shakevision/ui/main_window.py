@@ -1061,7 +1061,7 @@ class MainWindow(QMainWindow):
              remota arbitraria.
           3. Si es estación USGS/IRIS: preguntar al usuario si quiere
              añadirla al banco de trabajo Pro. Si confirma, construir
-             un StationPreset con el host correcto (rtserve.iris…) y
+             un StationPreset con el host correcto (rtserve.earthscope…) y
              llamar a pro_window.add_station(). Mostrar estado.
         """
 

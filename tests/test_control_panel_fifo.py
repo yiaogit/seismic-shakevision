@@ -39,7 +39,7 @@ def _preset(net: str, code: str, label: str | None = None) -> StationPreset:
         station=code,
         location="*",
         channel="BHZ",
-        seedlink_host="rtserve.iris.washington.edu",
+        seedlink_host="rtserve.earthscope.org",
         seedlink_port=18000,
     )
 

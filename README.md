@@ -4,7 +4,7 @@
 
 **简体中文** · [English](README.en.md) · [Español](README.es.md) · [Français](README.fr.md)
 
-> **v0.9.0.2 — 更顺滑、更可靠、更易上手。** 本版加入台站占位与 Connect 防误连、**30 Hz 平滑实时波形**（Smooth/Realtime 可切）、Globe 台站搜索、连接耗时进度条、可折叠 ScopeBar、Helicorder 采集进度、Data 页报告入口，以及 **L1 自动更新**（GitHub manifest + SHA-256 校验下载，不静默安装）。同时修复 **Stop 时 QThread 崩溃**、**Workbench 置顶时弹窗被挡**、**Kiosk 快捷键失效**。v0.8.3 的历史目录/专业统计、双布局报告，v0.8.0 的「事件 → 复核 → 收藏」工作流完整保留。
+> **v0.9.0.3 — 更顺滑、更可靠、更易上手。** 本版加入台站占位与 Connect 防误连、**30 Hz 平滑实时波形**（Smooth/Realtime 可切）、Globe 台站搜索、连接耗时进度条、可折叠 ScopeBar、Helicorder 采集进度、Data 页报告入口，以及 **L1 自动更新**（GitHub manifest + SHA-256 校验下载，不静默安装）。同时修复 **Stop 时 QThread 崩溃**、**Workbench 置顶时弹窗被挡**、**Kiosk 快捷键失效**。v0.8.3 的历史目录/专业统计、双布局报告，v0.8.0 的「事件 → 复核 → 收藏」工作流完整保留。
 >
 > 原名 **ShakeVision OpenData Monitor**；历史 v0.1.x 二进制仍以 `ShakeVision-*` 名称保留在 Releases。
 
@@ -29,7 +29,7 @@
 
 ## 🖼 界面与功能
 
-> 截图来自 **v0.9.0.2** 实机（1480×900 主窗 / 1200×800 Workbench）。默认深色，浅色主题一键切换。
+> 截图来自 **v0.9.0.3** 实机（1480×900 主窗 / 1200×800 Workbench）。默认深色，浅色主题一键切换。
 
 ### 1. 3D 地球：从“看”到“用”
 
@@ -97,7 +97,7 @@
 | 🌐 **i18n**               | 全栈 4 语言（EN / ES / 简中 / FR）即时切换，包括 Web 视图、图表内部、tooltip、HTML 报告                                          |
 | 🕒 **时区感知**           | 系统时区自动检测 + 手动覆盖；所有时间戳一致显示用户时区                                                                          |
 | 📄 **报告导出（双布局）** | 一键导出单文件 HTML + PDF，**按模式自动分两套**:**实时**=监控报告（态势概览 + 国家排行 + 时间线 + 数据源/初步数据说明）;**分析**=**统计报告**（7 张带坐标轴 SVG：GR / 能量 / Mc-b / 空间密度 / 深度剖面 / 深度分布 / 事件间隔 + 统计 KPI + 自动**结论段** + 方法/出处/有效性告警 + 含经纬度与事件 ID 的事件表）。纯内联 SVG，无 JS |
-| ⚡ **实时 SeedLink**      | 直连 IRIS `rtserve.iris.washington.edu:18000`，IU/US/II/IC 网络自动路由，分阶段连接状态显示，可随时取消                          |
+| ⚡ **实时 SeedLink**      | 直连 IRIS `rtserve.earthscope.org:18000`，IU/US/II/IC 网络自动路由，分阶段连接状态显示，可随时取消                          |
 | 👤 **个人中心**           | GitHub OAuth（Device Flow）+ 使用统计 + **最近活动时间线**（最近 50 条操作，相对时间戳，仅本地存储）                              |
 | 📍 **位置检测**           | IP 地理定位（一键，永不后台调用）推荐附近台站并同步时区                                                                          |
 
@@ -241,7 +241,7 @@ python -m shakevision
 <details>
 <summary><b>常见问题(FAQ)</b></summary>
 
-- **找不到 Raspberry Shake 的公开实时流?** 不存在公开的 Raspberry Shake SeedLink 服务器。只能连本地局域网里你自己的设备(`rs.local:18000`)或付费 RTDC;所有公开实时流默认走 IRIS `rtserve.iris.washington.edu`。
+- **找不到 Raspberry Shake 的公开实时流?** 不存在公开的 Raspberry Shake SeedLink 服务器。只能连本地局域网里你自己的设备(`rs.local:18000`)或付费 RTDC;所有公开实时流默认走 IRIS `rtserve.earthscope.org`。
 - **历史回放为什么有时要等几十秒?** 回放是从 IRIS FDSN dataselect **现下载**该时段波形,远程较慢时会有等待(已对自动时窗设上限并显示"计算中")。这不是卡死。
 - **收藏 / 录波 / 复核目录存在哪里?** 全部**本地**、零网络、零遥测:收藏在 QSettings,触发录波的 MiniSEED 与复核 `catalog.xml` 在 `~/SeismicGuard/`。可在「我的」里点「在文件夹中打开」直接取文件;「设置 → 清空缓存」会一并清掉它们。
 - **首次启动被系统拦截?** 二进制未做代码签名:Windows 点 SmartScreen 弹窗的「更多信息 → 仍要运行」;macOS 右键 `.app` → 打开。详见上面「下载安装」。
@@ -264,7 +264,7 @@ graph TB
     subgraph external[" 🌐 外部数据源"]
         USGS[USGS<br/>GeoJSON Feed]
         FDSN[FDSN Web Services<br/>IRIS · ShakeNet]
-        SL[SeedLink TCP<br/>rtserve.iris.washington.edu:18000]
+        SL[SeedLink TCP<br/>rtserve.earthscope.org:18000]
         GH[GitHub API<br/>Device Flow OAuth]
         IP[ip-api.com<br/>geolocation]
     end
@@ -548,7 +548,7 @@ stateDiagram-v2
 **重要决策记录：**
 
 1. **单一可执行包 vs 微服务** — 桌面用户期待"双击即用"，shipping 一个 ~250 MB 的 PyInstaller artifact 比让用户配 Python 简单几个数量级。
-2. **公开 Raspberry Shake SeedLink 不存在**（v0.5.1 发现） — 只能连 LAN 内自己的设备 (`rs.local:18000`) 或付费 RTDC。所有实时流默认路由到 IRIS `rtserve.iris.washington.edu`。
+2. **公开 Raspberry Shake SeedLink 不存在**（v0.5.1 发现） — 只能连 LAN 内自己的设备 (`rs.local:18000`) 或付费 RTDC。所有实时流默认路由到 IRIS `rtserve.earthscope.org`。
 3. **QSettings 命名空间保留 `SeismicGuard` / `ShakeVision`** — 改名会孤立现有用户的所有持久化数据；rebrand 仅限可见层面。
 4. **代码注释使用西班牙语** — 项目早期开发约定，保持风格一致；用户面对的字符串始终走 i18n。
 5. **`DEFAULT_CLIENT_ID` 烘焙进二进制**（v0.7.5） — GitHub OAuth Client ID 设计上即公开，Device Flow 不需要 secret；用户开箱即用，无需注册自己的 App。
@@ -584,7 +584,7 @@ seismic-shakevision/
 ├── shakevision/                          # ── 主 Python 包 ──
 │   ├── __init__.py                       # __version__ + APP_NAME 常量
 │   ├── __main__.py                       # 入口：splash → 主窗口；处理 PyInstaller --windowed stderr=None
-│   ├── config.py                         # SEEDLINK_SERVERS 注册表（IU/US/II/IC → rtserve.iris）+ DEFAULT_STATIONS
+│   ├── config.py                         # SEEDLINK_SERVERS 注册表（IU/US/II/IC → rtserve.earthscope）+ DEFAULT_STATIONS
 │   │
 │   ├── sources/                          # ── 实时数据源 (4) ──
 │   │   ├── base.py                       # 抽象 DataSource：start/stop + samples_ready signal
@@ -816,7 +816,7 @@ git push origin v0.9.0
 
 - 🍓 [Raspberry Shake](https://raspberryshake.org/) — 公民地震学网络，开放数据 CC-BY
 - 🇺🇸 [USGS Earthquake Hazards Program](https://earthquake.usgs.gov/) — 地震 GeoJSON Feed
-- 🌍 [IRIS DMC](https://ds.iris.edu/) — 专业台网元数据 + SeedLink 实时流（`rtserve.iris.washington.edu`）
+- 🌍 [IRIS DMC](https://ds.iris.edu/) — 专业台网元数据 + SeedLink 实时流（`rtserve.earthscope.org`）
 
 > ⚠ **Raspberry Shake 公开 SeedLink 服务器不存在**。只能连本地 LAN 内自己的设备（`rs.local:18000`）
 > 或付费 RTDC 订阅。详见 `shakevision/config.py` 中的 `SEEDLINK_SERVERS` 注册表。

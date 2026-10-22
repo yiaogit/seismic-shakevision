@@ -481,6 +481,7 @@ class WorkbenchController(QObject):
         # v0.8.0: se eliminó la estación Demo (XX.MOCK) y su MockSource del
         # flujo en vivo; toda conexión va por SeedLink real.
         from shakevision.config import (
+            IRIS_SEEDLINK_HOST,
             seedlink_channels_for,
             seedlink_location_for,
             seedlink_server_for,
@@ -488,6 +489,10 @@ class WorkbenchController(QObject):
 
         if preset.seedlink_host and preset.seedlink_port:
             host, port = preset.seedlink_host, preset.seedlink_port
+            # v0.9.0.3 — presets creados antes del cambio de host guardaban
+            # el nombre retirado; migrarlo sin obligar a reañadir la estación.
+            if host in ("rtserve.iris.washington.edu", "rtserve.iris.edu"):
+                host = IRIS_SEEDLINK_HOST
         elif preset.network == "AM":
             host = self._config.seedlink_host
             port = self._config.seedlink_port

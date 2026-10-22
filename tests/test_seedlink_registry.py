@@ -24,7 +24,7 @@ from shakevision.config import (
 # Mapa SEEDLINK_SERVERS
 # ============================================================
 def test_iris_backbone_networks_route_to_rtserve() -> None:
-    """Las redes profesionales (IU/US/II/IC) van a rtserve.iris."""
+    """Las redes profesionales (IU/US/II/IC) van a rtserve.earthscope."""
 
     for net in ("IU", "US", "II", "IC"):
         host, port = SEEDLINK_SERVERS[net]
@@ -56,7 +56,7 @@ def test_seedlink_server_for_unknown_falls_back_to_iris() -> None:
 def test_iris_host_is_well_known_endpoint() -> None:
     """Sanity: el host IRIS es el endpoint público estándar."""
 
-    assert IRIS_SEEDLINK_HOST == "rtserve.iris.washington.edu"
+    assert IRIS_SEEDLINK_HOST == "rtserve.earthscope.org"
     assert IRIS_SEEDLINK_PORT == 18000
 
 
@@ -80,10 +80,10 @@ def test_preset_can_carry_explicit_host_and_port() -> None:
         station="ANMO",
         location="*",
         channel="BHZ",
-        seedlink_host="rtserve.iris.washington.edu",
+        seedlink_host="rtserve.earthscope.org",
         seedlink_port=18000,
     )
-    assert p.seedlink_host == "rtserve.iris.washington.edu"
+    assert p.seedlink_host == "rtserve.earthscope.org"
     assert p.seedlink_port == 18000
     assert p.channel == "BHZ"
 
